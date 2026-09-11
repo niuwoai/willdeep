@@ -353,7 +353,15 @@ extension AppState {
             let models = await discovery.value
             guard agentProviderLibrary.entries.contains(entry), !models.isEmpty else { continue }
             pluginDiscoveredModels[entry.id] = models
+            // Make one good fetch durable. Without this the picker is only
+            // ever as complete as this page load's network: a provider entry
+            // carries one or two configured model ids, so a fetch that fails
+            // or outruns its 15s cap left some.im offering
+            // `someim-auto-flash` alone while the relay serves dozens.
+            AgentSettingsStore.saveProviderModelCatalog(entryID: entry.id, models: models)
+            recordFetchedAgentModels(models)
         }
+        AgentSettingsStore.pruneProviderModelCatalogs(keeping: agentProviderLibrary.entries.map(\.id))
         let activeID = agentProviderLibrary.active?.id
         var descriptors = agentProviderLibrary.entries.map { entry in
             AgentPluginAIProviderDescriptor(
@@ -384,10 +392,22 @@ extension AppState {
         return descriptors
     }
 
+    /// Models a plugin page may offer for one provider.
+    ///
+    /// Three sources, in this order of preference: this launch's live
+    /// discovery, the last successful discovery persisted for this entry, and
+    /// the entry's own configured ids. The cached layer is what keeps the
+    /// picker honest — a provider entry names one or two models, so a failed
+    /// fetch used to leave the page showing just those, and some.im's entry
+    /// names exactly one.
+    ///
+    /// Built-in execution profiles are included too. They are models this
+    /// build already knows how to talk to through this provider, and there is
+    /// no reason a plugin page should see fewer of them than the composer.
     private func modelList(for entry: AgentProviderEntry) -> [String] {
-        AgentExecutionProfileModelCatalog.models(
-            for: entry, discoveredModels: pluginDiscoveredModels[entry.id] ?? [], builtIns: []
-        )
+        let live = pluginDiscoveredModels[entry.id] ?? []
+        let cached = live.isEmpty ? (AgentSettingsStore.loadProviderModelCatalogs()[entry.id] ?? []) : live
+        return AgentExecutionProfileModelCatalog.models(for: entry, discoveredModels: cached)
     }
 
     /// 页面能引用的技能：用户当前启用的那些，含插件自带的。刻意不返回 url。

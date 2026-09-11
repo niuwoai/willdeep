@@ -50,6 +50,12 @@ enum AgentWebSearchProvider: String, CaseIterable, Codable, Identifiable {
 enum AgentSettingsStore {
     private static let defaultsKey = "com.willdeep.agentSettings.v1"
     private static let knownModelsKey = "com.willdeep.agentSettings.knownModels.v1"
+    /// Per-provider `/models` results, keyed by provider library entry id.
+    /// Separate from `knownModelsKey`, which is a provider-agnostic union:
+    /// that union cannot answer "which models does THIS provider serve",
+    /// and some.im publishes no model hints, so filtering it by preset
+    /// would hand some.im the local Ollama tags too.
+    private static let providerModelCatalogsKey = "com.willdeep.agentSettings.providerModelCatalogs.v1"
     private static let discoveredModelMetadataKey = "com.willdeep.agentSettings.discoveredModelMetadata.v1"
     private static let recentlyUsedModelsKey = "com.willdeep.agentSettings.recentlyUsedModels.v1"
     private static let defaultModelModePreferenceKey = "com.willdeep.agentSettings.defaultModelModePreference.v1"
@@ -197,6 +203,53 @@ enum AgentSettingsStore {
     static func saveKnownModelIDs(_ ids: [String]) {
         let cleaned = Array(Set(ids.filter { !$0.isEmpty })).sorted()
         defaults.set(cleaned, forKey: knownModelsKey)
+    }
+
+    /// Every provider's last successful `/models` result, keyed by library
+    /// entry id.
+    ///
+    /// Discovery is a live network call, and a provider entry's configured
+    /// models are usually one or two ids. Without a cache, any fetch that
+    /// fails or outruns its timeout collapses a surface's model list down to
+    /// those one or two — which is what the plugin page's picker did: some.im
+    /// serves dozens of models, the picker offered `someim-auto-flash` alone.
+    /// One successful fetch now makes the catalogue durable.
+    static func loadProviderModelCatalogs() -> [UUID: [String]] {
+        guard let raw = defaults.dictionary(forKey: providerModelCatalogsKey) else { return [:] }
+        var out: [UUID: [String]] = [:]
+        for (key, value) in raw {
+            guard let id = UUID(uuidString: key), let models = value as? [String] else { continue }
+            let cleaned = models
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard !cleaned.isEmpty else { continue }
+            out[id] = cleaned
+        }
+        return out
+    }
+
+    /// Replace one entry's catalogue. An empty list is a no-op rather than a
+    /// delete: "this fetch came back with nothing" is the failure case, and
+    /// overwriting a good catalogue with it is exactly the collapse this
+    /// cache exists to prevent.
+    static func saveProviderModelCatalog(entryID: UUID, models: [String]) {
+        let cleaned = models
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return }
+        var raw = defaults.dictionary(forKey: providerModelCatalogsKey) ?? [:]
+        raw[entryID.uuidString] = cleaned
+        defaults.set(raw, forKey: providerModelCatalogsKey)
+    }
+
+    /// Forget entries that are no longer in the library, so a deleted
+    /// provider's catalogue does not sit in defaults forever.
+    static func pruneProviderModelCatalogs(keeping ids: [UUID]) {
+        guard let raw = defaults.dictionary(forKey: providerModelCatalogsKey) else { return }
+        let keep = Set(ids.map(\.uuidString))
+        let pruned = raw.filter { keep.contains($0.key) }
+        guard pruned.count != raw.count else { return }
+        defaults.set(pruned, forKey: providerModelCatalogsKey)
     }
 
     static func loadDiscoveredModelMetadata() -> [AgentModelDiscovery] {
