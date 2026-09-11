@@ -386,7 +386,10 @@
       event.preventDefault(); if (saving) return;
       var due = dueValue(draft);
       if (due === null) { error(t('invalidDate')); return; }
-      if (draft.projectPath && draft.projectPath.charAt(0) !== '/') { error(t('invalidProject')); return; }
+      // `~/Sites/Xedit` 是用户最自然的写法，只认 `/` 开头会把它直接拒掉。
+      // 服务端的 expand_project_path 会把 `~` 展开成真实绝对路径，所以这里
+      // 放行；相对路径仍然拒绝——服务端刻意不按 cwd 去猜。
+      if (draft.projectPath && !/^(\/|~($|\/))/.test(draft.projectPath)) { error(t('invalidProject')); return; }
       if (elements.project.value === CUSTOM_PROJECT && !draft.projectPath) { error(t('invalidProject')); return; }
       saving = true; elements.fields.disabled = true; elements.save.disabled = true; elements.cancel.disabled = true;
       elements.save.textContent = t('saving'); error('');

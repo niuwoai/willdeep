@@ -101,6 +101,22 @@ def validate_tags(arguments)
   valid ? nil : { "ok" => false, "error" => "tags must contain at most 20 names of at most 40 characters" }
 end
 
+# 展开项目路径里的 `~`。
+#
+# 存的是裸字符串，而筛选是拿它和工作区根路径比字面量。用户在「其他项目…」
+# 里输入 `~/Sites/Xedit` 是最自然的写法，不展开就永远匹配不上
+# `/Users/rocky/Sites/Xedit`，任务看着存下来了却一条都筛不出来。
+#
+# 只展开 `~`，不把相对路径按当前工作目录解析：服务端的 cwd 和用户心里那个
+# 目录没有任何关系，猜出来的绝对路径比报错更糟。
+def expand_project_path(raw)
+  path = raw.to_s.strip
+  return "" if path.empty?
+  return File.expand_path(path) if path == "~" || path.start_with?("~/")
+
+  path
+end
+
 # 项目名取工作区目录名；路径原样留着，页面用来做 tooltip 与去重。
 def project_name_for(path, fallback = nil)
   name = fallback.to_s.strip
@@ -287,7 +303,7 @@ def normalize_item(raw)
 
   created = parse_time(raw["createdAt"]) || Time.now
   due = parse_time(raw["due"])
-  path = raw["projectPath"].to_s.strip
+  path = expand_project_path(raw["projectPath"])
   {
     "id" => (raw["id"].to_s.strip.empty? ? SecureRandom.uuid : raw["id"].to_s.strip[0, 64]),
     "text" => text,
@@ -678,7 +694,7 @@ def update_item(arguments)
   item["tags"] = normalize_tags(arguments["tags"]) if arguments.key?("tags")
   item["priority"] = normalize_priority(arguments["priority"]) if arguments.key?("priority")
   if arguments.key?("projectPath") || arguments.key?("project")
-    path = (arguments["projectPath"] || "").to_s.strip
+    path = expand_project_path(arguments["projectPath"])
     item["projectPath"] = path.empty? ? nil : path
     item["project"] = project_name_for(path, arguments["project"])
   end

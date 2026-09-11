@@ -289,6 +289,26 @@ Dir.mktmpdir do |dir|
     check(tool.call("todo.list")["settings"]["parser"] == "local",
           "list 顺带把设置给页面，省一次往返。", results)
 
+    # 「其他项目…」里用户会直接打 `~/Sites/Xedit`。存的是裸字符串、筛选是
+    # 拿它和工作区根比字面量，不展开就永远匹配不上，任务看着存下来了却一条
+    # 都筛不出来。
+    tilde = tool.call("todo.quick_add", { "text" => "验一下波浪号", "projectPath" => "~/todo-tilde-fixture" })
+    expected_tilde = File.expand_path("~/todo-tilde-fixture")
+    check(tilde && tilde["item"]["projectPath"] == expected_tilde,
+          "projectPath 里的 ~ 在落盘前展开成绝对路径。", results)
+    check(tilde && tilde["item"]["project"] == "todo-tilde-fixture",
+          "展开之后项目名仍取目录名，不是带波浪号的那一段。", results)
+
+    # 相对路径刻意不展开：服务端的 cwd 和用户心里那个目录没有关系，猜出来的
+    # 绝对路径比原样存着更糟。
+    relative = tool.call("todo.quick_add", { "text" => "相对路径原样留着", "projectPath" => "Sites/Xedit" })
+    check(relative && relative["item"]["projectPath"] == "Sites/Xedit",
+          "相对路径不按 cwd 展开，原样留着。", results)
+
+    updated = tool.call("todo.update", { "id" => tilde["item"]["id"], "projectPath" => "~/todo-tilde-moved" })
+    check(updated && updated["item"]["projectPath"] == File.expand_path("~/todo-tilde-moved"),
+          "update 改 projectPath 时同样展开 ~，两条写入路径口径一致。", results)
+
     stats = tool.call("todo.stats")
     check(stats["buckets"]["done"] >= 0 && stats["projects"].is_a?(Array),
           "stats 给分组与项目分布。", results)
