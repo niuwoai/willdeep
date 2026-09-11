@@ -289,11 +289,20 @@ struct AgentGitCommitOutcome: Equatable {
 enum AgentGitCommitService {
     nonisolated static let commandTimeout: TimeInterval = 120
 
+    /// Commit the worktree, optionally narrowed to a set of paths.
+    ///
+    /// `stagePaths` nil keeps the old behaviour: `git add -A -- .`, everything
+    /// in the worktree. Non-nil stages exactly those paths and leaves the rest
+    /// unstaged, which is how a commit can carry the session's own edits
+    /// without taking a change the user made by hand along with it. An empty
+    /// array is refused rather than silently falling back to staging
+    /// everything — "narrow to nothing" must not widen to all.
     nonisolated static func commit(
         repositoryRoot: URL,
         message: String,
         includeUnstaged: Bool,
-        pushAfterCommit: Bool
+        pushAfterCommit: Bool,
+        stagePaths: [String]? = nil
     ) -> AgentGitCommitOutcome {
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedMessage.isEmpty else {
@@ -305,8 +314,17 @@ enum AgentGitCommitService {
         }
 
         if includeUnstaged {
+            if let stagePaths, stagePaths.isEmpty {
+                return AgentGitCommitOutcome(
+                    commitCreated: false,
+                    pushed: false,
+                    message: L10n.AgentGitReview.noAttributedChanges
+                )
+            }
+            let stageArguments: [String] = stagePaths.map { ["add", "--"] + $0 }
+                ?? ["add", "-A", "--", "."]
             let stage = AppState.runGitCommand(
-                arguments: ["add", "-A", "--", "."],
+                arguments: stageArguments,
                 in: repositoryRoot,
                 timeout: commandTimeout
             )

@@ -25,6 +25,21 @@ extension L10n {
         static let commitMessageRequired = String(localized: "agent-git-review.commit-message-required", defaultValue: "Enter a commit message.")
         static let includeUnstaged = String(localized: "agent-git-review.include-unstaged", defaultValue: "Include unstaged changes")
         static let commitSucceeded = String(localized: "agent-git-review.commit-succeeded", defaultValue: "Commit created.")
+        static let noAttributedChanges = String(
+            localized: "agent-git-review.no-attributed-changes",
+            defaultValue: "Nothing from this session to commit. The other changes were left unstaged."
+        )
+        static let commitOnlySessionChanges = String(
+            localized: "agent-git-review.commit-only-session-changes",
+            defaultValue: "Commit only this session's changes"
+        )
+        static func unattributedKeptUnstaged(_ a1: String) -> String {
+            let template = String(
+                localized: "agent-git-review.unattributed-kept-unstaged",
+                defaultValue: "%@ change(s) are not from this session and will stay unstaged."
+            )
+            return String(format: template, a1)
+        }
         static let commitAndPushSucceeded = String(localized: "agent-git-review.commit-and-push-succeeded", defaultValue: "Commit created and pushed.")
 
         static func unmodifiedLines(_ a1: String) -> String {

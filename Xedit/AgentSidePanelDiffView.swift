@@ -27,6 +27,8 @@ struct AgentSidePanelDiffView: View {
     @State private var showsCommitPopover = false
     @State private var commitMessage = ""
     @State private var includesUnstagedChanges = true
+    /// 勾上时只暂存本会话写过的路径，其余留在工作区。有非本会话改动时默认勾上。
+    @State private var commitsOnlySessionChanges = true
     @State private var commitState: CommitState = .idle
     @State private var collapsedPaths: Set<String> = []
     @State private var refreshTick = 0
@@ -575,6 +577,25 @@ struct AgentSidePanelDiffView: View {
             .toggleStyle(.checkbox)
             .font(.system(size: 12))
 
+            // 归属只在「本会话真的写过东西」且「工作区里确实有它没写的改动」
+            // 时才有意义可说。写集为空时这一段整体不出现——那种情况下会话
+            // 说不出「这些不是我改的」。
+            if includesUnstagedChanges, let attribution = commitAttribution, attribution.hasUnattributed {
+                Toggle(
+                    L10n.AgentGitReview.commitOnlySessionChanges,
+                    isOn: $commitsOnlySessionChanges
+                )
+                .toggleStyle(.checkbox)
+                .font(.system(size: 12))
+
+                if commitsOnlySessionChanges {
+                    Text(L10n.AgentGitReview.unattributedKeptUnstaged("\(attribution.unattributed.count)"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             if case .finished(let outcome) = commitState {
                 Label(
                     outcome.message,
@@ -640,11 +661,27 @@ struct AgentSidePanelDiffView: View {
         return false
     }
 
+    /// 本次评审里哪些改动属于本会话的写集。nil 表示无从判断。
+    private var commitAttribution: AgentGitCommitAttribution? {
+        guard case .loaded(let snapshot) = state else { return nil }
+        return AgentGitCommitAttribution.split(
+            changePaths: snapshot.changes.files.map(\.path),
+            editedPaths: appState.activeRuntime?.agentEditedPaths
+        )
+    }
+
     private func performCommit(pushAfterCommit: Bool) {
         guard case .loaded(let snapshot) = state, !isCommitting else { return }
         let root = snapshot.repositoryRoot
         let message = commitMessage
         let includeUnstaged = includesUnstagedChanges
+        // 只在「勾了只提交本会话」且真有非本会话改动时才收窄。否则传 nil，
+        // 走原来的 add -A，行为一个字不变。
+        let stagePaths: [String]? = {
+            guard includeUnstaged, commitsOnlySessionChanges else { return nil }
+            guard let attribution = commitAttribution, attribution.hasUnattributed else { return nil }
+            return attribution.attributed
+        }()
         commitState = .running
 
         Task {
@@ -653,7 +690,8 @@ struct AgentSidePanelDiffView: View {
                     repositoryRoot: root,
                     message: message,
                     includeUnstaged: includeUnstaged,
-                    pushAfterCommit: pushAfterCommit
+                    pushAfterCommit: pushAfterCommit,
+                    stagePaths: stagePaths
                 )
             }.value
             commitState = .finished(outcome)
