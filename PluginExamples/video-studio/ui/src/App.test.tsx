@@ -362,6 +362,66 @@ describe('Short Drama Studio', () => {
     await waitFor(() => expect(document.querySelector('.toast-item.error')?.textContent).toContain('没给剧本正文'));
   });
 
+  // ---- 批量采用分集草稿 ----
+
+  /// 逐集点「采用草稿」在二十四集的工程里是二十四次切集加二十四次点击。
+  it('有待采用草稿时页头出现批量采用，按钮报出集数', async () => {
+    const withDraft = episodeFixture({ id: 'e1', order: 1, script: '', draftRev: 1, draft: { script: '陈默：一。' } });
+    const clean = episodeFixture({ id: 'e2', order: 2, title: '第二集', script: '陈默：二。' });
+    const committed = scriptDramaFixture(episodeFixture({ id: 'e1', order: 1, script: '陈默：一。', rev: 1 }));
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'drama.commitEpisodeDrafts') {
+        return JSON.stringify({ ok: true, drama: committed, applied: [1], skipped: [] });
+      }
+      return JSON.stringify({ ok: true });
+    });
+    dramas = [{ ...scriptDramaFixture(withDraft), episodes: [withDraft, clean], episodeCount: 2 }];
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分集剧本/ }))[0]!);
+
+    // 只数有草稿的那一集。
+    fireEvent.click(await screen.findByRole('button', { name: '采用 1 集草稿' }));
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.commitEpisodeDrafts');
+      expect(call?.[1]).toMatchObject({ dramaID: 'd1' });
+    });
+    await waitFor(() => expect(document.body.textContent).toContain('已把 1 集写进正式内容'));
+  });
+
+  it('没有待采用草稿时不出这颗按钮', async () => {
+    await openScript(episodeFixture({ script: '陈默：有正文。' }));
+    await screen.findByRole('button', { name: 'AI 重写这一集' });
+    expect(screen.queryByRole('button', { name: /采用 \d+ 集草稿/ })).toBeNull();
+  });
+
+  /// 只报一个成功计数就又变成「看起来全好了」，跳过的集号必须说出来。
+  it('跳过的集号报出来，不只报一个成功计数', async () => {
+    const withDraft = episodeFixture({ id: 'e1', order: 1, script: '', draftRev: 1, draft: { summary: '只有梗概' } });
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'drama.commitEpisodeDrafts') {
+        return JSON.stringify({
+          ok: true, drama: dramas[0], applied: [3],
+          skipped: [{ order: 1, reason: 'script_would_be_empty' }, { order: 7, reason: 'script_would_be_empty' }],
+        });
+      }
+      return JSON.stringify({ ok: true });
+    });
+    dramas = [scriptDramaFixture(withDraft)];
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分集剧本/ }))[0]!);
+    fireEvent.click(await screen.findByRole('button', { name: '采用 1 集草稿' }));
+
+    await waitFor(() => {
+      expect(document.querySelector('.toast-item.error')?.textContent).toContain('第 1、7 集没有采用');
+    });
+  });
+
   // ---- 分集选择 ----
 
   /// 二十四集塞进一个下拉，要选第几集全靠滚，标题也看不全。

@@ -219,6 +219,11 @@ TOOLS = [
     inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodes: { type: "array", items: { type: "object", properties: { order: { type: "integer" }, title: { type: "string" }, summary: { type: "string" }, script: { type: "string" } }, required: ["order"] } } }, required: %w[dramaID episodes] }
   },
   {
+    name: "drama.commit_episode_drafts",
+    description: "Adopt the working drafts of many episodes at once. Atomic: one write for the whole batch. Episodes whose script would still be empty after adopting are left untouched, draft included, and reported in `skipped`. Episodes without a draft are neither touched nor reported. Pass `orders` to limit the batch to those episode numbers.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, orders: { type: "array", items: { type: "integer" } } }, required: %w[dramaID] }
+  },
+  {
     name: "drama.commit_draft",
     description: "Adopt the working draft into committed content, clear the draft, and bump rev. A second call with the same expectedRev returns revision_conflict, which callers should read as 'already committed'.",
     inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, expectedRev: { type: "integer" }, expectedDraftRev: { type: "integer" } }, required: %w[dramaID scope] }
@@ -406,6 +411,7 @@ def call_tool(name, arguments)
   when "drama.list_shots" then DRAMA_SERVICE.list_shots(arguments)
   when "drama.save_shot_drafts" then DRAMA_SERVICE.save_shot_drafts(arguments)
   when "drama.save_episode_drafts" then DRAMA_SERVICE.save_episode_drafts(arguments)
+  when "drama.commit_episode_drafts" then DRAMA_SERVICE.commit_episode_drafts(arguments)
   when "drama.commit_draft" then DRAMA_SERVICE.commit_draft(arguments)
   when "drama.discard_draft" then DRAMA_SERVICE.discard_draft(arguments)
   when "skill.list" then creative_skill_list
@@ -453,7 +459,7 @@ ARGF.each_line do |line|
              {
                protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "video-studio", version: "0.15.3" }
+               serverInfo: { name: "video-studio", version: "0.16.0" }
              }
            when "tools/list"
              { tools: TOOLS }

@@ -31,6 +31,7 @@
       {"id":"drama.listShots","titleKey":"command.drama.listShots","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.list_shots"}},
       {"id":"drama.saveShotDrafts","titleKey":"command.drama.saveShotDrafts","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_shot_drafts"}},
       {"id":"drama.saveEpisodeDrafts","titleKey":"command.drama.saveEpisodeDrafts","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_episode_drafts"}},
+      {"id":"drama.commitEpisodeDrafts","titleKey":"command.drama.commitEpisodeDrafts","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.commit_episode_drafts"}},
       {"id":"drama.commitDraft","titleKey":"command.drama.commitDraft","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.commit_draft"}},
       {"id":"drama.discardDraft","titleKey":"command.drama.discardDraft","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.discard_draft"}},
       {"id":"skill.list","titleKey":"command.skill.list","handler":{"type":"mcpTool","server":"video-studio","tool":"skill.list"}},

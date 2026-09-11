@@ -187,6 +187,53 @@ class DramaService
     end
   end
 
+  # 一次采用多集的草稿。
+  #
+  # 逐集点「采用草稿」在二十四集的工程里是二十四次切集加二十四次点击，而
+  # 每一次都是一轮「读全量、改、全量覆写」。这里一把锁里走完，要么全写要么
+  # 全不写。
+  #
+  # 正文会变空的集**不采用**：草稿里没有 script、这一集的正式正文也还是空的
+  # 时候，采用下去的效果是正式内容照样没有正文，而那份草稿被一并清掉——用户
+  # 手上就此什么都不剩。这不是保守，是这条路真的吃掉过一集正文。跳过的集连
+  # 草稿一起留在原地，并在 `skipped` 里报出集号，让调用方说得出是哪几集。
+  #
+  # 没有草稿的集既不动也不报：二十四集里二十三集没草稿是常态，逐条报出来
+  # 只会把真正需要看的那几行埋掉。
+  def commit_episode_drafts(arguments)
+    guarded do
+      orders = arguments["orders"]
+      return failure("invalid_orders", "Orders must be an array of episode numbers.") unless orders.nil? || orders.is_a?(Array)
+      wanted = orders&.map { |value| value.to_i }
+
+      applied = []
+      skipped = []
+      drama = mutate_drama(arguments) do |item|
+        candidates = item["episodes"].select do |episode|
+          draft = episode["draft"]
+          next false unless draft.is_a?(Hash) && !draft.empty?
+          wanted.nil? || wanted.include?(episode["order"].to_i)
+        end
+
+        candidates.first(MAX_BATCH_EPISODES).each do |episode|
+          order = episode["order"].to_i
+          draft = episode["draft"]
+          # 采用后的正文：草稿给了就是草稿那份，没给就还是正式那份。
+          resulting = draft.key?("script") ? draft["script"] : episode["script"]
+          next skipped << { "order" => order, "reason" => "script_would_be_empty" } if resulting.to_s.strip.empty?
+
+          apply_draft("episode", episode, draft)
+          episode["draft"] = nil
+          episode["rev"] = episode["rev"].to_i + 1
+          # 清空草稿本身也是一次草稿变更，理由同 commit_draft。
+          episode["draftRev"] = episode["draftRev"].to_i + 1
+          applied << order
+        end
+      end
+      { "ok" => true, "drama" => drama, "applied" => applied, "skipped" => skipped }
+    end
+  end
+
   def save_shot(arguments)
     guarded do
       drama = mutate_episode(arguments) do |episode, item|

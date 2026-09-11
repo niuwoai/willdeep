@@ -706,6 +706,30 @@ export default function App() {
     } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
   }
 
+  /// 一次采用全部待采用的分集草稿。
+  ///
+  /// 逐集点「采用草稿」在二十四集的工程里是二十四次切集加二十四次点击。
+  /// 服务端一把锁里走完，并且把「采用后正文还是空的」那几集连草稿一起留在
+  /// 原地——那种采用等于把唯一一份内容清掉，用户手上什么都不剩。跳过的集号
+  /// 必须报出来，只报一个成功计数就又变成「看起来全好了」。
+  async function adoptAllEpisodeDrafts() {
+    if (!drama) return;
+    setBusy('adopt-all'); setFailure('');
+    try {
+      const payload = await callCommand<{
+        ok: boolean; drama?: Drama; applied?: number[];
+        skipped?: Array<{ order?: number; reason?: string }>; error?: { message?: string };
+      }>('drama.commitEpisodeDrafts', { dramaID: drama.id });
+      if (!payload.ok || !payload.drama) throw new Error(payload.error?.message || t('operationFailed'));
+      applyDrama(payload.drama);
+      const applied = payload.applied ?? [];
+      const skipped = (payload.skipped ?? []).map((entry) => entry.order).filter((order): order is number => typeof order === 'number');
+      if (applied.length > 0) setNotice(t('adoptAllDone', { count: applied.length }));
+      if (skipped.length > 0) setFailure(t('adoptAllSkipped', { orders: skipped.join('、') }));
+      if (applied.length === 0 && skipped.length === 0) setNotice(t('adoptAllNone'));
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
   async function chooseCharacterImage(candidateID: string) {
     if (!drama || !character.id) return;
     await callCommand('drama.selectCharacterImage', { dramaID: drama.id, characterID: character.id, candidateID });
@@ -1623,6 +1647,9 @@ export default function App() {
     const hasDraft = differences.length > 0;
     const chatForObject = scriptChat.filter((item) => !item.objectID || item.objectID === episode?.id);
     const selectedLength = scriptSelection ? scriptSelection.end - scriptSelection.start : 0;
+    // 全季待采用的集数。按钮只在真有草稿时出现：没有草稿时它点下去什么也
+    // 不会发生，摆在那儿只是让人以为漏了一步。
+    const pendingEpisodeDrafts = drama?.episodes.filter((item) => episodeDifferences(item).length > 0).length ?? 0;
     return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}
       <div className="page-heading"><div><p className="eyebrow">{t('stage_script')}</p><h1>{t('scriptTitle')}</h1><p>{t('scriptHint')}</p></div>
         <div className="heading-actions">
@@ -1636,6 +1663,13 @@ export default function App() {
               ? t('episodesBatchProgress', { done: batchProgress.done + 1, total: batchProgress.total })
               : t('enrichEpisodes', { count: drama?.episodes.length ?? 0 })}
           </button>
+          {pendingEpisodeDrafts > 0 && <button
+            className="ghost"
+            disabled={busy === 'adopt-all' || busy === 'episodes-batch'}
+            onClick={() => void adoptAllEpisodeDrafts()}
+          >
+            {busy === 'adopt-all' ? t('adoptAllBusy') : t('adoptAllEpisodes', { count: pendingEpisodeDrafts })}
+          </button>}
           {hasDraft && <button className="ghost" onClick={() => setShowEpisodeDiff((value) => !value)}>{t(showEpisodeDiff ? 'hideDiff' : 'showDiff')}</button>}
           {hasDraft && <button className="ghost" onClick={() => void discardEpisodeDraft()}>{t('discardDraft')}</button>}
           {hasDraft

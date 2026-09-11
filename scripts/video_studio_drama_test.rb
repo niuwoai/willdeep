@@ -426,6 +426,86 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
     raise "cap not applied" unless response["applied"].length == DramaService::MAX_BATCH_EPISODES
   end
 
+  # ---- 批量采用分集草稿 ----
+
+  check.call("adopting many episode drafts commits them all in one write") do
+    created = service.confirm_plan("plan" => { "title" => "批量采用", "episodeCount" => 3 })
+    id = created.dig("drama", "id")
+    service.save_episode_drafts(
+      "dramaID" => id,
+      "episodes" => (1..3).map { |order| { "order" => order, "title" => "第#{order}集", "script" => "陈默：第 #{order} 集。" } }
+    )
+    response = service.commit_episode_drafts("dramaID" => id)
+    raise "not all applied" unless response["applied"].sort == [1, 2, 3]
+    raise "unexpected skips" unless response["skipped"].empty?
+    response.dig("drama", "episodes").each do |episode|
+      raise "draft not cleared" unless episode["draft"].nil?
+      raise "script not committed" unless episode["script"] == "陈默：第 #{episode["order"]} 集。"
+      raise "rev not bumped" unless episode["rev"] == 1
+    end
+  end
+
+  # 真实故障：草稿里只有梗概、正式正文也还是空的，采用下去正文照样是空的，
+  # 而那份草稿被一并清掉——用户手上什么都不剩。这条路已经吃掉过一集正文。
+  check.call("a draft that would leave the script empty is kept, not adopted") do
+    created = service.confirm_plan("plan" => { "title" => "空正文", "episodeCount" => 2 })
+    id = created.dig("drama", "id")
+    service.save_episode_drafts(
+      "dramaID" => id,
+      "episodes" => [
+        { "order" => 1, "summary" => "只有梗概" },
+        { "order" => 2, "summary" => "带正文", "script" => "陈默：有正文。" }
+      ]
+    )
+    response = service.commit_episode_drafts("dramaID" => id)
+    raise "wrong applied set" unless response["applied"] == [2]
+    raise "skip not reported" unless response["skipped"] == [{ "order" => 1, "reason" => "script_would_be_empty" }]
+    kept = response.dig("drama", "episodes").find { |episode| episode["order"] == 1 }
+    raise "draft was thrown away" unless kept.dig("draft", "summary") == "只有梗概"
+    raise "rev should not move" unless kept["rev"].to_i.zero?
+  end
+
+  # 正式正文已经在的集，只改梗概的草稿照样能采用：判据是「采用后正文空不空」，
+  # 不是「这次草稿里有没有 script」。
+  check.call("a summary-only draft is adopted when the episode already has a script") do
+    created = service.confirm_plan("plan" => { "title" => "已有正文", "episodeCount" => 1 })
+    id = created.dig("drama", "id")
+    episode_id = created.dig("drama", "episodes", 0, "id")
+    service.save_draft("dramaID" => id, "scope" => "episode", "episodeID" => episode_id, "draft" => { "script" => "陈默：先有的正文。" })
+    service.commit_draft("dramaID" => id, "scope" => "episode", "episodeID" => episode_id)
+    service.save_episode_drafts("dramaID" => id, "episodes" => [{ "order" => 1, "summary" => "后补的梗概" }])
+    response = service.commit_episode_drafts("dramaID" => id)
+    raise "not adopted" unless response["applied"] == [1]
+    episode = response.dig("drama", "episodes", 0)
+    raise "script lost" unless episode["script"] == "陈默：先有的正文。"
+    raise "summary not committed" unless episode["summary"] == "后补的梗概"
+  end
+
+  check.call("orders narrow the batch, and episodes without a draft are neither touched nor reported") do
+    created = service.confirm_plan("plan" => { "title" => "限定集号", "episodeCount" => 3 })
+    id = created.dig("drama", "id")
+    service.save_episode_drafts(
+      "dramaID" => id,
+      "episodes" => [{ "order" => 1, "script" => "一" }, { "order" => 2, "script" => "二" }]
+    )
+    response = service.commit_episode_drafts("dramaID" => id, "orders" => [2])
+    raise "wrong applied set" unless response["applied"] == [2]
+    # 第 3 集没有草稿：不动，也不出现在 skipped 里，否则真正要看的行会被埋掉。
+    raise "draftless episode reported" unless response["skipped"].empty?
+    raise "episode 1 should still hold its draft" unless response.dig("drama", "episodes", 0, "draft", "script") == "一"
+    bad = service.commit_episode_drafts("dramaID" => id, "orders" => "2")
+    raise "string orders accepted" if bad["ok"]
+    raise "wrong code" unless bad.dig("error", "code") == "invalid_orders"
+  end
+
+  check.call("adopting a drama with no episode drafts is a no-op, not a failure") do
+    created = service.confirm_plan("plan" => { "title" => "无草稿", "episodeCount" => 2 })
+    response = service.commit_episode_drafts("dramaID" => created.dig("drama", "id"))
+    raise "should succeed" unless response["ok"]
+    raise "nothing should be applied" unless response["applied"].empty?
+    raise "nothing should be skipped" unless response["skipped"].empty?
+  end
+
   # ---- 分镜清单与批量写入 ----
 
   check.call("the shot listing is trimmed for the model and hides candidate arrays") do
