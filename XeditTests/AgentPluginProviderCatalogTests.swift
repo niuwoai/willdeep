@@ -63,6 +63,56 @@ struct AgentPluginProviderCatalogTests {
         #expect(catalogs[retired] == nil)
     }
 
+    /// some.im 的 `/v1/model-capabilities` 不要凭据，而 `/v1/models` 没 key
+    /// 就是 401。列表塌成一条的根子在这儿：签出状态下可鉴权那条必然失败。
+    @MainActor
+    @Test("capabilities 端点解析出模型和各自的上下文窗口")
+    func capabilitiesPayloadParses() throws {
+        let payload = Data("""
+        {"object":"list","data":[
+          {"id":"kimi-k3","object":"model.capability","capability_kinds":["llm"],
+           "context_window":1000000,"max_output_tokens":1048576,
+           "supports_thinking":true,"supports_tools":true},
+          {"id":"gpt-5.6-sol","object":"model.capability","capability_kinds":["llm"],
+           "context_window":512000,"max_output_tokens":8192,
+           "supports_thinking":false,"supports_tools":false},
+          {"id":"deepseek-v4-flash","object":"model.capability","capability_kinds":["llm"],
+           "context_window":null,"max_output_tokens":8192}
+        ]}
+        """.utf8)
+
+        let found = try AgentSomeIMModelCapabilities.discoveries(from: payload)
+        #expect(found.map(\.id) == ["deepseek-v4-flash", "gpt-5.6-sol", "kimi-k3"])
+
+        // 上报的窗口要原样收下：本地按模型名匹配的表把 kimi-k3 猜成 128K，
+        // 少算 87%，压缩和 90% 的停车会对着一个几乎没用的窗口开火。
+        #expect(found.first { $0.id == "kimi-k3" }?.contextWindowTokens == 1_000_000)
+        #expect(found.first { $0.id == "gpt-5.6-sol" }?.contextWindowTokens == 512_000)
+        // 没上报就留空，让本地那张表去兜——不要把 0 当成窗口。
+        #expect(found.first { $0.id == "deepseek-v4-flash" }?.contextWindowTokens == nil)
+    }
+
+    /// `supports_tools` 不能当权威：gpt-5.6-sol 在这个端点上报 false，而审计
+    /// 日志里它实打实完成过一次 write_episode 工具调用。拿它去关功能等于把
+    /// 本来能用的路掐掉，所以解析层根本不收这个字段。
+    @MainActor
+    @Test("非对话类模型不进聊天模型列表，未标类别的照旧算对话模型")
+    func capabilitiesFiltersNonConversational() throws {
+        let payload = Data("""
+        {"object":"list","data":[
+          {"id":"kimi-k3","capability_kinds":["llm"],"context_window":1000000},
+          {"id":"seedance-2.0","capability_kinds":["video"],"context_window":null},
+          {"id":"legacy-model","context_window":128000}
+        ]}
+        """.utf8)
+
+        let ids = try AgentSomeIMModelCapabilities.discoveries(from: payload).map(\.id)
+        #expect(ids.contains("kimi-k3"))
+        #expect(!ids.contains("seedance-2.0"))
+        // 没有 capability_kinds 字段一直就是「对话模型」的意思，不能误杀。
+        #expect(ids.contains("legacy-model"))
+    }
+
     /// 缓存目录必须真的能进模型列表。`models(for:)` 把配置里的 id 排在
     /// 前面，探测/缓存来的接在后面，并且过滤掉图像、视频、语音这些不是
     /// 对话模型的条目。

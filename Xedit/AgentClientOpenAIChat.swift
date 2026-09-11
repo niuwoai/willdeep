@@ -334,6 +334,14 @@ struct OpenAIChatAdapter {
     }
 
     func fetchModels() async throws -> [String] {
+        // some.im goes through the discovery path so the credential-free
+        // capabilities catalogue backs it up. `/v1/models` there answers 401
+        // without a key, and a surface that treats that as "no models" falls
+        // back to whatever ids the provider entry happens to name — one, in
+        // the some.im entry's case, against a relay serving dozens.
+        if configuration.providerID == AgentProviderPreset.someIMID {
+            return try await fetchModelDiscoveries().map(\.id)
+        }
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             throw AgentClientError.missingAPIKey
         }
@@ -376,6 +384,9 @@ struct OpenAIChatAdapter {
     }
 
     func fetchModelDiscoveries() async throws -> [AgentModelDiscovery] {
+        if configuration.providerID == AgentProviderPreset.someIMID {
+            return try await someIMDiscoveries()
+        }
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             throw AgentClientError.missingAPIKey
         }
@@ -415,6 +426,104 @@ struct OpenAIChatAdapter {
             )
         }
         return responseBody.discoveries
+    }
+
+    /// some.im's catalogue from both of its endpoints at once.
+    ///
+    /// `/v1/models` needs the credential and carries the hot / new badges.
+    /// `/v1/model-capabilities` needs none and carries the context window.
+    /// Neither is a superset, so both run and the results merge by id; either
+    /// one failing alone is not fatal. Only both failing throws, and the
+    /// credentialed one's error is the one reported, since a 401 there is the
+    /// actionable problem.
+    private func someIMDiscoveries() async throws -> [AgentModelDiscovery] {
+        async let credentialed: [AgentModelDiscovery] = someIMModelsDiscoveries()
+        async let published: [AgentModelDiscovery] = someIMCapabilityDiscoveries()
+
+        var fromModels: [AgentModelDiscovery] = []
+        var fromCapabilities: [AgentModelDiscovery] = []
+        var credentialedFailure: Error?
+        var publishedFailure: Error?
+        // Both are awaited unconditionally: an `async let` that is never
+        // awaited gets cancelled, which would turn "one endpoint answered"
+        // into a cancellation race.
+        do { fromModels = try await credentialed } catch { credentialedFailure = error }
+        do { fromCapabilities = try await published } catch { publishedFailure = error }
+
+        guard !fromModels.isEmpty || !fromCapabilities.isEmpty else {
+            if let credentialedFailure { throw credentialedFailure }
+            if let publishedFailure { throw publishedFailure }
+            throw AgentClientError.invalidResponse
+        }
+
+        var merged: [String: AgentModelDiscovery] = [:]
+        for entry in fromCapabilities { merged[entry.id.lowercased()] = entry }
+        for entry in fromModels {
+            let key = entry.id.lowercased()
+            guard var existing = merged[key] else { merged[key] = entry; continue }
+            // Badges only `/v1/models` knows; window only capabilities does.
+            existing.isHot = entry.isHot
+            existing.isNew = entry.isNew
+            existing.contextWindowTokens = existing.contextWindowTokens ?? entry.contextWindowTokens
+            merged[key] = existing
+        }
+        return merged.values
+            .sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
+    }
+
+    private func someIMModelsDiscoveries() async throws -> [AgentModelDiscovery] {
+        guard !configuration.apiKey.isEmpty else { throw AgentClientError.missingAPIKey }
+        let data = try await modelCatalogPayload(suffix: "models")
+        do {
+            return try JSONDecoder().decode(ModelsResponse.self, from: data).discoveries
+        } catch {
+            throw AgentModelListResponseFormatError.wrapping(
+                error, data: data, expectedSchema: #"{"data":[{"id":"model-id"}]}"#
+            )
+        }
+    }
+
+    private func someIMCapabilityDiscoveries() async throws -> [AgentModelDiscovery] {
+        let data = try await modelCatalogPayload(suffix: "model-capabilities")
+        do {
+            return try AgentSomeIMModelCapabilities.discoveries(from: data)
+        } catch {
+            throw AgentModelListResponseFormatError.wrapping(
+                error, data: data,
+                expectedSchema: #"{"data":[{"id":"model-id","context_window":128000}]}"#
+            )
+        }
+    }
+
+    /// One GET against a catalogue endpoint. The credential is attached when
+    /// there is one and omitted when there is not, which is what lets
+    /// `model-capabilities` answer for a signed-out client.
+    private func modelCatalogPayload(suffix: String) async throws -> Data {
+        let endpoint = try AgentNetworkSupport.endpoint(from: configuration.baseURL, suffix: suffix)
+        var request = URLRequest(url: endpoint)
+        request.timeoutInterval = AgentNetworkSupport.requestTimeout
+        request.httpMethod = "GET"
+        applyAuthenticationHeaders(to: &request)
+        applySomeIMContextHeaders(to: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AgentClientError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw AgentClientError.serverStatus(
+                httpError(
+                    statusCode: httpResponse.statusCode,
+                    method: request.httpMethod ?? "GET",
+                    url: endpoint,
+                    requestBody: nil,
+                    responseBody: String(data: data, encoding: .utf8) ?? "<non-UTF8 response body>",
+                    messages: []
+                )
+            )
+        }
+        return data
     }
 
     private func applyAuthenticationHeaders(to request: inout URLRequest) {
@@ -920,6 +1029,62 @@ private struct ChatCompletionChunk: Decodable {
 
         struct CompletionTokensDetails: Decodable {
             let reasoning_tokens: Int?
+        }
+    }
+}
+
+/// some.im's `/v1/model-capabilities`. Unlike `/v1/models` it needs no
+/// credential, and it publishes the context window per model.
+///
+/// Only `id` and `context_window` are taken. `max_output_tokens` comes back as
+/// a flat 8192 for most entries and `supports_tools` reads false for models
+/// that demonstrably take tool calls (`gpt-5.6-sol` returns false and answers
+/// a `write_episode` call anyway), so treating either as authority would cap
+/// working models or switch off a working feature.
+enum AgentSomeIMModelCapabilities {
+    /// Decode one `/v1/model-capabilities` body into discoveries, sorted by
+    /// id, non-conversational products dropped.
+    nonisolated static func discoveries(from data: Data) throws -> [AgentModelDiscovery] {
+        try JSONDecoder()
+            .decode(SomeIMModelCapabilitiesResponse.self, from: data)
+            .data
+            .filter(\.isConversational)
+            .map(\.discovery)
+            .filter { !$0.id.isEmpty }
+            .sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
+    }
+}
+
+struct SomeIMModelCapabilitiesResponse: Decodable {
+    let data: [Model]
+
+    struct Model: Decodable {
+        let id: String
+        let contextWindow: Int?
+        let capabilityKinds: [String]?
+
+        /// Every entry is `["llm"]` today. The field is read anyway so that an
+        /// image or speech product appearing later does not land in a chat
+        /// model picker; an entry that declares no kinds at all is kept,
+        /// because "unlabelled" has always meant "a chat model" here.
+        var isConversational: Bool {
+            guard let kinds = capabilityKinds, !kinds.isEmpty else { return true }
+            return kinds.contains { $0.caseInsensitiveCompare("llm") == .orderedSame }
+        }
+
+        var discovery: AgentModelDiscovery {
+            AgentModelDiscovery(
+                id: id.trimmingCharacters(in: .whitespacesAndNewlines),
+                isHot: false,
+                isNew: false,
+                contextWindowTokens: (contextWindow ?? 0) > 0 ? contextWindow : nil
+            )
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case contextWindow = "context_window"
+            case capabilityKinds = "capability_kinds"
         }
     }
 }

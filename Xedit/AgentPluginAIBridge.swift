@@ -342,15 +342,22 @@ extension AppState {
             let session = URLSession(configuration: sessionConfiguration)
             defer { session.invalidateAndCancel() }
             do {
-                return try await AgentClient(configuration: entry.makeConfiguration(), session: session).fetchModels()
+                // Discoveries, not bare ids: the catalogue carries each
+                // model's own context window, and the local id-matching table
+                // guesses. some.im publishes kimi-k3 at 1M where the guess
+                // reads 128K, and that 87% undercount fires compression and
+                // the ordered stop against a window that is barely touched.
+                return try await AgentClient(configuration: entry.makeConfiguration(), session: session)
+                    .fetchModelDiscoveries()
             } catch {
                 // Preserve configured models when discovery is unavailable.
                 NSLog("Plugin model discovery failed for provider %@", entry.providerID)
-                return [String]()
+                return [AgentModelDiscovery]()
             }
         } }
         for (entry, discovery) in zip(entries, discoveries) {
-            let models = await discovery.value
+            let found = await discovery.value
+            let models = found.map(\.id)
             guard agentProviderLibrary.entries.contains(entry), !models.isEmpty else { continue }
             pluginDiscoveredModels[entry.id] = models
             // Make one good fetch durable. Without this the picker is only
@@ -359,7 +366,7 @@ extension AppState {
             // or outruns its 15s cap left some.im offering
             // `someim-auto-flash` alone while the relay serves dozens.
             AgentSettingsStore.saveProviderModelCatalog(entryID: entry.id, models: models)
-            recordFetchedAgentModels(models)
+            recordFetchedAgentModelDiscoveries(found)
         }
         AgentSettingsStore.pruneProviderModelCatalogs(keeping: agentProviderLibrary.entries.map(\.id))
         let activeID = agentProviderLibrary.active?.id
