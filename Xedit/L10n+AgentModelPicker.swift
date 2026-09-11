@@ -13,6 +13,7 @@ extension L10n {
         static let managedSubtitle = String(localized: "agent-model-picker.managed-subtitle", defaultValue: "Automatically select a model")
         static let allModels = String(localized: "agent-model-picker.all-models", defaultValue: "All Models")
         static let codingRecommended = String(localized: "agent-model-picker.coding-recommended", defaultValue: "Coding Picks")
+        static let free = String(localized: "agent-model-picker.free", defaultValue: "Free")
         static let recent = String(localized: "agent-model-picker.recent", defaultValue: "Recently Used")
         static let providers = String(localized: "agent-model-picker.providers", defaultValue: "Providers")
         static let current = String(localized: "agent-model-picker.current", defaultValue: "Current")

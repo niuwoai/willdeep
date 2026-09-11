@@ -11,6 +11,9 @@ enum AgentModelPickerSource: Hashable {
     case managed
     case allModels
     case codingRecommended
+    /// Models the provider's own price list reports at zero cost. Only shown
+    /// when a price list actually said so — see `AgentModelCatalogItem.isFree`.
+    case free
     case recent
     case provider(UUID)
 }
@@ -83,6 +86,10 @@ struct AgentModelCatalogItem: Identifiable, Equatable {
     let modelID: String
     let tier: AgentModelPickerTierFilter?
     let isPrimaryFlashModel: Bool
+    /// nil when no price list covered this model. Unknown is deliberately not
+    /// folded into false: a free group built from unknowns would advertise paid
+    /// models as free.
+    var isFree: Bool?
 
     var id: String {
         "\(providerEntryID.uuidString)::\(modelID.lowercased())"
@@ -92,9 +99,11 @@ struct AgentModelCatalogItem: Identifiable, Equatable {
 enum AgentModelPickerCatalog {
     static func items(
         entries: [AgentProviderEntry],
-        fetchedByProvider: [UUID: [String]]
+        fetchedByProvider: [UUID: [String]],
+        freeModelIDs: Set<String> = []
     ) -> [AgentModelCatalogItem] {
-        entries.flatMap { entry in
+        let free = Set(freeModelIDs.map { $0.lowercased() })
+        return entries.flatMap { entry in
             models(for: entry, fetchedModels: fetchedByProvider[entry.id] ?? [])
                 .map { model in
                     AgentModelCatalogItem(
@@ -103,10 +112,16 @@ enum AgentModelPickerCatalog {
                         providerName: entry.displayName,
                         modelID: model,
                         tier: tier(for: model, in: entry),
-                        isPrimaryFlashModel: entry.flashPrimary.caseInsensitiveCompare(model) == .orderedSame
+                        isPrimaryFlashModel: entry.flashPrimary.caseInsensitiveCompare(model) == .orderedSame,
+                        isFree: free.isEmpty ? nil : free.contains(model.lowercased())
                     )
                 }
         }
+    }
+
+    /// Only the models a price list positively reported as free.
+    static func freeItems(_ items: [AgentModelCatalogItem]) -> [AgentModelCatalogItem] {
+        items.filter { $0.isFree == true }
     }
 
     static func models(

@@ -113,6 +113,91 @@ struct AgentPluginProviderCatalogTests {
         #expect(ids.contains("legacy-model"))
     }
 
+    // MARK: - 免费模型分组
+
+    /// 价格早就是公开的：`/api/v1/public/model-pricing` 不要凭据，56 条里
+    /// 八条全零价，和按名字猜出来的那八条完全对上。所以免费分组不需要动
+    /// 服务端，客户端读这份价目表就够。
+    @MainActor
+    @Test("全零价算免费，任一项非零就不算")
+    func freeModelsComeFromEveryPriceBeingZero() throws {
+        let payload = Data("""
+        {"code":0,"data":{"items":[
+          {"model":"someim-free","input_price_per_1m":"0.00","output_price_per_1m":"0.00",
+           "cache_write_price_per_1m":"0.00","cache_read_price_per_1m":"0.00",
+           "price_per_image":"0.00","price_per_request":"0.00",
+           "price_per_output_second":"0.00","min_charge_per_request":"0.00"},
+          {"model":"kimi-k3","input_price_per_1m":"0.00","output_price_per_1m":"2.50",
+           "price_per_request":"0.00"},
+          {"model":"per-request-only","input_price_per_1m":"0.00","output_price_per_1m":"0.00",
+           "price_per_request":"0.02"}
+        ]}}
+        """.utf8)
+
+        let free = try AgentSomeIMPublicPricing.freeModelIDs(from: payload)
+        #expect(free == ["someim-free"])
+        // 输入输出都是 0 但按次要钱，不是免费。
+        #expect(!free.contains("per-request-only"))
+    }
+
+    /// 「没有价目表」和「不免费」必须分得开。把未知当成免费，等于把付费
+    /// 模型摆进免费分组。
+    @MainActor
+    @Test("读不出价格的行算未知，不算免费")
+    func unreadablePricesAreNotFree() throws {
+        let payload = Data("""
+        {"code":0,"data":{"items":[
+          {"model":"no-prices-at-all"},
+          {"model":"blank-prices","input_price_per_1m":"","output_price_per_1m":""}
+        ]}}
+        """.utf8)
+        #expect(try AgentSomeIMPublicPricing.freeModelIDs(from: payload).isEmpty)
+    }
+
+    @MainActor
+    @Test("价目表地址按 baseURL 的源推导，不钉死生产域名")
+    func pricingEndpointFollowsTheConfiguredHost() {
+        #expect(
+            AgentSomeIMPublicPricing.endpoint(forBaseURL: "https://some.im/v1")?.absoluteString
+                == "https://some.im/api/v1/public/model-pricing"
+        )
+        // 自建/预发中继解析到自己的域名和端口。
+        #expect(
+            AgentSomeIMPublicPricing.endpoint(forBaseURL: "http://staging.example.com:8080/v1")?.absoluteString
+                == "http://staging.example.com:8080/api/v1/public/model-pricing"
+        )
+        #expect(AgentSomeIMPublicPricing.endpoint(forBaseURL: "   ") == nil)
+        #expect(AgentSomeIMPublicPricing.endpoint(forBaseURL: "not a url") == nil)
+    }
+
+    /// 分组只能装价目表明确报过免费的模型。
+    @MainActor
+    @Test("免费分组只收明确报过免费的，未知的一个都不进")
+    func freeGroupTakesOnlyPositiveMarks() {
+        let entry = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://some.im/v1",
+            flashPrimary: "someim-auto-flash",
+            proPrimary: "someim-auto-flash"
+        )
+
+        let items = AgentModelPickerCatalog.items(
+            entries: [entry],
+            fetchedByProvider: [entry.id: ["someim-free", "kimi-k3", "gpt-5.6-sol"]],
+            freeModelIDs: ["someim-free"]
+        )
+        #expect(AgentModelPickerCatalog.freeItems(items).map(\.modelID) == ["someim-free"])
+
+        // 没有任何 provider 给出价目表时，整份目录的 isFree 都是未知，
+        // 分组因此为空——这也正是分组不显示的条件。
+        let unpriced = AgentModelPickerCatalog.items(
+            entries: [entry],
+            fetchedByProvider: [entry.id: ["someim-free", "kimi-k3"]]
+        )
+        #expect(unpriced.allSatisfy { $0.isFree == nil })
+        #expect(AgentModelPickerCatalog.freeItems(unpriced).isEmpty)
+    }
+
     /// 缓存目录必须真的能进模型列表。`models(for:)` 把配置里的 id 排在
     /// 前面，探测/缓存来的接在后面，并且过滤掉图像、视频、语音这些不是
     /// 对话模型的条目。

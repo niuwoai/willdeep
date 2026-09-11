@@ -743,6 +743,19 @@ struct ModelPickerPill: View {
                 selectSource(.codingRecommended)
             }
 
+            // 只在价目表真的报出免费模型时出现。没有模型免费时摆一个空分组，
+            // 等于让人点进去看一句「没有模型」。
+            if !freeCatalogItems.isEmpty {
+                providerSourceButton(
+                    title: L10n.AgentModelPicker.free,
+                    subtitle: L10n.AgentModelPicker.modelCount(freeCatalogItems.count),
+                    systemImage: "gift",
+                    checked: selectedSource == .free
+                ) {
+                    selectSource(.free)
+                }
+            }
+
             providerSourceButton(
                 title: L10n.AgentModelPicker.recent,
                 subtitle: L10n.AgentModelPicker.modelCount(recentCatalogItems.count),
@@ -842,6 +855,8 @@ struct ModelPickerPill: View {
             allModelsDetail
         case .codingRecommended:
             codingRecommendationsDetail
+        case .free:
+            freeModelsDetail
         case .recent:
             recentModelsDetail
         case let .provider(entryID):
@@ -1093,6 +1108,19 @@ struct ModelPickerPill: View {
             catalogEmptyState(L10n.AgentModelPicker.noModels, clearable: false)
         } else {
             catalogRows(recentCatalogItems)
+        }
+    }
+
+    @ViewBuilder
+    private var freeModelsDetail: some View {
+        catalogSectionHeader(
+            title: L10n.AgentModelPicker.free,
+            subtitle: L10n.AgentModelPicker.modelCount(freeCatalogItems.count)
+        )
+        if freeCatalogItems.isEmpty {
+            catalogEmptyState(L10n.AgentModelPicker.noModels, clearable: false)
+        } else {
+            catalogRows(freeCatalogItems)
         }
     }
 
@@ -1908,8 +1936,24 @@ struct ModelPickerPill: View {
     private var allCatalogItems: [AgentModelCatalogItem] {
         AgentModelPickerCatalog.items(
             entries: selectableProviderEntries,
-            fetchedByProvider: fetchedModelsByProvider
+            fetchedByProvider: fetchedModelsByProvider,
+            freeModelIDs: freeModelIDs
         )
+    }
+
+    /// Models a provider's own price list reported at zero cost. Empty when no
+    /// provider published one, which is also what hides the free group.
+    private var freeModelIDs: Set<String> {
+        Set(
+            appState.agentDiscoveredModelMetadata
+                .filter { $0.isFree == true }
+                .map { $0.id.lowercased() }
+        )
+    }
+
+    private var freeCatalogItems: [AgentModelCatalogItem] {
+        AgentModelPickerCatalog.freeItems(allCatalogItems)
+            .sorted { $0.modelID.localizedCaseInsensitiveCompare($1.modelID) == .orderedAscending }
     }
 
     private var searchResults: [AgentModelCatalogItem] {
@@ -1977,7 +2021,7 @@ struct ModelPickerPill: View {
         case let .provider(entryID):
             selectedModelSourceIsManaged = false
             selectedModelProviderID = entryID
-        case .allModels, .codingRecommended, .recent:
+        case .allModels, .codingRecommended, .free, .recent:
             selectedModelSourceIsManaged = false
         }
     }
@@ -2020,9 +2064,13 @@ struct ModelPickerPill: View {
         Task { @MainActor in
             defer { loadingProviderIDs.remove(entry.id) }
             do {
-                let models = try await AgentClient(configuration: resolvedEntry.makeConfiguration()).fetchModels()
-                fetchedModelsByProvider[entry.id] = models
-                appState.recordFetchedAgentModels(models)
+                // Discoveries, not bare ids: they carry each model's own
+                // context window (the local id-matching table only guesses)
+                // and the free marking the price list published.
+                let found = try await AgentClient(configuration: resolvedEntry.makeConfiguration())
+                    .fetchModelDiscoveries()
+                fetchedModelsByProvider[entry.id] = found.map(\.id)
+                appState.recordFetchedAgentModelDiscoveries(found)
             } catch {
                 fetchedModelsByProvider[entry.id] = []
                 providerLoadFailures.insert(entry.id)

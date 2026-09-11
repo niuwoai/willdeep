@@ -23,6 +23,11 @@ struct AgentModelDiscovery: Codable, Equatable {
     /// figure was 10%, which fires compression and the 90% ordered stop for
     /// no reason.
     var contextWindowTokens: Int?
+    /// Whether the provider charges nothing for this model. Optional because
+    /// most providers publish no price list at all, and "unknown" must stay
+    /// distinguishable from "not free" — a free group built out of unknowns
+    /// would quietly advertise paid models as free.
+    var isFree: Bool?
 }
 
 enum AgentDefaultModelModePreference: String, Equatable {
@@ -280,7 +285,8 @@ enum AgentSettingsStore {
                     id: id,
                     isHot: model.isHot,
                     isNew: model.isNew,
-                    contextWindowTokens: model.contextWindowTokens.flatMap { $0 > 0 ? $0 : nil }
+                    contextWindowTokens: model.contextWindowTokens.flatMap { $0 > 0 ? $0 : nil },
+                    isFree: model.isFree
                 )
             )
         }
