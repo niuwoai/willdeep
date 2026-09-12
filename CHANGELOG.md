@@ -8,10 +8,16 @@
   - 讽刺的是解释一直存在，只是挂在点击处理函数里。按钮被 disabled 之后点击事件永远不触发，那句「请先采用当前分镜草稿」就永远没机会出现。
   - 现在把原因直接写在按钮下面。不加新控件，只补文案。
 - **单元测试不再往用户真实的 worker 计时台账里灌桩运行。** `AgentWorkerTimingLog.defaultURL()` 在测试进程里也指向用户的 `AgentAudit/worker-timing.jsonl`。9 天积了 4060 条，其中 2755 条 `deep` 是桩（rounds=1、工具调用 0、token 1，模型名里直接写着 `test`），照这份数据算工种分布会得出「deep 占 68%、运维占 1%」，而真实开销 98% 在 32 次 ops_runner 上。判据与 `AgentDispatchCoordinator.processDefaults` 等三处保持同一套，测试进程按 pid 落到临时目录。
+  - `defaultURL()` 另开了一个显式的 `underTests` 参数：改道之后测试进程里再也走不到生产那条分支，「日志落在 `AgentAudit` 旁边」这条老断言会变成永远验不到的死代码。传 `false` 让它继续守着真实落点，而不是把断言改成迁就改道。
 
 ### Notes
 
 - `App.test.tsx` 里一条按 `生成 4 张候选` 这个名字找按钮的断言早就烂了——默认张数改成 2 之后它查不到任何元素，直接抛错。改成按 `/生成 \d+ 张候选/` 匹配，并补上「被拦时解释确实渲染出来」的断言。这条红在本次改动之前就存在。
+
+### Known issues
+
+- 本机全量在满载下持续有计时红，数量每轮都不一样：这一轮 4067 例 failed=21，上一轮 failed=9，更早两轮是 19 和 13。形态高度一致——18 条 `Time limit was exceeded: 60.000 seconds`，一条 `NSURLErrorDomain -1001`，一条流空转 1 秒被判 stalled，一条 worker 首次联络等了 13 秒超出 10 秒窗口。把涉及的 12 个 suite 单独复跑，85 例 2 秒全绿，没有一条重现。这台机器当时同时在跑 Xcode 构建、插件构建和多轮测试，窗口被挤爆；判据本身该按「从 cancel 起算」加固，属于既有待办，不在本次改动范围。
+- 与之相对，本轮唯一一条**确定性**红已经修掉：`AgentWorkerTimingLogTests` 的「日志落在 `AgentAudit` 旁边」。
 
 ## 1.372.0-rc5 - 2026-09-13
 

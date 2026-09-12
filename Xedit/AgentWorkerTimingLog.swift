@@ -208,8 +208,11 @@ nonisolated enum AgentWorkerTimingLog {
             || environment["XCTestBundlePath"] != nil
     }
 
-    static func defaultURL() -> URL {
-        if isRunningUnderTests {
+    /// `underTests` 显式可传，是为了让测试还能验证**生产**那条分支。写死读
+    /// `isRunningUnderTests` 的话，测试进程里永远只走得到临时目录那一支，
+    /// 「日志落在 AgentAudit 旁边」这条约束就再也没人守。
+    static func defaultURL(underTests: Bool = isRunningUnderTests) -> URL {
+        if underTests {
             // 一个测试进程一个文件：并行跑的 suite 之间不互相追加，进程退出
             // 后由系统清理临时目录。
             return FileManager.default.temporaryDirectory

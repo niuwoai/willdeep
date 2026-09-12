@@ -120,7 +120,10 @@ struct AgentWorkerTimingLogTests {
 
     @Test("the default log lives next to judge.jsonl under AgentAudit")
     func defaultLocation() {
-        let url = AgentWorkerTimingLog.defaultURL()
+        // 显式要生产分支。测试进程里 defaultURL() 会改道到临时目录（见
+        // AgentWorkerTimingLogIsolationTests），不传这个参数就只能验到改道
+        // 本身，验不到真实落点。
+        let url = AgentWorkerTimingLog.defaultURL(underTests: false)
         #expect(url.lastPathComponent == "worker-timing.jsonl")
         #expect(url.deletingLastPathComponent().lastPathComponent == "AgentAudit")
         #expect(url.pathComponents.contains("WillDeep"))
