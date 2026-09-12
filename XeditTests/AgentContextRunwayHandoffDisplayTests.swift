@@ -3,6 +3,7 @@
 //  WillDeepTests
 //
 
+import WillDeepCore
 import AppKit
 import Foundation
 import Testing

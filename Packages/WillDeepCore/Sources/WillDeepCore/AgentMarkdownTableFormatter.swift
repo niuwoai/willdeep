@@ -31,16 +31,22 @@
 
 import Foundation
 
-enum AgentMarkdownTableFormatter {
+public enum AgentMarkdownTableFormatter {
     /// An inline-Markdown style applied to a run of the laid-out plain
     /// text. Offsets are *Character* offsets into the formatted string
     /// (not UTF-16), so callers convert to whatever index space their
     /// attributed-string API needs.
-    nonisolated struct StyledSpan: Equatable {
-        enum Style: Equatable { case bold, italic, code }
+    public nonisolated struct StyledSpan: Equatable {
+        public enum Style: Equatable { case bold, italic, code }
         /// Character-offset range into the formatted text.
-        let range: Range<Int>
-        let style: Style
+        public let range: Range<Int>
+        public let style: Style
+
+        // 成员初始化器默认 internal，跨模块构造不到。
+        public init(range: Range<Int>, style: Style) {
+            self.range = range
+            self.style = style
+        }
     }
 
     /// Returns the table as a multi-line string with `│`-separated
@@ -53,7 +59,7 @@ enum AgentMarkdownTableFormatter {
     /// `**` markers don't push columns out of alignment. Use
     /// `formattedWithSpans` when you also need the style runs to restyle
     /// an attributed string.
-    static func formatted(headers: [String], rows: [[String]]) -> String {
+    public static func formatted(headers: [String], rows: [[String]]) -> String {
         formattedWithSpans(headers: headers, rows: rows).text
     }
 
@@ -62,7 +68,7 @@ enum AgentMarkdownTableFormatter {
     /// Character-offset ranges into the returned `text`. Both chat
     /// rendering paths use this to bake `**bold**` etc. into the
     /// monospaced fallback while keeping the columns aligned.
-    static func formattedWithSpans(
+    public static func formattedWithSpans(
         headers: [String],
         rows: [[String]]
     ) -> (text: String, spans: [StyledSpan]) {
@@ -169,7 +175,7 @@ enum AgentMarkdownTableFormatter {
     /// Approximate the visual column width of `text` in a monospaced
     /// font. CJK ideographs, fullwidth punctuation, and most emoji
     /// count as 2 columns; everything else counts as 1.
-    static func displayWidth(of text: String) -> Int {
+    public static func displayWidth(of text: String) -> Int {
         var width = 0
         for scalar in text.unicodeScalars {
             width += isFullWidth(scalar) ? 2 : 1
@@ -180,14 +186,14 @@ enum AgentMarkdownTableFormatter {
     /// Returns the user-visible text of one inline-Markdown table cell.
     /// Shared with the SwiftUI table layout so formatting markers do not
     /// inflate the measured column width.
-    static func visibleText(in raw: String) -> String {
+    public static func visibleText(in raw: String) -> String {
         renderCell(raw).visible
     }
 
     /// True when this scalar is laid out as ~2 monospace columns.
     /// Ranges chosen for common CJK + emoji blocks; not exhaustive
     /// (CJK Ext G+ stop after the BMP ext range here).
-    static func isFullWidth(_ scalar: Unicode.Scalar) -> Bool {
+    public static func isFullWidth(_ scalar: Unicode.Scalar) -> Bool {
         let value = scalar.value
         if (0x1100...0x115F).contains(value) { return true } // Hangul Jamo
         if (0x2E80...0x303E).contains(value) { return true } // CJK Radicals, Kangxi, CJK Symbols

@@ -9,6 +9,7 @@
 //  Text inside an unbounded two-axis ScrollView.
 //
 
+import WillDeepCore
 import AppKit
 import SwiftUI
 

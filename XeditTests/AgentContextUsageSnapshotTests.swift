@@ -8,6 +8,7 @@
 //  runway 同时按裸口径告诉模型 92%。
 //
 
+import WillDeepCore
 import Testing
 
 @testable import WillDeep

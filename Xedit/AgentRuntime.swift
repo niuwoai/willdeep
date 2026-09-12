@@ -18,6 +18,7 @@
 //   - rc4: sidebar busy indicators, queues, settings, polish.
 //
 
+import WillDeepCore
 import Foundation
 import Combine
 

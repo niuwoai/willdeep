@@ -11,6 +11,7 @@
 //  这些用例锁的就是这条边界。
 //
 
+import WillDeepCore
 import Foundation
 import Testing
 

@@ -25,6 +25,7 @@
 //  refactor so they can land here.
 //
 
+import WillDeepCore
 import AppKit
 
 // `AgentMarkdownTableFormatter` lives in its own file

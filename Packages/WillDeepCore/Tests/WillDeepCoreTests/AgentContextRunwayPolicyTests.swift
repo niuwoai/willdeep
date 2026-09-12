@@ -5,7 +5,7 @@
 
 import Testing
 
-@testable import WillDeep
+@testable import WillDeepCore
 
 @Suite("Context runway handoff")
 nonisolated struct AgentContextRunwayPolicyTests {

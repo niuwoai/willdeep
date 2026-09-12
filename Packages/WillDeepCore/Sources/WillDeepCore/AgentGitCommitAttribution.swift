@@ -21,14 +21,14 @@
 
 import Foundation
 
-nonisolated struct AgentGitCommitAttribution: Equatable {
+public nonisolated struct AgentGitCommitAttribution: Equatable {
     /// Paths the session's write set claims.
-    let attributed: [String]
+    public let attributed: [String]
     /// Paths present in the worktree that the write set does not claim.
-    let unattributed: [String]
+    public let unattributed: [String]
 
-    var hasUnattributed: Bool { !unattributed.isEmpty }
-    var isEmpty: Bool { attributed.isEmpty && unattributed.isEmpty }
+    public var hasUnattributed: Bool { !unattributed.isEmpty }
+    public var isEmpty: Bool { attributed.isEmpty && unattributed.isEmpty }
 
     /// Split a review snapshot's file list against a write set.
     ///
@@ -37,7 +37,7 @@ nonisolated struct AgentGitCommitAttribution: Equatable {
     /// (or one restored without its write set) knows nothing about these
     /// files, and "I did not write any of this" is a claim it cannot make.
     /// `nil` means the same thing for a caller with no runtime at hand.
-    nonisolated static func split(
+    public nonisolated static func split(
         changePaths: [String],
         editedPaths: Set<String>?
     ) -> AgentGitCommitAttribution? {
@@ -66,5 +66,12 @@ nonisolated struct AgentGitCommitAttribution: Equatable {
         while value.hasPrefix("./") { value.removeFirst(2) }
         while value.hasPrefix("/") { value.removeFirst() }
         return value
+    }
+
+    // 成员初始化器默认 internal，跨模块构造不到；`hasUnattributed` 与
+    // `isEmpty` 是计算属性，不进参数表。
+    public init(attributed: [String], unattributed: [String]) {
+        self.attributed = attributed
+        self.unattributed = unattributed
     }
 }

@@ -22,13 +22,20 @@ import Foundation
 /// Kept deliberately narrow: only markup that unambiguously opens a call is
 /// treated as a marker, because ordinary prose is allowed to mention these
 /// tag names when a model is explaining tool syntax rather than using it.
-nonisolated enum AgentLeakedToolCallText {
-    nonisolated struct Detection: Equatable, Sendable {
+public nonisolated enum AgentLeakedToolCallText {
+    public nonisolated struct Detection: Equatable, Sendable {
         /// Everything before the first marker, whitespace-trimmed. Empty when
         /// the reply was nothing but markup.
-        let cleanedText: String
+        public let cleanedText: String
         /// The discarded tail, kept for logging and test assertions.
-        let discardedFragment: String
+        public let discardedFragment: String
+
+        // 显式写出来：public struct 的成员初始化器默认是 internal，跨模块用
+        // 不到。这个类型在 App 侧被构造，所以必须自己给一个 public 的。
+        public init(cleanedText: String, discardedFragment: String) {
+            self.cleanedText = cleanedText
+            self.discardedFragment = discardedFragment
+        }
     }
 
     /// U+FF5C, the full-width bar DeepSeek's special tokens are built from.
@@ -45,7 +52,7 @@ nonisolated enum AgentLeakedToolCallText {
         "<function=",
     ]
 
-    static func detect(in text: String) -> Detection? {
+    public static func detect(in text: String) -> Detection? {
         guard let markerStart = firstMarkerIndex(in: text) else { return nil }
         return Detection(
             cleanedText: String(text[text.startIndex..<markerStart])
@@ -54,7 +61,7 @@ nonisolated enum AgentLeakedToolCallText {
         )
     }
 
-    static func contains(in text: String) -> Bool {
+    public static func contains(in text: String) -> Bool {
         firstMarkerIndex(in: text) != nil
     }
 

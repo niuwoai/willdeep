@@ -20,26 +20,26 @@
 
 import Foundation
 
-nonisolated struct AgentFileObservation: Codable, Equatable {
-    nonisolated enum Source: String, Codable, Equatable {
+public nonisolated struct AgentFileObservation: Codable, Equatable {
+    public nonisolated enum Source: String, Codable, Equatable {
         case disk
         /// 内容来自编辑器里打开的那个 tab 的内存 buffer，不是磁盘。
         case buffer
     }
 
-    nonisolated enum Kind: String, Codable, Equatable {
+    public nonisolated enum Kind: String, Codable, Equatable {
         case read
         case write
     }
 
-    var sizeBytes: Int64
-    var modifiedAt: Date
-    var source: Source
-    var kind: Kind
+    public var sizeBytes: Int64
+    public var modifiedAt: Date
+    public var source: Source
+    public var kind: Kind
     /// 本会话最后一次观察到它是这个样子的时刻。
-    var observedAt: Date
+    public var observedAt: Date
 
-    nonisolated init(
+    public nonisolated init(
         sizeBytes: Int64,
         modifiedAt: Date,
         source: Source,
@@ -55,23 +55,23 @@ nonisolated struct AgentFileObservation: Codable, Equatable {
 }
 
 /// 一个路径在观察之后发生的漂移。
-nonisolated struct AgentFileDrift: Equatable {
-    let path: String
+public nonisolated struct AgentFileDrift: Equatable {
+    public let path: String
     /// 本会话观察到它的时刻。
-    let observedAt: Date
+    public let observedAt: Date
     /// 磁盘现在报的修改时刻。
-    let currentModifiedAt: Date
-    let observedSizeBytes: Int64
-    let currentSizeBytes: Int64
+    public let currentModifiedAt: Date
+    public let observedSizeBytes: Int64
+    public let currentSizeBytes: Int64
 }
 
-nonisolated enum AgentFileObservationLedger {
+public nonisolated enum AgentFileObservationLedger {
     /// 每会话上限。一次长任务读几百个文件是常态，不设上限会把会话存档撑大。
     /// 淘汰按 `observedAt` 从旧到新。
-    static let maximumEntries = 500
+    public static let maximumEntries = 500
 
     /// 记一次观察。同一路径重复观察时覆盖——台账要的是「最后一次看到的样子」。
-    nonisolated static func recording(
+    public nonisolated static func recording(
         _ ledger: [String: AgentFileObservation],
         path: String,
         observation: AgentFileObservation
@@ -84,7 +84,7 @@ nonisolated enum AgentFileObservationLedger {
     }
 
     /// 超出上限时按 observedAt 丢最旧的。
-    nonisolated static func trimmed(
+    public nonisolated static func trimmed(
         _ ledger: [String: AgentFileObservation]
     ) -> [String: AgentFileObservation] {
         guard ledger.count > maximumEntries else { return ledger }
@@ -98,7 +98,7 @@ nonisolated enum AgentFileObservationLedger {
     ///
     /// nil 有三种含义，调用方一律按「无从判断」处理，不得当成「没变过」：
     /// 台账里没有它、观察来自 tab buffer、或者现在读不到它的 stat。
-    nonisolated static func drift(
+    public nonisolated static func drift(
         for path: String,
         in ledger: [String: AgentFileObservation],
         currentSizeBytes: Int64,
@@ -124,7 +124,7 @@ nonisolated enum AgentFileObservationLedger {
 
     /// 给模型看的一句话。刻意带上两个时刻——「什么时候读的」和「什么时候被
     /// 改的」放在一起，模型才说得出用户原话里那种交代。
-    nonisolated static func driftNotice(_ drift: AgentFileDrift) -> String {
+    public nonisolated static func driftNotice(_ drift: AgentFileDrift) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
         return "注意：\(drift.path) 在本会话读取之后被改动过。"
@@ -137,7 +137,7 @@ nonisolated enum AgentFileObservationLedger {
 
     /// git 报的是相对仓库根的裸路径，而写集历史上带过 `./` 前缀。两边不归一，
     /// 同一个文件会被读成两个。
-    nonisolated static func normalize(_ path: String) -> String {
+    public nonisolated static func normalize(_ path: String) -> String {
         var value = path.trimmingCharacters(in: .whitespaces)
         while value.hasPrefix("./") { value.removeFirst(2) }
         while value.hasPrefix("/") { value.removeFirst() }

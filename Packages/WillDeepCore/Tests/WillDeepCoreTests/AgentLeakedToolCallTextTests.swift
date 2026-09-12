@@ -5,7 +5,7 @@
 
 import Testing
 
-@testable import WillDeep
+@testable import WillDeepCore
 
 /// Samples are transcribed from real sessions on disk, including the doubled
 /// full-width bars the models actually produced.

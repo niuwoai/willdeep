@@ -1,3 +1,4 @@
+import WillDeepCore
 import Foundation
 
 /// One continuation authority for mechanical segment boundaries. A segment

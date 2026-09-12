@@ -5,6 +5,7 @@
 //  Lightweight models for the built-in project agent.
 //
 
+import WillDeepCore
 import Foundation
 
 /// Durable marker for a Goal-backed model turn that was live when the app

@@ -17,6 +17,7 @@
 //  can drop under the CLAUDE.md §10 size budget.
 //
 
+import WillDeepCore
 import Foundation
 
 enum AgentUntrackedDiffPreviewSection: Equatable {

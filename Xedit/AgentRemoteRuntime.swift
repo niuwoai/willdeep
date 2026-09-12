@@ -8,6 +8,7 @@
 //  Keychain by AgentRemoteRuntimeModels.swift.
 //
 
+import WillDeepCore
 import Foundation
 import Darwin
 

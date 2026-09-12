@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import WillDeep
+@testable import WillDeepCore
 
 /// Git Review 面板的提交按钮原本一律 `git add -A -- .`：它列的是整个工作区，
 /// 提交的也是整个工作区，自洽，但用户自己手改的那一笔会被无声带进 Agent 的

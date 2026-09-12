@@ -46,6 +46,7 @@
 //  own private `AgentEmptyState`.
 //
 
+import WillDeepCore
 import AppKit
 import SwiftUI
 

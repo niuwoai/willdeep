@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.370.0-rc1 - 2026-09-12
+
+### Changed
+
+- **构建分层第一刀：新增本地 SwiftPM 包 `Packages/WillDeepCore`，纯逻辑与它们的测试从 App target 搬出去。** 设计与实测口径见 `docs/BUILD_MODULARIZATION_DESIGN.md`。
+  - **收益是实测的**：包里 53 条测试连编带跑 4.9 秒（测试本身 0.007 秒）；同样这批逻辑此前要先建整个 App（十几分钟）再跑 156 秒。改这些判据并验证，从十几分钟变成 5 秒。
+  - 首批 6 对：`AgentContextRunwayPolicy`、`AgentDaemonEventCursor`、`AgentFileObservationLedger`、`AgentGitCommitAttribution`、`AgentLeakedToolCallText`、`AgentMarkdownTableFormatter`。
+  - **收益边界写在文档里，不夸大**：改 `AgentSession` 这类模型层存储属性仍会级联全表（两三百个文件引用它），SwiftUI 视图层的 157 个文件也仍在 App 模块。变快的是纯逻辑改动和它们的测试，不是消灭全量编译。
+  - 新增 `scripts/willdeep_core_boundary_test.rb`：禁止包内出现 SwiftUI / AppKit / AppState / `@MainActor`，并要求包测试 import `WillDeepCore`。包一旦引入这些就不再独立，而那**不会有编译错误来提醒**，所以靠守卫拦不靠约定。它和包测试一起接在 `run_tests.sh` 的 xcodebuild 之前——最快，失败也最该早暴露。
+  - `swiftLanguageMode(.v5)` 钉住：主工程是 Swift 5 模式加 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`，包若切 v6 严格并发，同一份源码在两处的编译结论就不一样了。
+
+### Fixed
+
+- **又两条满载才红的计时断言加固了**，思路与上一版一致：拉开判据与噪声的间距，不动语义。
+  - Workflow watchdog 那条此前已按「满载抖动 0.63s」加固过一次，这次实测 2.18s 又被击穿——量级比上次估的大三倍多。所以不是把 2s 挪到 3s，而是两端一起拉开：被守护操作 60s、判据 15s，判据与噪声差一个量级、与信号差四倍。
+  - Goal soak 那条的容差是「目标时长 + 120s」，默认 3 秒的 soak 在满载下最长跑到两分多钟。判据是「有没有真的卡死」而不是「跑得多快」，真卡死是无限，所以放到 600 秒。
+
+### Notes
+
+- 全量测试 4156 条全绿：App 侧 4103 条 + 包侧 53 条。`complexity_guard` hard=0，其余守卫与插件测试全绿。
+- P0 量出的可抽总量：678 个 App 源文件里 111 个（17293 行）无 UI 依赖且零项目内依赖，其中 28 个有配对测试。P3 未启动，按决策先看 P1 收益。
+- 文档里记了两个量测脚本的判定缺陷（`extension X` 被误算成定义、只量源文件没量测试），P3 要按「源码与测试都零依赖」重新量。
+
 ## 1.369.0-rc1 - 2026-09-12
 
 ### Added

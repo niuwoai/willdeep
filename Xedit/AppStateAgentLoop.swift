@@ -40,6 +40,7 @@
 //  AppStateAgentLoopLifecycle.swift.
 //
 
+import WillDeepCore
 import AppKit
 import Foundation
 

@@ -5,6 +5,7 @@
 //  Agent request previews, model status, and token/window estimates.
 //
 
+import WillDeepCore
 import Foundation
 
 /// Context windows a provider reported for specific models, keyed by

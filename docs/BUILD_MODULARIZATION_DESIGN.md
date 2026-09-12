@@ -1,6 +1,6 @@
 # 构建分层设计：把单模块工程切出可独立编译的核心包
 
-> Last updated: 2026-09-11 | 状态：**待确认**（等用户拍板下面「待确认问题」一节）
+> Last updated: 2026-09-12 | 状态：**P1 已实现（1.370.0-rc1）**，P3 未启动（按决策 3，先看 P1 收益）
 > 关联版本：基于 1.368.0-rc3（develop @ 562cd5cb）
 > 适用范围：Xedit（WillDeep macOS App）的构建拓扑与测试执行路径
 > 关联文档：`TESTING.md`、`docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md`
@@ -126,7 +126,43 @@ P1 的现成候选（本轮新写的纯逻辑，以及既有的同形状文件�
 
 ---
 
-## 6. 待确认问题
+## 6. 已确认决策（2026-09-12）
+
+1. **P1 搬那批零传递依赖的纯逻辑文件**（清单见 §6.1，由 P0 实测确定）。
+2. **包名 `WillDeepCore`**，放在仓库内 `Packages/WillDeepCore`。
+3. **不一次做到 P3。** 先在 P1 验证 `swift test` 的实测收益，不明显就停。
+4. **包测试放在 ruby 守卫之后、xcodebuild 之前**——它最快，失败也最该早暴露。
+5. **P0 用 grep 粗算给量级**，不引入新工具链。
+
+## 6.1 P0 实测清单
+
+脚本口径：去掉注释后，取文件里所有 `Agent|App|WillDeep|Editor|Xedit` 前缀的标识符，
+减去该文件自己声明的类型，剩下的若都不属于别的文件即算「零项目内依赖」。
+
+| 口径 | 数量 |
+| --- | --- |
+| App 源文件总数 | 678 |
+| 零项目内依赖 | 138 |
+| 且无 SwiftUI / AppKit / MainActor | 111（合计 17293 行） |
+| 且有配对测试文件 | 28 |
+
+**脚本有一个判定缺陷，值得记下来**：第一版把 `extension X` 也算作「本文件定义了 X」，
+于是 `AgentStructuredSchema.swift` 因为带一个 `extension AgentJSONValue: Codable`
+被误判成零依赖，搬进包里才被编译器拆穿。已修正为只认 `struct/enum/class/actor/
+protocol/typealias`。
+
+**第二个缺陷是只量了源文件，没量测试文件。** `AgentDelegatedAcceptancePolicy`、
+`AgentGoalContinuationBudget`、`AgentTimeContext` 三个源文件确实零依赖，但它们的
+测试依赖 `AgentDelegatedTaskContract` / `AgentGoal` / `AgentContextBuilder`，
+搬过去编不过，只能退回。**「可抽」的判据是源码与测试都零依赖**，这一点在 P1 里
+才浮出来。
+
+### P1 实际落地的 6 对
+
+`AgentContextRunwayPolicy`、`AgentDaemonEventCursor`、`AgentFileObservationLedger`、
+`AgentGitCommitAttribution`、`AgentLeakedToolCallText`、`AgentMarkdownTableFormatter`。
+
+## 原待确认问题（已按默认执行）
 
 1. **P1 先搬哪一批？** 默认假设：上面列的 5 个纯逻辑文件加它们的测试。理由是这批零传递依赖、且其中三个是本轮刚写的，我清楚它们的边界。
 2. **包名叫什么？** 默认假设 `WillDeepCore`。
@@ -138,4 +174,36 @@ P1 的现成候选（本轮新写的纯逻辑，以及既有的同形状文件�
 
 ### 落地后补记的实现要点
 
-（P1 完成后回写。）
+**收益是实测出来的，比预期好。**
+
+| 路径 | 实测 |
+| --- | --- |
+| 包：`swift build` | 0.2–1.9 秒 |
+| 包：`swift test`（53 条，连编带跑） | 4.9 秒；测试本身 0.007 秒 |
+| App：`build-for-testing` + 全量测试 | 十几分钟编译 + 156 秒测试 |
+
+也就是说，改这 6 个文件里的判据并验证，从「十几分钟」变成「5 秒」。
+
+**跨模块访问控制是主要的搬迁成本，不是编译配置。** 一共撞了 7 轮编译错，全是
+access level：`public struct` 的成员初始化器默认 internal、`private(set)` 跨模块
+读不到、`nonisolated final class` 合成的 init 是 internal、嵌套类型的成员没跟着
+标 public。批量加 `public` 的脚本还把函数体里的局部 `let` 也标了，触发
+「attribute 'public' can only be used in a non-local scope」。**结论：别指望脚本
+一把标对，靠包的 2 秒编译迭代收敛。**
+
+**`swiftLanguageMode(.v5)` 必须钉住。** 主工程是 Swift 5 模式加
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`；包若切到 v6 严格并发，同一份源码
+在两处的编译结论不一样，这个包就不再是「主工程代码换个地方编」。
+
+**pbxproj 要手工加三处**：`packageReferences` 里的 `XCLocalSwiftPackageReference`、
+新建的 `XCLocalSwiftPackageReference` 段、以及 App target 的
+`packageProductDependencies`。App 源文件走文件系统同步组，所以文件搬出 `Xedit/`
+就自动离开 target，这半边是免费的。
+
+**边界靠守卫不靠约定。** `scripts/willdeep_core_boundary_test.rb` 禁止包内出现
+SwiftUI / AppKit / AppState / `@MainActor`，并要求包测试 import `WillDeepCore`。
+它接在 `run_tests.sh` 的 xcodebuild 之前，和包测试一起跑。反验过：往包里塞一个
+`import SwiftUI` 即红。
+
+**下一步（P3）的判据已经清楚**：剩余候选要按「源码与测试都零依赖」重新量，且
+access level 的改造成本按本轮经验约等于每 100 行源码撞一次编译错。

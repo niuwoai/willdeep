@@ -25,6 +25,7 @@
 //  and SwiftUI's `.textSelection` hands back no way to read the selection.
 //
 
+import WillDeepCore
 import AppKit
 
 enum AgentSubagentSpeechMarkdown {

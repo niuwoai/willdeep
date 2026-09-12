@@ -234,11 +234,14 @@ extension WillDeepTests {
     @Test("Workflow watchdog times out without waiting for a stuck operation")
     func workflowWatchdogDoesNotWaitForUncancellableOperation() async {
         // 断言的本意是"没有傻等操作自然结束"，不是测量 watchdog 的精度。
-        // 满载全量下调度抖动实测能到 0.63s，所以把被守护操作拉到 5s、判据
-        // 放到 2s：抖动再大也够不着 2s，而 2s 远低于 5s，一旦真的等操作
-        // 跑完必然越线。信号与噪声之间留足间距，别把阈值往上抬一点点。
-        let stuckOperationSeconds: UInt64 = 5
-        let elapsedBudget: TimeInterval = 2
+        //
+        // 这条已经被加固过一次：当时按"满载抖动 0.63s"把被守护操作放到 5s、
+        // 判据放到 2s。2026-09-12 满载全量又被击穿，实测 2.18s——抖动的量级
+        // 比上次估的大三倍多。所以这次不是把 2s 挪到 3s，而是把两端一起拉开：
+        // 操作 60s、判据 15s。判据与噪声差一个量级，与信号也差四倍，任何一边
+        // 再变化几倍都不会误判。往上挪一点点只会把同一个问题推到下一次满载。
+        let stuckOperationSeconds: UInt64 = 60
+        let elapsedBudget: TimeInterval = 15
 
         var didTimeout = false
         // 计时从 watchdog 启动那一刻算起。

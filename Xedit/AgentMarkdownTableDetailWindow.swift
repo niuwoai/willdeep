@@ -7,6 +7,7 @@
 //  TextKit fallback; only an explicit click creates NSTableView cells.
 //
 
+import WillDeepCore
 import AppKit
 
 final class AgentMarkdownTablePayload: NSObject {

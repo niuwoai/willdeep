@@ -10,6 +10,7 @@
 //  路径不过这里——首版不覆盖，文档里记着。
 //
 
+import WillDeepCore
 import Foundation
 
 extension AppState {

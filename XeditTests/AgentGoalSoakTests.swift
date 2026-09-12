@@ -118,7 +118,12 @@ struct AgentGoalSoakTests {
         }
         f.start()
         while f.runtime.isResponding || f.runtime.isAwaitingProviderSlot || f.runtime.requestTask != nil || f.runtime.isCompressingContext {
-            if trace.elapsed > Double(seconds + 120) { throw Failure.stalled }
+            // 容差不是「目标时长 + 一点」，而是要和满载下的调度噪声差一个量级。
+            // 2026-09-12 满载全量把 seconds+120 击穿过一次：默认 3 秒的 soak
+            // 在这台机上最长跑到了两分多钟。这里的判据是「有没有真的卡死」，
+            // 不是「跑得有多快」，所以放到 600 秒——真卡死是无限，600 秒照样
+            // 能抓住，而抖动再大也够不着。
+            if trace.elapsed > Double(seconds) + 600 { throw Failure.stalled }
             try await Task.sleep(for: .milliseconds(100))
         }
         trace.check(trace.reachedDuration, "ended_before_requested_duration")

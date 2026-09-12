@@ -7,6 +7,7 @@
 //  itself.
 //
 
+import WillDeepCore
 import Foundation
 
 /// Presentation-side companion to `AgentContextRunwayPolicy`.

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import WillDeep
+@testable import WillDeepCore
 
 /// 台账要回答的是用户原话里那句「这处改动不是我做的，文件时间戳是 20:29」。
 /// 设计见 docs/FILE_CHANGE_PROVENANCE_DESIGN.md。
@@ -108,25 +108,5 @@ struct AgentFileObservationLedgerTests {
         #expect(notice.contains("100 字节"))
         #expect(notice.contains("140 字节"))
         #expect(notice.contains("不是本会话做的"))
-    }
-
-    @Test("搜索结果里按第一个冒号切路径，片段里的冒号不参与")
-    func parsesSearchResultPaths() {
-        let result = AgentToolResult(
-            summary: "3 matches",
-            payload: "a.swift:12: let x = foo(bar: 1)\nb/c.swift:3: // note: here\na.swift:44: again"
-        )
-        let paths = AppState.observedPaths(toolName: "grep_files", arguments: [:], result: result)
-        #expect(paths == ["a.swift", "b/c.swift"])
-    }
-
-    @Test("有 path 参数时直接用它，不去解析正文")
-    func prefersThePathArgument() {
-        let paths = AppState.observedPaths(
-            toolName: "read_file",
-            arguments: ["path": .string("Xedit/A.swift")],
-            result: AgentToolResult(summary: "", payload: "irrelevant:1: x")
-        )
-        #expect(paths == ["Xedit/A.swift"])
     }
 }

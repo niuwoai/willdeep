@@ -209,6 +209,7 @@
 				4D535041524B4C4530303033 /* Sparkle */,
 				5CA6B0D22FE2A000006DFCCC /* SwiftTerm */,
 				4D400004B6087AD73D48973E /* SomeIMSharedSession */,
+				5CA6C0RE10CA1PKG0002 /* WillDeepCore */,
 			);
 			productName = WillDeep;
 			productReference = 5CA6B0612FC6D8F9006DFCCC /* WillDeep.app */;
@@ -296,6 +297,7 @@
 				4D535041524B4C4530303032 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				5CA6B0D12FE2A000006DFCCC /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				8E3B78276C406A11424E710D /* XCRemoteSwiftPackageReference "SomeIMSharedSession" */,
+				5CA6C0RE10CA1PKG0001 /* XCLocalSwiftPackageReference "Packages/WillDeepCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5CA6B0622FC6D8F9006DFCCC /* Products */;
@@ -513,7 +515,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 738;
+				CURRENT_PROJECT_VERSION = 739;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -534,7 +536,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.369.0-rc1;
+				MARKETING_VERSION = 1.370.0-rc1;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -558,7 +560,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 738;
+				CURRENT_PROJECT_VERSION = 739;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -579,7 +581,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.369.0-rc1;
+				MARKETING_VERSION = 1.370.0-rc1;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -720,11 +722,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 738;
+				CURRENT_PROJECT_VERSION = 739;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.369.0-rc1;
+				MARKETING_VERSION = 1.370.0-rc1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -741,11 +743,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 738;
+				CURRENT_PROJECT_VERSION = 739;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.369.0-rc1;
+				MARKETING_VERSION = 1.370.0-rc1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -761,10 +763,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 738;
+				CURRENT_PROJECT_VERSION = 739;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.369.0-rc1;
+				MARKETING_VERSION = 1.370.0-rc1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -780,10 +782,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 738;
+				CURRENT_PROJECT_VERSION = 739;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.369.0-rc1;
+				MARKETING_VERSION = 1.370.0-rc1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -836,6 +838,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		5CA6C0RE10CA1PKG0001 /* XCLocalSwiftPackageReference "Packages/WillDeepCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/WillDeepCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		4D535041524B4C4530303032 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -864,6 +873,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		5CA6C0RE10CA1PKG0002 /* WillDeepCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WillDeepCore;
+		};
 		4D400004B6087AD73D48973E /* SomeIMSharedSession */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8E3B78276C406A11424E710D /* XCRemoteSwiftPackageReference "SomeIMSharedSession" */;

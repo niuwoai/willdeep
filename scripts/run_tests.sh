@@ -82,6 +82,15 @@ ruby "${ROOT_DIR}/scripts/short_drama_mvp_smoke_evidence_contract_test.rb" "${OU
 ruby "${ROOT_DIR}/scripts/short_drama_mvp_acceptance_report.rb" "${OUT_DIR}/short_drama_mvp_acceptance_report.md" "${OUT_DIR}/short_drama_mvp_acceptance_report.json"
 ruby "${ROOT_DIR}/scripts/short_drama_mvp_handoff_bundle.rb" "${OUT_DIR}/short_drama_mvp_acceptance_report.json" "${OUT_DIR}/short_drama_mvp_handoff_bundle.md" "${OUT_DIR}/short_drama_mvp_handoff_bundle.json"
 ruby "${ROOT_DIR}/scripts/short_drama_mvp_handoff_bundle_contract_test.rb" "${OUT_DIR}/short_drama_mvp_handoff_bundle_contract_report.md" "${OUT_DIR}/short_drama_mvp_handoff_bundle_contract_report.json"
+# WillDeepCore：包测试与边界守卫放在 xcodebuild 之前。
+#
+# 它最快——包里 53 条纯逻辑测试连编带跑不到 5 秒，而 App 那边要先建十几分钟。
+# 失败也最该早暴露：如果核心判据都不对，没必要再去等整个 App 编完。
+# 边界守卫见 docs/BUILD_MODULARIZATION_DESIGN.md：包一旦引入 SwiftUI/AppState
+# 就不再独立，而那不会有编译错误来提醒。
+ruby "${ROOT_DIR}/scripts/willdeep_core_boundary_test.rb" "${OUT_DIR}/willdeep_core_boundary_report.md" "${OUT_DIR}/willdeep_core_boundary_report.json"
+( cd "${ROOT_DIR}/Packages/WillDeepCore" && swift test )
+
 ruby "${ROOT_DIR}/scripts/xcresult_report_contract_test.rb" "${OUT_DIR}/xcresult_report_contract_report.md" "${OUT_DIR}/xcresult_report_contract_report.json"
 
 EXTRA_ARGS=("$@")

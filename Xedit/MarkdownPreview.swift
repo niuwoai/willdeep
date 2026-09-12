@@ -28,6 +28,7 @@
 //      `SyntaxHighlighter` so language colors match the editor.
 //
 
+import WillDeepCore
 import SwiftUI
 import AppKit
 

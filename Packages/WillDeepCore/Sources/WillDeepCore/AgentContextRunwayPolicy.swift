@@ -15,9 +15,9 @@ import Foundation
 /// preserved. This policy covers the different failure mode where one user turn
 /// keeps calling tools long enough to move from safe to nearly full before that
 /// post-turn compressor gets a chance to run.
-nonisolated enum AgentContextRunwayPolicy {
-    static let criticalUsedFraction = 0.90
-    static let firstGuardedToolRound = 1
+public nonisolated enum AgentContextRunwayPolicy {
+    public static let criticalUsedFraction = 0.90
+    public static let firstGuardedToolRound = 1
 
     /// How many times one user turn may be auto-resumed after a runway stop.
     ///
@@ -27,7 +27,7 @@ nonisolated enum AgentContextRunwayPolicy {
     /// drains it would otherwise loop stop → compress → resume → stop for as
     /// long as the user's credit lasts. Ordinary tasks park at this ceiling;
     /// Goals use their persisted execution budget instead.
-    static let maximumAutomaticResumes = 3
+    public static let maximumAutomaticResumes = 3
 
     /// How many extra rounds one handoff turn may spend recovering from a
     /// model that answered with a tool call instead of the handover.
@@ -37,27 +37,33 @@ nonisolated enum AgentContextRunwayPolicy {
     /// job is not new work" — so the host has to refuse the call and ask
     /// again. That costs a round; this ceiling stops a model that will not
     /// take no for an answer from spending the rest of the window arguing.
-    static let maximumHandoverRetries = 2
+    public static let maximumHandoverRetries = 2
 
-    nonisolated struct Snapshot: Equatable, Sendable {
-        let usedTokens: Int
-        let contextWindow: Int
+    public nonisolated struct Snapshot: Equatable, Sendable {
+        public let usedTokens: Int
+        public let contextWindow: Int
 
-        var remainingTokens: Int {
+        // 成员初始化器默认 internal，跨模块构造不到。
+        public init(usedTokens: Int, contextWindow: Int) {
+            self.usedTokens = usedTokens
+            self.contextWindow = contextWindow
+        }
+
+        public var remainingTokens: Int {
             max(0, contextWindow - usedTokens)
         }
 
-        var usedPercent: Int {
+        public var usedPercent: Int {
             min(100, max(0, Int((Double(usedTokens) / Double(max(1, contextWindow))) * 100)))
         }
     }
 
-    nonisolated enum Decision: Equatable, Sendable {
+    public nonisolated enum Decision: Equatable, Sendable {
         case continueExecution
         case handoff(Snapshot)
     }
 
-    static func evaluate(
+    public static func evaluate(
         usedTokens: Int,
         contextWindow: Int,
         toolRound: Int,
@@ -81,7 +87,7 @@ nonisolated enum AgentContextRunwayPolicy {
 
     /// Model-facing instruction, intentionally not localized UI copy. The
     /// ordinary language instruction still controls the visible reply.
-    static func handoffPrompt(snapshot: Snapshot) -> String {
+    public static func handoffPrompt(snapshot: Snapshot) -> String {
         """
         === CONTEXT RUNWAY HANDOFF ===
         Host-observed context usage is approximately \(snapshot.usedTokens) of \(snapshot.contextWindow) tokens (\(snapshot.usedPercent)% used, about \(snapshot.remainingTokens) remaining). This estimate is a safety signal, not evidence that the task is complete.
@@ -108,7 +114,7 @@ nonisolated enum AgentContextRunwayPolicy {
     /// will otherwise ask again. Telling it where the request belongs instead
     /// — REMAINING now, NEXT PROMPT for the resumed turn — turns the refusal
     /// into part of the handover rather than a wall.
-    static func refusedToolCallNotice(toolNames: [String]) -> String {
+    public static func refusedToolCallNotice(toolNames: [String]) -> String {
         let named = toolNames.isEmpty
             ? "The tool call"
             : "The call to \(toolNames.joined(separator: ", "))"
@@ -123,7 +129,7 @@ nonisolated enum AgentContextRunwayPolicy {
     /// Handed to the model after raw tool-call markup was stripped out of its
     /// handover reply. The call was already lost before it reached WillDeep —
     /// this only tells the model why its own text came back shorter.
-    static func discardedMarkupNotice() -> String {
+    public static func discardedMarkupNotice() -> String {
         """
         === CONTEXT RUNWAY HANDOFF — MALFORMED TOOL CALL DISCARDED ===
         Your last reply carried raw tool-call markup as plain text instead of a real call. Nothing ran, and the markup was removed from the transcript.
@@ -136,7 +142,7 @@ nonisolated enum AgentContextRunwayPolicy {
     /// the window. The handover the model just wrote survives compression as
     /// part of the kept tail, so this only has to point at it rather than
     /// restate the task.
-    static func resumePrompt(attempt: Int) -> String {
+    public static func resumePrompt(attempt: Int) -> String {
         """
         === CONTEXT RUNWAY RESUME ===
         Context compression finished and the window has been reclaimed. This is automatic resumption \(attempt) of at most \(maximumAutomaticResumes) for this task.

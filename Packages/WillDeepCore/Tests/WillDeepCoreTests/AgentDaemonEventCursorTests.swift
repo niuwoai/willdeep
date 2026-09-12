@@ -1,5 +1,5 @@
 import Testing
-@testable import WillDeep
+@testable import WillDeepCore
 
 @Suite("Daemon 稳定事件游标")
 struct AgentDaemonEventCursorTests {
