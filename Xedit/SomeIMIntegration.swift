@@ -994,20 +994,20 @@ enum SomeIMClient {
         let settings = SomeIMIntegrationStore.loadSettings().normalized
         let apiKey = SomeIMIntegrationStore.loadAPIKey()
         let session = AgentNetworkSupport.defaultSession()
+        let baseURL = settings.baseURL
         var uploaded: [String] = []
         for fileURL in fileURLs {
             let key = try SomeIMReferenceImageUpload.contentKey(forContentsOf: fileURL)
-            if let hit = SomeIMReferenceImageCache.shared.cached(contentKey: key) {
-                uploaded.append(hit.publicURL)
-                continue
+            // 走合并器而不是直接传：一次生成会并发发起多张候选，每一路都要
+            // 同一批脸，各传一遍纯属白花流量。
+            let image = try await SomeIMReferenceImageUploadCoalescer.shared.image(contentKey: key) {
+                try await SomeIMReferenceImageUpload.upload(
+                    fileURL: fileURL,
+                    inferenceBaseURL: baseURL,
+                    apiKey: apiKey,
+                    session: session
+                )
             }
-            let image = try await SomeIMReferenceImageUpload.upload(
-                fileURL: fileURL,
-                inferenceBaseURL: settings.baseURL,
-                apiKey: apiKey,
-                session: session
-            )
-            SomeIMReferenceImageCache.shared.store(contentKey: key, image: image)
             uploaded.append(image.publicURL)
         }
         return uploaded

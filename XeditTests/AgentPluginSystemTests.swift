@@ -1058,7 +1058,8 @@ struct AgentPluginSystemTests {
             try SomeIMReferenceImageUpload.endpoint(inferenceBaseURL: "https://some.im/v1").absoluteString
                 == "https://some.im/api/v1/customer/tmp-files"
         )
-        // 自建/测试环境带端口和多级路径时也要落到同一个前缀上。
+        // 自建/测试环境带端口和多级路径时按原地址推导：自建的人网关和控制台
+        // 是一个进程，换前缀是对的。
         #expect(
             try SomeIMReferenceImageUpload.endpoint(inferenceBaseURL: "http://127.0.0.1:8080/gateway/v1/").absoluteString
                 == "http://127.0.0.1:8080/api/v1/customer/tmp-files"
@@ -1066,6 +1067,59 @@ struct AgentPluginSystemTests {
         #expect(throws: (any Error).self) {
             _ = try SomeIMReferenceImageUpload.endpoint(inferenceBaseURL: "not a url")
         }
+    }
+
+    /// 线上实测撞出来的：中国区中继是**边缘节点，只挂了网关**，控制台那套
+    /// `/api/v1` 路由不在上面。照着推理地址换前缀会必然 404，而页面上只看得到
+    /// 「HTTP 404: 404 page not found」——那正是 Go 默认的 404 页，跟「路径写错」
+    /// 长得一模一样，所以这条一定要钉住。
+    @Test
+    func referenceImageUploadNeverTargetsTheChinaEdgeNode() throws {
+        let endpoint = try SomeIMReferenceImageUpload.endpoint(
+            inferenceBaseURL: SomeIMRelayRegion.chinaBaseURL
+        )
+        #expect(endpoint.absoluteString == "https://some.im/api/v1/customer/tmp-files")
+        #expect(endpoint.host != "api.niuwoai.com")
+        // 两个已知中继都必须落到同一个主站，否则同一个账号的素材会分家。
+        #expect(
+            try SomeIMReferenceImageUpload.endpoint(inferenceBaseURL: SomeIMRelayRegion.internationalBaseURL)
+                == endpoint
+        )
+    }
+
+    /// 一次生成并发发起多张候选，每一路都要同一批脸。只靠「传完写缓存」拦不住
+    /// 并发：实测两张候选把同一个文件传了两次，各 945 KB。
+    @Test
+    func concurrentReferenceUploadsOfTheSameFaceCollapseIntoOne() async throws {
+        SomeIMReferenceImageCache.shared.removeAll()
+        let counter = UploadCounter()
+        let key = "same-face-\(UUID())"
+        let expected = SomeIMReferenceImage(
+            publicURL: "https://cdn.example/face.png", expiresAt: Date().addingTimeInterval(3600)
+        )
+        let results = try await withThrowingTaskGroup(of: String.self) { group in
+            for _ in 0..<6 {
+                group.addTask {
+                    try await SomeIMReferenceImageUploadCoalescer.shared.image(contentKey: key) {
+                        await counter.increment()
+                        try await Task.sleep(nanoseconds: 50_000_000)
+                        return expected
+                    }.publicURL
+                }
+            }
+            var collected: [String] = []
+            for try await value in group { collected.append(value) }
+            return collected
+        }
+        #expect(results.count == 6)
+        #expect(results.allSatisfy { $0 == expected.publicURL })
+        #expect(await counter.value == 1)
+        SomeIMReferenceImageCache.shared.removeAll()
+    }
+
+    private actor UploadCounter {
+        private(set) var value = 0
+        func increment() { value += 1 }
     }
 
     @Test

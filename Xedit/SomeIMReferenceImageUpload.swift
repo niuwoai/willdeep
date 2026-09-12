@@ -74,13 +74,28 @@ nonisolated enum SomeIMReferenceImageUpload {
         }
     }
 
-    /// The upload host is derived from the inference base URL by dropping its
-    /// path entirely: the two live on the same host under different prefixes
-    /// (`/v1` for inference, `/api/v1` for this). Deriving rather than
-    /// hardcoding keeps a self-hosted or staging base URL working.
+    /// 上传端点所在的主机。
+    ///
+    /// **不能从推理地址推导**。推理和上传确实是同一个站点的两个前缀
+    /// （`/v1` 与 `/api/v1`），但只在主站上都挂着：中国区中继
+    /// `api.niuwoai.com` 是**边缘节点，只挂了网关**，控制台那套 `/api/v1`
+    /// 路由根本不在上面。第一版就是照着推理地址换前缀，于是国际区能用、
+    /// 中国区必然 404——而页面上只看得到「HTTP 404: 404 page not found」，
+    /// 这行文字正是 Go 默认的 404 页，跟「路径写错了」长得一模一样。
+    ///
+    /// 判据按区域走：两个已知中继都回主站 some.im（账号、控制台本来就只在
+    /// 主站，`customerPortalURL` 也钉在那里）；自建/测试地址则仍按原地址
+    /// 推导——自建的人网关和控制台是一个进程，换前缀是对的。
     static func endpoint(inferenceBaseURL: String) throws -> URL {
         let trimmed = inferenceBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ \n\t"))
-        guard var components = URLComponents(string: trimmed), components.host != nil else {
+        let host: String
+        switch SomeIMRelayRegion.resolved(for: trimmed) {
+        case .china, .international:
+            host = SomeIMRelayRegion.internationalBaseURL
+        case .custom:
+            host = trimmed
+        }
+        guard var components = URLComponents(string: host), components.host != nil else {
             throw AgentClientError.invalidBaseURL
         }
         components.path = "/api/v1/customer/tmp-files"
@@ -192,6 +207,41 @@ nonisolated enum SomeIMReferenceImageUpload {
             hasher.update(data: chunk)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+/// 按内容键合并同时进行的上传。
+///
+/// 一次生成会并发发起多张候选（`IMAGE_CONCURRENCY`），每一路都要同一批参照
+/// 图。只靠"上传完写缓存"是拦不住的：几路同时起跑，谁都还没写完，于是同一张
+/// 脸被传 N 次——实测两张候选就传了两次同一个文件，各 945 KB。这里让后到的
+/// 那几路去 await 第一路的那个任务，而不是各传一遍。
+///
+/// 失败不缓存：`tasks` 在收尾时无条件清掉，所以一次失败不会把后续调用钉死在
+/// 同一个错误上。
+actor SomeIMReferenceImageUploadCoalescer {
+    static let shared = SomeIMReferenceImageUploadCoalescer()
+
+    private var tasks: [String: Task<SomeIMReferenceImage, Error>] = [:]
+
+    func image(
+        contentKey: String,
+        upload: @escaping @Sendable () async throws -> SomeIMReferenceImage
+    ) async throws -> SomeIMReferenceImage {
+        if let cached = SomeIMReferenceImageCache.shared.cached(contentKey: contentKey) {
+            return cached
+        }
+        if let running = tasks[contentKey] {
+            return try await running.value
+        }
+        let task = Task<SomeIMReferenceImage, Error> {
+            let image = try await upload()
+            SomeIMReferenceImageCache.shared.store(contentKey: contentKey, image: image)
+            return image
+        }
+        tasks[contentKey] = task
+        defer { tasks[contentKey] = nil }
+        return try await task.value
     }
 }
 
