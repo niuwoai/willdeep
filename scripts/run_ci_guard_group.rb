@@ -39,6 +39,10 @@ def guard_groups(output_dir)
   image_edit_md, image_edit_json = report_paths(output_dir, "image_edit")
   media_refresh_md, media_refresh_json = report_paths(output_dir, "media_task_refresh")
   media_import_md, media_import_json = report_paths(output_dir, "media_import_context")
+  fixture_lifetime_md, fixture_lifetime_json = report_paths(
+    output_dir,
+    "test_fixture_process_lifetime"
+  )
 
   short_drama_md, short_drama_json = report_paths(output_dir, "short_drama_media")
   production_gap_md, production_gap_json = report_paths(output_dir, "production_gap_actions")
@@ -81,6 +85,14 @@ def guard_groups(output_dir)
       [
         "bundled-agent-rules",
         command("bundled_agent_rules_contract_test.rb", bundled_rules_md, bundled_rules_json)
+      ],
+      [
+        "test-fixture-process-lifetime",
+        command(
+          "test_fixture_process_lifetime_contract_test.rb",
+          fixture_lifetime_md,
+          fixture_lifetime_json
+        )
       ],
       ["project-build-guard", command("project_build_guard_contract_test.rb")]
     ],

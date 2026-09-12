@@ -155,7 +155,7 @@ struct AgentExecutorAndTerminalPoolTests {
     func terminalProcessTreeTerminationEscalates() async throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "trap '' TERM; while true; do sleep 1; done"]
+        process.arguments = ["-c", AgentJobFixtureCommand.idleIgnoringTerm()]
         try process.run()
         let rootPID = process.processIdentifier
         defer {

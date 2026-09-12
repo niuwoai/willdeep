@@ -607,7 +607,7 @@ struct AgentBackgroundJobsTests {
         let registry = AgentJobRegistry()
         let runtimeID = UUID()
         let job = try registry.start(
-            command: "trap 'exit 143' TERM; while true; do sleep 1; done",
+            command: AgentJobFixtureCommand.idle(),
             workingDirectory: nil,
             runtimeID: runtimeID,
             timeoutSeconds: nil
@@ -628,7 +628,7 @@ struct AgentBackgroundJobsTests {
     func phaseCleanupStopsOnlyTheCompletedPhaseWithoutWakingGoalLoop() async throws {
         let registry = AgentJobRegistry()
         let runtimeID = UUID()
-        let command = "trap 'exit 143' TERM; while true; do sleep 1; done"
+        let command = AgentJobFixtureCommand.idle()
         let phaseOne = try registry.start(
             command: command,
             workingDirectory: nil,
@@ -698,7 +698,7 @@ struct AgentBackgroundJobsTests {
         let registry = AgentJobRegistry()
         let runtimeID = UUID()
         let job = try registry.start(
-            command: "trap 'exit 143' TERM; while true; do sleep 1; done",
+            command: AgentJobFixtureCommand.idle(),
             workingDirectory: nil,
             runtimeID: runtimeID,
             timeoutSeconds: 0.4
@@ -785,13 +785,20 @@ struct AgentBackgroundJobsTests {
         )
 
         let runningJob = try appState.agentJobRegistry.start(
-            command: "printf 'Compiling AgentBackgroundTasksPanel.swift\\nLinking WillDeep\\n'; printf 'warning: preview fixture uses sample output\\n' >&2; trap 'exit 143' TERM; while true; do sleep 1; done",
+            command: AgentJobFixtureCommand.idle(
+                prefix: "printf 'Compiling AgentBackgroundTasksPanel.swift\\nLinking WillDeep\\n'; "
+                    + "printf 'warning: preview fixture uses sample output\\n' >&2; "
+            ),
             workingDirectory: workspace,
             runtimeID: session.id,
             timeoutSeconds: nil
         )
-        try await Task.sleep(nanoseconds: 120_000_000)
+        // Registered before the first `await`, so a throw anywhere below
+        // still signals the shell. The rendering path underneath is the
+        // heaviest in this suite, and it was an abandoned run of exactly
+        // this test that stranded two orphan shells for days.
         defer { _ = appState.agentJobRegistry.kill(id: runningJob.id) }
+        try await Task.sleep(nanoseconds: 120_000_000)
 
         // Match the selected ImageGen reference's right-side panel viewport so
         // the Design QA comparison is spatially meaningful rather than scaled.
@@ -829,6 +836,17 @@ struct AgentBackgroundJobsTests {
 
         #expect(png.count > 20_000)
         #expect(FileManager.default.fileExists(atPath: outputURL.path))
+
+        // Reap before returning rather than leaving it to `defer`, which
+        // cannot await: the test must not finish while the shell is still
+        // draining its TERM.
+        _ = appState.agentJobRegistry.kill(id: runningJob.id)
+        #expect(
+            await waitUntilFinished(
+                registry: appState.agentJobRegistry,
+                id: runningJob.id
+            )
+        )
     }
 
     /// `tail_lines` only returns the last N lines. Saves the model
@@ -927,7 +945,7 @@ struct AgentBackgroundJobsTests {
         _ = await waitUntilFinished(registry: registry, id: finishedJob.id)
 
         let liveJob = try registry.start(
-            command: "trap 'exit 143' TERM; while true; do sleep 1; done",
+            command: AgentJobFixtureCommand.idle(),
             workingDirectory: nil,
             runtimeID: runtimeID,
             timeoutSeconds: nil
