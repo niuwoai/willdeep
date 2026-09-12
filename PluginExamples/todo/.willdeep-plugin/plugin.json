@@ -64,6 +64,24 @@
         "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.restore"}
       },
       {
+        "id": "todo.attach",
+        "titleKey": "command.attach",
+        "icon": "sf:paperclip",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.attach"}
+      },
+      {
+        "id": "todo.attachment_preview",
+        "titleKey": "command.attachmentPreview",
+        "icon": "sf:eye",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.attachment_preview"}
+      },
+      {
+        "id": "todo.detach",
+        "titleKey": "command.detach",
+        "icon": "sf:paperclip.badge.ellipsis",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.detach"}
+      },
+      {
         "id": "todo.settings",
         "titleKey": "command.settings",
         "icon": "sf:gearshape",

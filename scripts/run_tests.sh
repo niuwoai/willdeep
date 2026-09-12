@@ -64,6 +64,7 @@ ruby "${ROOT_DIR}/scripts/computer_use_helper_contract_test.rb" "${OUT_DIR}/comp
 ruby "${ROOT_DIR}/scripts/chrome_extension_contract_test.rb" "${OUT_DIR}/chrome_extension_contract_report.md" "${OUT_DIR}/chrome_extension_contract_report.json"
 ruby "${ROOT_DIR}/scripts/short_drama_media_contract_test.rb" "${OUT_DIR}/short_drama_media_report.md" "${OUT_DIR}/short_drama_media_report.json"
 ruby "${ROOT_DIR}/scripts/widget_side_panel_contract_test.rb" "${OUT_DIR}/widget_side_panel_report.md" "${OUT_DIR}/widget_side_panel_report.json"
+ruby "${ROOT_DIR}/scripts/plugin_command_contract_test.rb" "${OUT_DIR}/plugin_command_report.md" "${OUT_DIR}/plugin_command_report.json"
 ruby "${ROOT_DIR}/scripts/roundtable_interaction_contract_test.rb" "${OUT_DIR}/roundtable_interaction_contract_report.md" "${OUT_DIR}/roundtable_interaction_contract_report.json"
 ruby "${ROOT_DIR}/scripts/image_edit_contract_test.rb" "${OUT_DIR}/image_edit_report.md" "${OUT_DIR}/image_edit_report.json"
 ruby "${ROOT_DIR}/scripts/media_task_refresh_contract_test.rb" "${OUT_DIR}/media_task_refresh_report.md" "${OUT_DIR}/media_task_refresh_report.json"

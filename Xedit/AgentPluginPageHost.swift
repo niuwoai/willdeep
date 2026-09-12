@@ -141,6 +141,16 @@ private struct AgentPluginWebPage: View {
                     context: destinationContext,
                     appState: appState
                 )
+                // 视图身份必须跟着目标走。所有插件页共用 AgentModeView 里
+                // 同一个结构槽位，没有 .id 的话换插件只会走 updateNSView：
+                // makeNSView 不再执行，于是上一个插件的 WKWebView 被原地复用
+                // ——它的 websiteDataStore 和 scheme handler 的 pluginID 都是
+                // 创建时钉死的，`/__media__/` 会去上一个插件的 plugin-data 下
+                // 找图，整页图片 404（短剧工坊反复出现的"图不显示"）。带上
+                // .id 才会重新走 makeNSView，保活缓存也才按目标各自命中。
+                // 只钉 qualifiedID：激活包切换仍由 updateNSView 回写
+                // packageURL 处理，不必为此另起一张页面。
+                .id(destination.qualifiedID)
                 // 重新载入时旧页面还挂着，下面那个 isLoading 分支根本走不到，
                 // 用户点完「重新载入」屏幕纹丝不动，只能以为没反应。这里在
                 // 顶部叠一条细进度条，不遮挡内容。
@@ -643,6 +653,7 @@ private struct AgentPluginWebView: NSViewRepresentable {
         coordinator.destinationContext = context
         coordinator.appState = appState
         coordinator.schemeHandler?.packageURL = destination.packageURL
+        coordinator.schemeHandler?.pluginID = destination.pluginID
         if coordinator.loadedHTML != html || coordinator.baseURL != baseURL {
             coordinator.prepareForReload()
             coordinator.loadedHTML = html
@@ -1838,9 +1849,27 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
     nonisolated static let host = "bundle"
     private let packageURLLock = NSLock()
     private var lockedPackageURL: URL
+    private var lockedPluginID: String
     private let maximumResourceBytes = 8 * 1024 * 1024
-    private let pluginID: String
     private let maximumMediaBytes = 32 * 1024 * 1024
+
+    /// 生成媒体的落盘目录是按插件分的（plugin-data/<pluginID>/generated-images），
+    /// 所以这个值钉死在创建时刻就等于把图钉在了创建时那个插件上。视图身份
+    /// 现在跟着目标走，正常路径下不会再出现复用；这里仍然可写，是为了任何
+    /// 复用了同一张 WKWebView 的宿主都不会静默去错误的插件目录取图——那种
+    /// 失败只在统一日志里留一行，页面上只是一张空框。
+    var pluginID: String {
+        get {
+            packageURLLock.lock()
+            defer { packageURLLock.unlock() }
+            return lockedPluginID
+        }
+        set {
+            packageURLLock.lock()
+            defer { packageURLLock.unlock() }
+            lockedPluginID = newValue
+        }
+    }
 
     /// 资源根必须跟着 destination 的激活包走。它在 `makeNSView` 时创建，而
     /// 注册表刷新可能把激活包切到另一个副本（内置 ↔ 本地安装同版本并存）；
@@ -1862,7 +1891,7 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
 
     init(packageURL: URL, pluginID: String) {
         self.lockedPackageURL = packageURL
-        self.pluginID = pluginID
+        self.lockedPluginID = pluginID
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
