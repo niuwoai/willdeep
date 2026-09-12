@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.372.0-rc3 - 2026-09-12
+
+### Fixed
+
+- **后台任务面板的可视化 QA 测试会在开发机上留下永不退出的 `/bin/sh`。** 今天在本机抓到两个，一个已经活了 6 天，一个 20 小时，父进程都是 launchd。命令是 `printf 'Compiling AgentBackgroundTasksPanel.swift…'; trap 'exit 143' TERM; while true; do sleep 1; done`，来自 [AgentBackgroundJobsTests.swift](XeditTests/AgentBackgroundJobsTests.swift) 里那条渲染面板截图的 `rendersBackgroundTaskManagerForVisualQA`。
+  - **不是产品代码的问题，产品里搜不到这条命令，它只存在于测试。** 面板本身照常把作业登记进 `AgentJobRegistry`，`kill` 也照常发 SIGTERM。
+  - 漏的是另一头：这个桩只会因为别人给它发信号而死。测试宿主一旦非正常结束（`xcodebuild` 收尾 hang 被 watchdog SIGKILL、harness 崩掉、强退），`defer` 一条都不跑，shell 被挂到 launchd 名下，然后就是无限期地每秒 fork 一个 `sleep 1`。
+  - 修法是让桩自带死线：新增 [AgentJobFixtureCommands.swift](XeditTests/AgentJobFixtureCommands.swift)，`while true` 换成数到 60 秒的 POSIX 计数循环。正常路径仍然毫秒级被 SIGTERM 收掉，被遗弃的那一份最多苟活一分钟。全部 6 处长驻桩（含那条**故意**忽略 TERM、用来验证 SIGKILL 升级的）都改走这个入口。
+  - 那条可视化 QA 测试另外补了两处：`defer` 挪到第一个 `await` 之前（中途抛异常也能收），结尾显式 kill 并 `waitUntilFinished`，不让测试在 shell 还没排干 TERM 时就返回。
+
+### Added
+
+- **`scripts/test_fixture_process_lifetime_contract_test.rb`** —— 扫 `XeditTests/` 下所有 Swift 源码，发现 `while true; do sleep` / `sleep infinity` / `tail -f /dev/null` 这类会脱缰的 shell 桩就红，并核验可视化 QA 那条确实 kill + wait。已挂进 `run_ci_guard_group.rb` 的 quality 组。反验做过：注入一行违规写法即 FAIL，撤掉即 PASS。
+
 ## 1.372.0-rc2 - 2026-09-12
 
 ### Fixed
