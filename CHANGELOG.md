@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.372.0-rc5 - 2026-09-13
+
+### Changed
+
+- **随应用分发的 Agent 规则库升到 0.21.0，新增一条「不要探测凭据文件」。** 起因是 Agent 为了诊断 ssh 连不上，跑了 `cat ~/.ssh/id_ed25519 >/dev/null; echo "read_exit=$?"` 去看私钥读不读得到。这条命令没给出任何多余信息——直接跑 `ssh -o BatchMode=yes <host> true`，报错本身就把认证、网络、主机密钥三种原因区分开了，而且全程不碰钥匙文件。它还离泄漏只差一个重定向，并且白白花掉用户一次审批确认。
+  - 规则里给了替代手法：要凭据文件的元信息用 `ls -l` / `stat`；判断有没有 agent 转发只读 `SSH_AUTH_SOCK`；判断 API key 能不能用就拿它发一个最小的真实请求看状态码。
+  - 产品自己的远程运行时本来就用 BatchMode，设置页也写着「只存路径，绝不存私钥内容」。规则库此前没有这一条，`BundledAgentRules/` 里搜 ssh 是零命中。
+  - 同一次同步顺带带入了上游 0.20.0 的生成器索引模式改动。快照的 `content_sha256` 和 `source_revision` 由 `scripts/sync_bundled_agent_rules.rb` 重算。
+
+### Known issues
+
+- 本机三轮全量都有红，失败集合每轮都不一样：945 例 failed=13、3095 例 failed=19、当前基点 4064 例 failed=4。形态统一是满载下的进程与计时红——`Time limit was exceeded: 60.000 seconds`、后台作业等不到终态、进程树忽略 TERM 后没被及时升级、一条 `NSURLErrorDomain -1001`。三轮的失败 suite 分别单独复跑，131 例、82 例、63 例全绿，没有一条重现，与本次规则快照改动零交集。
+
 ## 1.372.0-rc4 - 2026-09-12
 
 ### Fixed

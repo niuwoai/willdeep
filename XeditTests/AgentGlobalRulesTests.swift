@@ -111,7 +111,7 @@ struct AgentGlobalRulesTests {
         let manifest = try #require(AgentBundledRules.manifest(rootURL: rulesRoot))
 
         #expect(rulesRoot.lastPathComponent == AgentBundledRules.directoryName)
-        #expect(manifest.rulesVersion == "0.20.0")
+        #expect(manifest.rulesVersion == "0.21.0")
         #expect(manifest.files.contains("AGENTS.md"))
         #expect(manifest.files.contains("programming.md"))
     }

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "rules_version": "0.20.0",
+  "rules_version": "0.21.0",
   "source_repository": "https://github.com/xurenlu/agentrules",
-  "source_revision": "8521395e65e1c4f5538cd38d10dd99a7caa367e5",
-  "content_sha256": "58458b0063f3f637cc6214e0dca75078fe5721d47f412f52415a66d09675d261",
+  "source_revision": "e3d8fecb0ae52c1709305fd10f66f2c4c74a494e",
+  "content_sha256": "eb8425c8b5f5bbac9ea21425c85b28bd5060d450a369cd73616fbfe6ca897da1",
   "files": [
     "AGENTS.md",
     "ARCHITECTURE.md",
