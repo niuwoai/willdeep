@@ -66,6 +66,8 @@
       .composer input[type="text"] { flex: 1; outline: none; font-size: var(--willdeep-body-font-size, 15px); }
       .composer input::placeholder { color: var(--placeholder); }
       input::placeholder, textarea::placeholder { color: var(--placeholder); }
+      /* 项目和标签在新建时就能选，不必先建完再去改。 */
+      .composer-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
       .composer .hint { margin-top: 7px; font-size: .78em; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
       .quick-attachments { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
       .quick-attachments:empty { display: none; }
@@ -208,6 +210,7 @@
         <input id="quick" type="text" autocomplete="off" spellcheck="false" />
         <button class="chip" id="quick-add" type="button"></button>
       </div>
+      <div class="composer-meta" id="quick-meta"></div>
       <div class="quick-attachments" id="quick-attachments" aria-live="polite"></div>
       <div class="hint" id="quick-hint"></div>
     </div>
@@ -434,6 +437,10 @@
           providers: [],
           loaded: false, editing: null, busy: false
         };
+        // 新建行上选好的项目和标签。projectPath 为 null 表示「还没选过」，
+        // 此时沿用当前工作区（也就是改动之前的唯一行为）；选过之后就按选的
+        // 来，空串是明确要「未归项目」，和没选过不是一回事。
+        var quickDraft = { projectPath: null, tags: [] };
         var lastRemoved = null;
         var toastTimer = null;
         var pendingQuickAttachments = [];
@@ -444,7 +451,7 @@
         ['title', 'count', 'refresh', 'settings-toggle', 'settings', 'settings-title', 'parser-label',
          'parser-mode', 'provider-label', 'provider-select', 'model-select', 'settings-note',
          'filters', 'skeleton', 'state', 'groups', 'toast', 'toast-text', 'toast-undo',
-         'composer', 'quick', 'quick-add', 'quick-attachments', 'quick-hint',
+         'composer', 'quick', 'quick-add', 'quick-attachments', 'quick-hint', 'quick-meta',
          'image-lightbox', 'image-lightbox-caption', 'image-lightbox-close', 'image-lightbox-image'].forEach(function (id) {
           el[id] = document.getElementById(id);
         });
@@ -463,6 +470,16 @@
             return runCommand('todo.update', changes).then(function () { toast(dt('saved')); return load(); });
           }
         });
+        /// 就地改一两个字段。todo.update 是按 key 是否出现来决定改什么的，
+        /// 所以这里只带要改的那几个，其余字段不受影响。
+        function saveItemFields(item, changes) {
+          var payload = { id: item.id };
+          Object.keys(changes).forEach(function (name) { payload[name] = changes[name]; });
+          return runCommand('todo.update', payload)
+            .then(function () { toast(dt('saved')); return load(); })
+            .catch(fail);
+        }
+
         function openInspector(item, field) {
           if (inspector.open(item, field)) render();
         }
@@ -531,6 +548,57 @@
           return isNaN(date.getTime()) ? null : date.toISOString();
         }
 
+        function quickProjectPath() {
+          return quickDraft.projectPath === null ? workspacePath() : quickDraft.projectPath;
+        }
+
+        function projectLabel(path) {
+          if (!path) return dt('scopeInbox');
+          var known = (state.projects || []).filter(function (project) { return project.path === path; })[0];
+          return (known && known.name) || path.replace(/\/$/, '').split('/').pop() || path;
+        }
+
+        // 新建行上的项目/标签选择器。和列表行用的是同一对面板，所以两边
+        // 的交互和判据一致，不会出现「新建时能填、列表里改不了」这种落差。
+        function renderQuickMeta() {
+          var host = el['quick-meta'];
+          if (!host) return;
+          host.textContent = '';
+
+          var path = quickProjectPath();
+          var project = metadataButton('', projectLabel(path), 'folder');
+          if (path) project.title = path;
+          project.setAttribute('aria-expanded', 'false');
+          project.addEventListener('click', function () {
+            window.TodoDetails.projectMenu(project, {
+              t: dt, projects: state.projects, workspace: workspacePath(), selected: path,
+              onPick: function (value) { quickDraft.projectPath = value; renderQuickMeta(); }
+            });
+          });
+          host.appendChild(project);
+
+          quickDraft.tags.forEach(function (name) {
+            host.appendChild(window.TodoDetails.tagChip(name, function () {
+              quickDraft.tags = quickDraft.tags.filter(function (tag) { return tag !== name; });
+              renderQuickMeta();
+            }, dt));
+          });
+
+          var addTag = window.TodoDetails.button(
+            quickDraft.tags.length ? '' : dt('tags'), 'tag-add', null, 'plus'
+          );
+          addTag.setAttribute('aria-label', dt('tags'));
+          addTag.setAttribute('aria-expanded', 'false');
+          addTag.addEventListener('click', function () {
+            window.TodoDetails.tagMenu(addTag, {
+              t: dt, catalog: state.allTags, selected: quickDraft.tags,
+              onChange: function (tags) { quickDraft.tags = tags; },
+              onClose: renderQuickMeta
+            });
+          });
+          host.appendChild(addTag);
+        }
+
         function quickAdd() {
           var sentence = el.quick.value.trim();
           if (!sentence || state.busy) return;
@@ -545,7 +613,8 @@
                   due: parsed.due,
                   allDay: parsed.allDay,
                   priority: parsed.priority,
-                  projectPath: workspacePath(),
+                  projectPath: quickProjectPath(),
+                  tags: quickDraft.tags,
                   source: 'todo.page'
                 }).then(function (payload) {
                   return { payload: payload, by: t('parsedBy', parsed.model || 'AI') };
@@ -554,7 +623,8 @@
               // 模型没接上（关了、超时、答非所问）就走本地规则，绝不把这条弄丢
               return runCommand('todo.quick_add', {
                 text: sentence,
-                projectPath: workspacePath(),
+                projectPath: quickProjectPath(),
+                tags: quickDraft.tags,
                 source: 'todo.page'
               }).then(function (payload) {
                 var by = (state.settings.parser === 'ai' && aiAvailable()) ? t('fallback') : t('parsedLocally');
@@ -1029,7 +1099,16 @@
           {
             var project = metadataButton('', item.project || dt('scopeInbox'), 'folder');
             if (item.projectPath) project.title = item.projectPath;
-            project.addEventListener('click', function () { openInspector(item, 'project'); });
+            project.setAttribute('aria-expanded', 'false');
+            // 就地改，不再强迫先展开右侧那块大面板。update 是按字段存在与否
+            // 生效的，所以只发这一个字段是安全的。
+            project.addEventListener('click', function () {
+              window.TodoDetails.projectMenu(project, {
+                t: dt, projects: state.projects, workspace: workspacePath(),
+                selected: item.projectPath || '',
+                onPick: function (value) { saveItemFields(item, { projectPath: value }); }
+              });
+            });
             meta.insertBefore(project, due);
           }
 
@@ -1100,10 +1179,26 @@
 
           body.appendChild(meta);
           var labels = document.createElement('div'); labels.className = 'tag-row';
+          function openTagMenu(anchor) {
+            var chosen = null;
+            window.TodoDetails.tagMenu(anchor, {
+              t: dt, catalog: state.allTags, selected: item.tags || [],
+              onChange: function (tags) { chosen = tags; },
+              // 勾选时只记在本地，收起面板才落一次盘：每勾一下都发一次
+              // update 会连着触发多次 load()，列表在手底下反复重建。
+              onClose: function () { if (chosen) saveItemFields(item, { tags: chosen }); }
+            });
+          }
           (item.tags || []).forEach(function (name) {
-            labels.appendChild(window.TodoDetails.tagChip(name, function () { openInspector(item, 'tags'); }));
+            var chip = window.TodoDetails.tagChip(name, function () { openTagMenu(chip); });
+            chip.setAttribute('aria-expanded', 'false');
+            labels.appendChild(chip);
           });
-          if (!(item.tags || []).length) labels.appendChild(window.TodoDetails.button(dt('tags'), 'tag-add', function () { openInspector(item, 'tags'); }, 'plus'));
+          if (!(item.tags || []).length) {
+            var addTag = window.TodoDetails.button(dt('tags'), 'tag-add', function () { openTagMenu(addTag); }, 'plus');
+            addTag.setAttribute('aria-expanded', 'false');
+            labels.appendChild(addTag);
+          }
           (item.attachments || []).forEach(function (file) {
             if (window.TodoDetails.isImageAttachment(file)) {
               var cacheKey = 'stored:' + item.id + ':' + file.id;
@@ -1299,6 +1394,9 @@
               state.allTags = (payload && payload.allTags) || [];
               state.untaggedCount = (payload && payload.untaggedCount) || 0;
               inspector.catalogs(state.projects, state.allTags);
+              // 项目名和标签目录是随这次 list 一起回来的，新建行上的选择器
+              // 要跟着刷新，否则第一次渲染只能显示路径末段。
+              renderQuickMeta();
               state.buckets = (payload && payload.buckets) || {};
               state.total = (payload && payload.total) || 0;
               if (payload && payload.settings) {
@@ -1364,6 +1462,7 @@
         });
         renderChrome();
         renderSettings();
+        renderQuickMeta();
         load();
         loadProviders();
       })();

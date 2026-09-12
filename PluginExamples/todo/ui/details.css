@@ -209,6 +209,33 @@ body.lightbox-open { overflow: hidden; }
   .image-lightbox { padding: 10px; }
 }
 
+/* 就地编辑：点项目/标签在锚点旁弹一张小卡，位置由 JS 算，所以这里只
+   给外观。position: fixed 是因为它挂在 body 上而不是行内。 */
+.inline-popover {
+  position: fixed; z-index: 70; width: 268px; max-height: 70vh; overflow: auto;
+  display: flex; flex-direction: column; gap: 6px; padding: 10px;
+  border: 1px solid var(--border-strong); border-radius: 10px;
+  background: var(--page); box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
+}
+.inline-popover .popover-title { margin: 0; color: var(--muted); font-size: .82em; }
+.inline-popover .popover-options { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow: auto; }
+.inline-popover .popover-option {
+  display: flex; align-items: center; gap: 7px; text-align: left;
+  border: 1px solid transparent; border-radius: 7px; padding: 7px 9px;
+  cursor: pointer; background: none; color: inherit; width: 100%;
+}
+.inline-popover .popover-option:hover { background: var(--surface-strong); border-color: var(--border); }
+.inline-popover .popover-option.is-active { border-color: var(--accent); }
+.inline-popover .popover-ghost { color: var(--accent); font-size: 13px; padding: 6px 2px; text-align: left; }
+.inline-popover .popover-custom { display: flex; gap: 6px; }
+/* display: flex 会盖掉 [hidden] 的 display: none，自由填路径那一栏就藏不住。 */
+.inline-popover .popover-custom[hidden] { display: none; }
+.inline-popover .popover-custom input { flex: 1; min-width: 0; }
+.inline-popover .popover-submit { border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+.inline-popover .popover-error:empty { display: none; }
+.inline-popover .popover-error { margin: 0; color: var(--danger); font-size: .8em; }
+.inline-popover .tag-options { max-height: 220px; }
+
 /* 项目选择：就地一张小卡，选完即走，不做成模态对话框。 */
 .project-picker {
   position: fixed; z-index: 60; right: 20px; bottom: 20px; width: 280px;

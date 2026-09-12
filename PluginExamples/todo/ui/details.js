@@ -153,6 +153,196 @@
     return row;
   }
 
+  // ── 就地编辑的锚定小面板 ─────────────────────────────────
+  // 列表里点项目/标签以前只能打开右侧那块大面板改。这里改成点哪儿在哪儿
+  // 弹一张小卡：挂在 body 上而不是行内，因为 render() 每次都把整张列表重建，
+  // 挂在行里会被连带清掉；一次只允许开一张，再点同一个锚点就是收起。
+  var openPopover = null;
+
+  function placePopover(root, anchor) {
+    if (!anchor || typeof anchor.getBoundingClientRect !== 'function') return;
+    var box = anchor.getBoundingClientRect();
+    var width = root.offsetWidth || 260;
+    var height = root.offsetHeight || 220;
+    var left = Math.min(Math.max(8, box.left), Math.max(8, window.innerWidth - width - 8));
+    var top = box.bottom + 6;
+    // 贴着窗口下沿的行往上翻，否则面板一半在屏幕外，够不着。
+    if (top + height > window.innerHeight - 8) top = Math.max(8, box.top - height - 6);
+    root.style.left = left + 'px';
+    root.style.top = top + 'px';
+  }
+
+  function closePopover(restoreFocus) {
+    var current = openPopover;
+    if (!current) return;
+    openPopover = null;
+    if (current.root.parentNode) current.root.parentNode.removeChild(current.root);
+    document.removeEventListener('mousedown', current.onDown, true);
+    document.removeEventListener('keydown', current.onKey, true);
+    window.removeEventListener('resize', current.onReflow, true);
+    window.removeEventListener('scroll', current.onReflow, true);
+    if (current.anchor && current.anchor.setAttribute) current.anchor.setAttribute('aria-expanded', 'false');
+    if (restoreFocus !== false && current.anchor && current.anchor.isConnected) current.anchor.focus();
+    // 收起之后才重绘锚点所在的那一块。开着的时候重绘会把锚点换成一个新
+    // 节点，面板还挂在 body 上，于是外部点击判定对着一个已经脱离文档的
+    // 锚点算——多选标签时每勾一下都要重开一次面板。
+    if (current.onClose) current.onClose();
+  }
+
+  function popover(anchor, build, onClose) {
+    var reopeningSameAnchor = !!openPopover && openPopover.anchor === anchor;
+    closePopover(false);
+    if (reopeningSameAnchor) return null;
+
+    var root = node('div', 'inline-popover');
+    root.setAttribute('role', 'dialog');
+    document.body.appendChild(root);
+
+    var entry = { root: root, anchor: anchor, onClose: onClose };
+    entry.onDown = function (event) {
+      if (root.contains(event.target)) return;
+      if (anchor && anchor.contains && anchor.contains(event.target)) return;
+      closePopover(false);
+    };
+    entry.onKey = function (event) {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      closePopover();
+    };
+    entry.onReflow = function () { placePopover(root, anchor); };
+    openPopover = entry;
+    document.addEventListener('mousedown', entry.onDown, true);
+    document.addEventListener('keydown', entry.onKey, true);
+    window.addEventListener('resize', entry.onReflow, true);
+    window.addEventListener('scroll', entry.onReflow, true);
+    if (anchor && anchor.setAttribute) anchor.setAttribute('aria-expanded', 'true');
+
+    build(root, function () { closePopover(); });
+    placePopover(root, anchor);
+    var first = root.querySelector('input, select, button');
+    if (first) first.focus();
+    return root;
+  }
+
+  /// 项目选择面板。`onPick` 收到的是 projectPath（空串 = 未归项目）。
+  function projectMenu(anchor, options) {
+    var t = options.t;
+    return popover(anchor, function (root, close) {
+      root.appendChild(node('p', 'popover-title', t('project')));
+      var list = node('div', 'popover-options');
+      var selected = String(options.selected || '');
+      projectEntries(options.projects, options.workspace, selected, t).forEach(function (entry) {
+        var row = button(entry[1], 'popover-option' + (entry[0] === selected ? ' is-active' : ''),
+          function () { close(); options.onPick(entry[0]); }, 'folder');
+        if (entry[0]) row.title = entry[0];
+        list.appendChild(row);
+      });
+      root.appendChild(list);
+
+      var error = node('p', 'popover-error');
+      var custom = node('form', 'popover-custom');
+      var input = node('input');
+      input.type = 'text';
+      input.placeholder = t('projectPath');
+      input.setAttribute('aria-label', t('projectPath'));
+      custom.appendChild(input);
+      custom.appendChild(button(t('save'), 'popover-submit'));
+      custom.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var path = input.value.trim();
+        // 和右侧面板同一条判据：`~/Sites/Xedit` 放行（服务端会展开），相对
+        // 路径拒绝——服务端刻意不按 cwd 去猜。
+        if (!path || !/^(\/|~($|\/))/.test(path)) {
+          error.textContent = t('invalidProject');
+          return;
+        }
+        close();
+        options.onPick(path);
+      });
+      var toggle = button(t('otherProject'), 'popover-ghost', function () {
+        toggle.hidden = true;
+        custom.hidden = false;
+        input.focus();
+      });
+      custom.hidden = true;
+      root.appendChild(toggle);
+      root.appendChild(custom);
+      root.appendChild(error);
+    });
+  }
+
+  /// 标签选择面板。勾选即提交一次 `onChange(tags)`，不需要再点保存——
+  /// 列表里改标签是个高频小动作，多一步确认就不如打开大面板了。
+  function tagMenu(anchor, options) {
+    var t = options.t;
+    var dirty = false;
+    return popover(anchor, function (root) {
+      root.appendChild(node('p', 'popover-title', t('tags')));
+      var error = node('p', 'popover-error');
+      var search = node('input', 'tag-search');
+      search.type = 'search';
+      search.placeholder = t('tagSearch');
+      search.setAttribute('aria-label', t('tagSearch'));
+      root.appendChild(search);
+      var list = node('div', 'tag-options');
+      root.appendChild(list);
+      root.appendChild(error);
+
+      var current = normalizeTags(options.selected);
+
+      function commit(next) {
+        if (next.length > MAX_TAGS) { error.textContent = t('tagLimit'); return false; }
+        current = normalizeTags(next);
+        error.textContent = '';
+        dirty = true;
+        options.onChange(current.slice());
+        return true;
+      }
+
+      function renderOptions() {
+        list.textContent = '';
+        var query = key(search.value);
+        var available = (options.catalog || []).slice();
+        current.forEach(function (name) {
+          if (!available.some(function (entry) { return key(entry.name) === key(name); })) {
+            available.push({ name: name, count: 0 });
+          }
+        });
+        var matches = available.filter(function (entry) { return key(entry.name).indexOf(query) >= 0; });
+        matches.forEach(function (entry) {
+          var checked = current.some(function (name) { return key(name) === key(entry.name); });
+          list.appendChild(checkRow(entry.name, checked, function (selected) {
+            var next = current.filter(function (name) { return key(name) !== key(entry.name); });
+            if (selected) next.push(entry.name);
+            // 勾上了就不重绘：checkbox 自己就记着状态，而重建整张列表会丢掉
+            // 焦点和滚动位置——连着勾两个标签时，第二下会落在一个已经被换掉
+            // 的 checkbox 上，等于白点。只有被上限拦下来时才重绘去纠正勾选。
+            if (!commit(next)) renderOptions();
+          }, entry.count));
+        });
+        var typed = search.value.normalize('NFC').trim().replace(/^#+/, '').trim();
+        var exists = typed && available.some(function (entry) { return key(entry.name) === key(typed); });
+        if (typed && !exists) {
+          list.appendChild(button(t('createTag', typed), 'popover-ghost', function () {
+            if (Array.from(typed).length > MAX_TAG_LENGTH || /[\u0000-\u001f\u007f]/.test(typed)) {
+              error.textContent = t('tagLimit');
+              return;
+            }
+            if (commit(current.concat([typed]))) { search.value = ''; renderOptions(); }
+          }, 'plus'));
+        }
+        if (!list.childElementCount) list.appendChild(node('p', 'detail-help', t('noTagMatches')));
+      }
+
+      search.addEventListener('input', renderOptions);
+      renderOptions();
+    }, function () {
+      // 没改过就别重绘：重绘会换掉锚点节点，用户紧接着点另一个标签/项目
+      // 的那一下就会落在一个已经脱离文档的按钮上，等于白点一次。
+      if (dirty && options.onClose) options.onClose();
+    });
+  }
+
   function renderFilters(container, options) {
     var t = options.t, state = options.state;
     var focused = document.activeElement;
@@ -439,5 +629,7 @@
   window.TodoDetails = { createInspector: createInspector, renderFilters: renderFilters, icon: icon,
     button: button, tagChip: tagChip, normalizeTags: normalizeTags, dayKey: dayKey,
     pastedImages: pastedImages, isImageAttachment: isImageAttachment,
-    parseDay: parseDay, calendarDays: calendarDays, dueValue: dueValue, draftFor: draftFor };
+    parseDay: parseDay, calendarDays: calendarDays, dueValue: dueValue, draftFor: draftFor,
+    projectMenu: projectMenu, tagMenu: tagMenu, closePopover: closePopover,
+    projectEntries: projectEntries };
 })();
