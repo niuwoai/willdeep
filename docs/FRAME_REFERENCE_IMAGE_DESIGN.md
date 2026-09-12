@@ -152,11 +152,33 @@ startCandidates, startPrompt, summary, title
 
 **插件清单**：`permissions` 已含 `ai.image`，无需改。参照图读取发生在宿主侧，插件只递路径。
 
-### 4.2 一个尚未定死的实现细节
+### 4.2 本地文件怎么变成参照图（已定，靠读代码定的，没花钱）
 
-上游收的是 `image_url`（URL），我们手里是**本地文件路径**。宿主现有的 `AgentMediaTools.someIMRequestBody` 走的是 base64 data URL 塞进 `image` 键——那是 edits 那套，而 edits 已经 410。所以「本地文件 → generations 的参照图字段」这一段要实测一次才能定：data URL 能否直接放进 `image_urls[]`，还是必须先拿到可访问的 URL。
+结论：**data URL 走不通，必须先上传换一个公网 URL。**
 
-**这一步会真实调用一次图像生成，即真实花钱。** 所以它不在本次可以闷头做完的范围内，需要用户点头后再验。在验之前，第 4.1 的宿主改动按「客户端接受一组本地路径、由宿主决定如何编码」来实现，编码细节收在一个函数里，实测结论回填进本节。
+判据在网关代码里，不需要实测：
+
+- gpt-image-2 走 OpenAI 严格 edits，网关拿到参照图地址后用普通 HTTP GET 去取字节——`muchtoken/internal/asyncmedia/openai_image.go:271` 的 `fetchImageBytesForOpenAI` 是 `http.NewRequestWithContext(ctx, GET, url)` 加 `Do`，Go 的 HTTP 客户端取不了 `data:` 开头的地址。
+- nano-banana-2 走 GRSAI，`urls` 数组是原样透给上游的，data URL 同样落不了地。
+- 整个 `internal/asyncmedia` 与 `internal/gateway` 里**没有任何一处解码输入侧的 data URL**。那些 `data:` 前缀判断全是 SSE 行解析，那些 base64 解码全是在处理**上游返回的结果**。
+
+现成的上传通道已经有了，而且文档里就是为这件事写的（`muchtoken/web/public/llms.txt:65`）：
+
+| 端点 | 用途 |
+| --- | --- |
+| `POST /api/v1/customer/tmp-files` | 服务端中转，多部分表单 `file` 字段，直接返回 `public_url` |
+| `POST /api/v1/customer/tmp-files/upload-url` + PUT + `/complete` | 浏览器直传后验真，客户端用不上 |
+
+要点：
+
+- **认证**：`Authorization: Bearer sk_...` 网关 API Key 即可（`internal/authapi/customer_api_key_auth.go:52`），不必是登录会话。注意 `docs/15-API接口规范.md:97` 写的是「不使用 sk_... 网关 API Key」，与代码矛盾——那行文档是陈的。
+- **限制**（`internal/authapi/customer_tmp_files.go:20`）：8 MB、24 小时、只收真 JPEG/PNG/GIF/WebP，按魔术字节嗅探且必须与声明的扩展名一致。角色形象图实测 1.9–2.5 MB PNG，在限额内。
+- **前缀不同**：上传在 `/api/v1`，推理在 `/v1`。
+- 返回的 `public_url` 直接作为 `reference_image_urls[]` 的元素。
+
+于是宿主侧的实现形状定了：**收一组本地路径 → 逐个上传换 URL → 带着 URL 调生成**。上传结果可以按文件内容哈希缓存，24 小时内同一张脸不必重复上传。
+
+顺带记一条：客户端**无法通过能力发现知道这条上传通道存在**——`internal/asyncmedia/capabilities.go` 只描述了 URL 形状的字段，一个字没提上传。见第 8 节。
 
 ---
 
@@ -191,8 +213,10 @@ startCandidates, startPrompt, summary, title
 
 ---
 
-## 8. 待确认问题
+## 8. 已确认决策（2026-09-12 第二轮）
 
-1. **4.2 的实测要不要做。** 需要真实生成一张图，会花钱。不做的话这条链路只能到「宿主接受路径并编码」为止，最后一公里没有证据。
-2. **muchtoken 要不要补图像模型的能力声明。** 两个选择：给 `/v1/model-capabilities` 加一个不过滤 image/video 的开关（或 `include=image` 参数），或者把图像模型的 `generation_task_types` 填上。字段和枚举都已就位，只是没人写。这是 muchtoken 侧的独立改动。
-3. **默认张数要不要从 4 降下来。** 附了参照图之后单价从 `text_to_image` 跳到 `multi_image_to_image`，一次 4 张的开销比现在高。默认值不动的话用户可能在不知情下多花钱。
+用户对下面三条的原文是「都同意，且我都授权」。
+
+1. **端到端实测做。** 但要验的东西已经换了：原本它要验「data URL 行不行」，那一问 4.2 靠读代码结案了。所以这笔钱改花在真正不确定的那段——上传换 URL 再带参照图生成，出来的脸到底像不像锁定的那张形象图。
+2. **muchtoken 补图像模型的能力声明。** 落法：给 `/v1/model-capabilities` 加**按需包含**的开关（默认返回不变，避免动已有调用方的线格式），并把图像模型的 `generation_task_types` 填上——字段和枚举早就在 `internal/pricing/catalog_meta.go:26` 定好了，只是没人往里写。顺带在 `internal/asyncmedia/capabilities.go` 里把 4.2 那条上传通道写进去：客户端现在没法通过能力发现知道它存在。再顺手改掉 `docs/15-API接口规范.md:97` 那行与代码矛盾的认证说明。
+3. **默认张数从 4 降到 2。** 附参照图后计费口径从 `text_to_image` 跳到 `multi_image_to_image`，一次 4 张比现在贵不少。2 张够挑，也不至于让用户在不知情下翻倍。纯文生图路径（角色形象图那一步）不受影响。
