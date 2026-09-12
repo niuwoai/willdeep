@@ -1001,7 +1001,11 @@ describe('Short Drama Studio', () => {
     expect(await screen.findByDisplayValue('手机冷光照亮脸部')).toBeTruthy();
     expect(screen.getByDisplayValue('他抬头望向窗外')).toBeTruthy();
     expect(screen.getByRole('button', { name: '采用分镜草稿' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: '生成 4 张候选' }).every((button) => button.hasAttribute('disabled'))).toBe(true);
+    // 张数是可调的（默认 2），断言按名字写死会随默认值漂移而烂掉；只钉"生成候选"这件事。
+    const generateButtons = screen.getAllByRole('button', { name: /生成 \d+ 张候选/ });
+    expect(generateButtons.length).toBeGreaterThan(0);
+    expect(generateButtons.every((button) => button.hasAttribute('disabled'))).toBe(true);
+    expect(screen.getAllByText('请先采用当前分镜草稿，再生成图片或视频。').length).toBeGreaterThan(0);
     expect(executeCommand.mock.calls.some(([command]) => command === 'drama.commitDraft')).toBe(false);
   });
 
