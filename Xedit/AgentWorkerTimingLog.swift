@@ -184,7 +184,38 @@ nonisolated enum AgentWorkerTimingLog {
         }
     }
 
+    /// 跑测试时整个进程改写到临时目录，而不是用户真实的 AgentAudit。
+    ///
+    /// 这条判据和 `AgentDispatchCoordinator.processDefaults`、
+    /// `AgentLocalModelResidency`、`AIPipeBootstrap` 用的是同一套——那三处早就
+    /// 做了隔离，只有这份台账漏了，于是每跑一遍单测就往用户的
+    /// `worker-timing.jsonl` 里灌一批桩运行。
+    ///
+    /// 实测后果不是"文件大了点"，是**把按工种统计的结论整个带偏**：9 天里这
+    /// 份台账积了 4060 条，其中 2755 条 `deep` 全是桩——每条 rounds=1、工具
+    /// 调用 0、token 1，模型里直接有 `test` 和 `test-model-16k`，父运行时
+    /// 2212 个在磁盘上没有对应会话文件。照这份数据算，会得出「deep 占 68%、
+    /// 运维只占 1%」，而真实开销 98% 在那 32 次 ops_runner 上。排查时我就是
+    /// 先被它骗了一轮。
+    ///
+    /// 判据故意取四项的并集：`XCTestCase` / `XCTest` 类存在能覆盖 Swift
+    /// Testing 与 XCTest 两套，两个环境变量覆盖 `xcodebuild test` 起的进程。
+    nonisolated static var isRunningUnderTests: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return NSClassFromString("XCTestCase") != nil
+            || NSClassFromString("XCTest") != nil
+            || environment["XCTestConfigurationFilePath"] != nil
+            || environment["XCTestBundlePath"] != nil
+    }
+
     static func defaultURL() -> URL {
+        if isRunningUnderTests {
+            // 一个测试进程一个文件：并行跑的 suite 之间不互相追加，进程退出
+            // 后由系统清理临时目录。
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent("willdeep-worker-timing", isDirectory: true)
+                .appendingPathComponent("\(ProcessInfo.processInfo.processIdentifier)-\(fileName)")
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base
