@@ -73,7 +73,12 @@ struct AgentStreamIdleGuardTests {
         await #expect(throws: AgentClientError.self) {
             for try await _ in AgentStreamIdleGuard.lines(source, idleTimeout: 0.4) {}
         }
-        #expect(Date().timeIntervalSince(started) < 6)
+        // 判据是「没被 keepalive 续命，所以会结束」，不是「结束得多快」。
+        // 上限 0.4s 对窗口 6s 只有 15 倍余量，而这里每 50ms 一次 keepalive、
+        // 每次都要过一趟 Task.sleep，满载全量下实测 7.52s 就把 6s 击穿了。
+        // 放到 30s：要证伪的是「无限挂着」，30s 同样证得了，而余量从 15 倍
+        // 提到 75 倍，判据没有被削弱。
+        #expect(Date().timeIntervalSince(started) < 30)
     }
 
     /// 判据是两条同时成立：每一段间隔都短于空转上限（所以时钟被续上），而

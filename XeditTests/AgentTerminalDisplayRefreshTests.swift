@@ -336,7 +336,12 @@ struct AgentTerminalWinsizeDebounceTests {
         // 旧写法固定睡 250ms 等 0.12s 的 debounce 落地,只有 ~2x 余量——主队列
         // asyncAfter 在满载全量下延迟轻易超过这点空隙,于是假红。改成轮询到
         // 提交出现为止,上限 10s 只作挂死兜底:负载高只是变慢,不再假失败。
-        let deadline = Date().addingTimeInterval(10)
+        // 10s 也被击穿过（实测整条用例跑了 32.9s 还是 0 次提交）：debounce 是
+        // DispatchQueue.main.asyncAfter 投递的，而这个轮询本身跑在 MainActor
+        // 上——全量并行跑时一堆 @MainActor suite 抢同一个主队列，那个工作项
+        // 能被饿过 10 秒。上限只是挂死兜底，放到 90s 不削弱判据：要卡的是
+        // 「三次突变只提交一次」，不是「多快提交」。
+        let deadline = Date().addingTimeInterval(90)
         while spy.calls.isEmpty && Date() < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }

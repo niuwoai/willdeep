@@ -534,9 +534,13 @@ struct AgentGlobalRulesTests {
             continuation.yield(Self.readPipePayload(readFD, expectedCount: expectedCount))
             continuation.finish()
         }
+        // 90s 而不是 10s。2 MiB 过一个 64 KiB 的管道要读写两端交替唤醒约 32
+        // 次，而读端那个 DispatchQueue.global 块在满载全量下拿不到线程，于是
+        // 写端在 EAGAIN 上转到超时、读端一个字节没收到（实测 delivered=false
+        // 且 received=0）。判据是「整帧原样送达」，不是「多快送达」。
         let writer = TerminalZModemPTYWriter(
             fileDescriptor: writeFD,
-            writeTimeout: 10
+            writeTimeout: 90
         )
 
         let delivered = writer.write(payload)
@@ -553,7 +557,9 @@ struct AgentGlobalRulesTests {
     /// not an indefinite EOF wait that prevents the entire suite finishing.
     private nonisolated static func readPipePayload(_ descriptor: Int32, expectedCount: Int) -> Data {
         let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(10))
+        // 和写端的 writeTimeout 成对放宽：两边都是 10s 时，谁先被饿到都会让
+        // 这条用例假红。仍然是有界的——缺字节照样变成失败断言，不会无限等。
+        let deadline = clock.now.advanced(by: .seconds(90))
         var received = Data()
         var buffer = [UInt8](repeating: 0, count: 16 * 1_024)
         while received.count < expectedCount, clock.now < deadline {

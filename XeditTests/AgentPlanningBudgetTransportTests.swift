@@ -2,6 +2,13 @@ import Foundation
 import Testing
 @testable import WillDeep
 
+/// 首轮联系时限在这两个 suite 里要拉开。桩的响应在 MainActor 上交付，而全量
+/// 并行跑时 MainActor 是全局瓶颈（这几个 suite 全是 @MainActor），产品口径的
+/// 20 秒会在桩还没被调度时先到点，断言于是拿到 firstContactTimeout 而不是它
+/// 要验的那个错误。拉开的是测试的证据窗口，产品默认值一个字没动。
+/// 45 秒仍在 suite 的 .timeLimit 之内，也仍低于 workerRequestTimeout。
+private let testFirstContactTimeout: TimeInterval = 45
+
 @MainActor
 @Suite("规划实际 streaming 账本", .serialized, .timeLimit(.minutes(1)))
 struct AgentPlanningBudgetTransportTests {
@@ -52,18 +59,21 @@ struct AgentPlanningBudgetTransportTests {
         }
         if valid {
             let outcome = try await AgentSubagentRunner.run(prompt: "Return the fixture payload", configuration: configuration,
-                workspaceURL: nil, outputSchema: schema, executionBudget: envelope, session: session)
+                workspaceURL: nil, outputSchema: schema, executionBudget: envelope, session: session,
+                firstContactTimeout: testFirstContactTimeout)
             #expect(outcome.report == #"{"ok":true}"#)
             #expect(outcome.usageTokens == 18)
         } else {
             await #expect(throws: AgentModelRequestLedger.Failure.budgetExceeded) {
                 _ = try await AgentSubagentRunner.run(prompt: "Return the fixture payload", configuration: configuration,
-                    workspaceURL: nil, outputSchema: schema, executionBudget: envelope, session: session)
+                    workspaceURL: nil, outputSchema: schema, executionBudget: envelope, session: session,
+                firstContactTimeout: testFirstContactTimeout)
             }
         }
         await #expect(throws: AgentModelRequestLedger.Failure.budgetExceeded) {
             _ = try await AgentSubagentRunner.run(prompt: "Must not send another request", configuration: configuration,
-                workspaceURL: nil, outputSchema: schema, executionBudget: envelope, session: session)
+                workspaceURL: nil, outputSchema: schema, executionBudget: envelope, session: session,
+                firstContactTimeout: testFirstContactTimeout)
         }
         #expect(requests == 1)
         #expect(try #require(outputCap) > 0)

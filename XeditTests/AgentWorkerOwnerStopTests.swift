@@ -2,6 +2,13 @@ import Foundation
 import Testing
 @testable import WillDeep
 
+/// 首轮联系时限在这两个 suite 里要拉开。桩的响应在 MainActor 上交付，而全量
+/// 并行跑时 MainActor 是全局瓶颈（这几个 suite 全是 @MainActor），产品口径的
+/// 20 秒会在桩还没被调度时先到点，断言于是拿到 firstContactTimeout 而不是它
+/// 要验的那个错误。拉开的是测试的证据窗口，产品默认值一个字没动。
+/// 45 秒仍在 suite 的 .timeLimit 之内，也仍低于 workerRequestTimeout。
+private let testFirstContactTimeout: TimeInterval = 45
+
 @MainActor
 @Suite("Worker 宿主停止传播", .serialized, .timeLimit(.minutes(1)))
 struct AgentWorkerOwnerStopTests {
@@ -83,7 +90,8 @@ struct AgentWorkerOwnerStopTests {
                     reviews += 1
                     return try await f.app.resolveSubagentToolApproval(toolName: name, arguments: ["command": .string(command)],
                         risk: .write, workerName: "fixture", runtime: f.runtime, messageID: UUID(), rootDirectory: nil)
-                }, executionBudget: f.budget, session: f.session)
+                }, executionBudget: f.budget, session: f.session,
+                    firstContactTimeout: testFirstContactTimeout)
         }
         #expect(requests == 1 && reviews == 1)
         #expect(try f.ledger.summary().reportedTokens == 18)
@@ -113,7 +121,8 @@ struct AgentWorkerOwnerStopTests {
                     default: break
                     }
                     return false
-                }, executionBudget: budget, session: f.session)
+                }, executionBudget: budget, session: f.session,
+                firstContactTimeout: testFirstContactTimeout)
         }
         if transition == "deny" {
             let outcome = try await operation()

@@ -1148,6 +1148,13 @@ enum AgentSubagentRunner {
         openingImages: [AgentImageAttachment] = [],
         executionBudget: AgentToolExecutionBudget? = nil,
         session: URLSession? = nil,
+        /// 首轮「联系上 provider」的时限。默认就是产品口径的那个值，调用方
+        /// 不传即与改动前完全一致。开成参数只为让测试能把它拉开：测试用的
+        /// 是 URLProtocol 桩，桩要在 MainActor 上交付响应，而全量并行跑时
+        /// MainActor 是全局瓶颈，20 秒会在「桩还没被调度」时先到点，于是
+        /// 断言拿到 firstContactTimeout 而不是它要验的那个错误。那是测试
+        /// 环境的调度饥饿，不是产品该放宽的超时。
+        firstContactTimeout: TimeInterval = AgentWorkerFirstContact.timeout,
         onProgress: ((AgentSubagentProgressUpdate) -> Void)? = nil
     ) async throws -> Outcome {
         try Task.checkCancellation()
@@ -1369,6 +1376,7 @@ enum AgentSubagentRunner {
                     try await performRequest()
                 } else {
                     try await AgentWorkerFirstContact.race(
+                        timeout: firstContactTimeout,
                         hasMadeContact: { await collector.hasReceivedAnyEvent },
                         operation: performRequest
                     )

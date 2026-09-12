@@ -3,7 +3,11 @@ import Testing
 @testable import WillDeep
 
 @MainActor
-@Suite("Daemon 实际传输退出回执", .serialized, .timeLimit(.minutes(1)))
+// .timeLimit 放到 3 分钟：这个 suite 里的用例要等 waitForTerminal，而那是无
+// 界的 Combine 订阅，靠 suite 的时限兜底。满载全量下它被 60 秒切断过（实测
+// commandStreamsAsOwnedRawOutput 的 persistent=false 那个参数化用例）。时限
+// 是挂死兜底，不是性能判据，所以放宽不削弱任何断言。
+@Suite("Daemon 实际传输退出回执", .serialized, .timeLimit(.minutes(3)))
 struct AgentDaemonExitReceiptTests {
     @MainActor private struct Fixture {
         let backend: DaemonRuntimeBackend

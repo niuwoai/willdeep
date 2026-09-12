@@ -3,7 +3,9 @@ import Testing
 @testable import WillDeep
 
 @MainActor
-@Suite("Responses 完成事件与连接生命周期", .serialized, .timeLimit(.minutes(1)))
+// 看门狗从 30s 放到 120s（见下），suite 时限必须跟着放，否则时限成了新的
+// 假红来源；6 个参数化用例共享这一份预算。
+@Suite("Responses 完成事件与连接生命周期", .serialized, .timeLimit(.minutes(5)))
 struct AgentResponsesCompletionTests {
     private actor Events {
         var text = ""
@@ -53,9 +55,12 @@ struct AgentResponsesCompletionTests {
             }
             group.addTask {
                 // Full-suite MainActor contention can delay request admission.
-                // This remains well below the former 180-second idle wait;
-                // the fixture never sends EOF, so completion must be semantic.
-                try await Task.sleep(for: .seconds(30))
+                // 30s 仍被击穿过（实测这条报 waitedForSocketEOF）：这个 suite
+                // 是 @MainActor，而 adapter 的 streamChat 也要 MainActor，全量
+                // 并行跑时一堆 @MainActor suite 抢同一个执行器。放到 120s。
+                // 这仍远低于原来那个 180 秒的空转等待，而桩刻意永不发 EOF，
+                // 所以能过就只能是语义收尾走通了——判据没有被削弱。
+                try await Task.sleep(for: .seconds(120))
                 throw Failure.waitedForSocketEOF
             }
             try await group.next()
@@ -63,7 +68,9 @@ struct AgentResponsesCompletionTests {
         #expect(await events.text == "已返回的内容")
         #expect(await events.finishes.count == 1)
         if terminal != "response.failed" { #expect(await events.tokens == 42) }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(1))
+        // 同一个理由：观察 stopLoading 落地的窗口也只有 1 秒，同样会被主执行器
+        // 饥饿击穿。判据是「收尾时取消了连接」，和快慢无关。
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
         while !OpenResponsesProtocol.wasStopped(id: id), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }
