@@ -62,7 +62,16 @@ export type Drama = Omit<DramaPlan, 'episodes' | 'characters'> & Revised & {
 export type ImageModel = 'gpt-image-2' | 'nano-banana-2';
 export type ImageResult = { mediaURL: string; filePath: string; model: ImageModel; providerID: 'some-im' };
 export type ProviderEntry = { providerID: string; displayName: string; isActive: boolean; isLocal: boolean; models: string[]; flashModel?: string };
-export type Stage = 'library' | 'settings' | 'planning' | 'characters' | 'script' | 'storyboard' | 'frames' | 'video';
+export type Stage = 'library' | 'settings' | 'queue' | 'planning' | 'characters' | 'script' | 'storyboard' | 'frames' | 'video';
+/** 服务端 jobs.json 里的一条视频任务。字段名与 lib/video_store.rb 的 add_job 对齐。 */
+export type VideoJob = {
+  id: string; title?: string; prompt?: string; provider?: string;
+  state: 'draft' | 'submitting' | 'queued' | 'in_progress' | 'completed' | 'failed' | string;
+  progress?: number; createdAt?: string; updatedAt?: string;
+  error?: { code?: string; message?: string } | null;
+  outputPath?: string | null; outputURL?: string | null; downloadError?: string | null;
+};
+export type VideoQueueFilter = 'all' | 'active' | 'completed' | 'failed' | 'draft';
 /** 宿主给的技能条目。刻意没有正文和路径：引用时只回传 identifier。 */
 export type SkillEntry = { identifier: string; name: string; description: string; source: 'bundled' | 'user' | 'plugin'; tier?: 'worker' | 'standard' | 'deep' };
 

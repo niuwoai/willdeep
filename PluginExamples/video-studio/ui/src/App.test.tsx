@@ -38,6 +38,48 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.willdeep; });
 
 describe('Short Drama Studio', () => {
+  it('生成队列页列出任务，并且不自己轮询上游', async () => {
+    const jobs = [
+      { id: 'j1', title: '第 3 镜 · 雨夜追车', prompt: '雨夜，追车', state: 'in_progress', progress: 42, updatedAt: new Date().toISOString() },
+      { id: 'j2', title: '第 1 镜 · 手机亮起', state: 'completed', progress: 100, outputPath: '/Users/me/Movies/WillDeep Video Studio/j2.mp4', updatedAt: new Date().toISOString() },
+      { id: 'j3', title: '第 2 镜 · 坏掉的那条', state: 'failed', error: { message: 'provider rejected the prompt' }, updatedAt: new Date().toISOString() },
+    ];
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'video.list') return JSON.stringify({ ok: true, jobs });
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '生成队列' }));
+
+    expect(await screen.findByText('第 3 镜 · 雨夜追车')).toBeTruthy();
+    expect(screen.getByText('provider rejected the prompt')).toBeTruthy();
+    expect(screen.getByText('/Users/me/Movies/WillDeep Video Studio/j2.mp4')).toBeTruthy();
+    // 状态是快照这件事必须写在页面上，否则停在"生成中"的任务会被当成卡死。
+    expect(screen.getByText('进行中的状态是上次刷新时的快照，不代表此刻。')).toBeTruthy();
+    // 进页面只读一次本地台账，绝不自己去问上游——轮询等于替用户偷偷花钱。
+    expect(executeCommand.mock.calls.filter(([command]) => command === 'video.list').length).toBe(1);
+    expect(executeCommand.mock.calls.some(([command]) => command === 'video.refreshActive')).toBe(false);
+  });
+
+  it('刷新按钮才会去问上游，问完重新读台账', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'video.list') return JSON.stringify({ ok: true, jobs: [] });
+      if (command === 'video.refreshActive') return JSON.stringify({ ok: true, jobs: [{ id: 'j1', state: 'completed' }] });
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '生成队列' }));
+    expect(await screen.findByText('这个筛选下还没有任务。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '刷新活跃任务' }));
+
+    await waitFor(() => expect(executeCommand.mock.calls.some(([command]) => command === 'video.refreshActive')).toBe(true));
+    await waitFor(() => expect(executeCommand.mock.calls.filter(([command]) => command === 'video.list').length).toBe(2));
+  });
+
   it('opens settings, saves a model and shares it with planning', async () => {
     const set = vi.fn().mockResolvedValue({ ok: true });
     window.willdeep!.storage = { get: vi.fn().mockResolvedValue({ value: null }), set };

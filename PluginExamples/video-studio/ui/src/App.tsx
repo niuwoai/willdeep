@@ -7,7 +7,7 @@ import type { CreativeKind } from './creative-schema';
 import { FrameCoCreation } from './FrameCoCreation';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
-import type { ChatMessage, Character, CharacterDraft, CreativeSkill, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, SkillStage, Stage } from './types';
+import type { ChatMessage, Character, CharacterDraft, CreativeSkill, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, SkillStage, Stage, VideoJob, VideoQueueFilter } from './types';
 import type { ShotDigest } from './bridge';
 import type { Notice } from './bridge';
 import './styles.css';
@@ -141,6 +141,9 @@ export default function App() {
   /// 这一帧要把哪些角色的脸当参照图递上去。按镜头预勾选，一律可改。
   const [frameCastIDs, setFrameCastIDs] = useState<string[]>([]);
   const [videoCount, setVideoCount] = useState(2);
+  const [queueJobs, setQueueJobs] = useState<VideoJob[]>([]);
+  const [queueFilter, setQueueFilter] = useState<VideoQueueFilter>('all');
+  const [queueLoading, setQueueLoading] = useState(false);
   const [idea, setIdea] = useState('');
   const [plannerMessages, setPlannerMessages] = useState<PlannerMessage[]>([]);
   const [plan, setPlan] = useState<DramaPlan | null>(null);
@@ -291,6 +294,67 @@ export default function App() {
       await window.willdeep.storage.set('planning-model', { provider: assistantProvider, model: assistantModel });
       setNotice(t('settingsSaved'));
     } catch (error) { setFailure(errorMessage(error)); }
+  }
+
+  // 队列台账是服务端 jobs.json 的投影。这里只读，绝不后台轮询：上游只在用户
+  // 点刷新时被问一次，页面不替他偷偷发请求。状态因此天然是"上次刷新时的
+  // 快照"，页面必须把这件事说出来，否则一个停在"生成中"的任务会被当成卡死。
+  async function loadQueue(filter: VideoQueueFilter) {
+    setQueueLoading(true);
+    try {
+      const payload = await callCommand<{ ok: boolean; jobs?: VideoJob[] }>('video.list', { status: filter });
+      setQueueJobs(payload.jobs ?? []);
+    } catch (error) { setFailure(errorMessage(error)); }
+    finally { setQueueLoading(false); }
+  }
+
+  async function refreshQueue() {
+    setQueueLoading(true);
+    try {
+      const payload = await callCommand<{ ok: boolean; jobs?: VideoJob[] }>('video.refreshActive', {});
+      setNotice(t('queueRefreshed', { count: payload.jobs?.length ?? 0 }));
+      const listed = await callCommand<{ ok: boolean; jobs?: VideoJob[] }>('video.list', { status: queueFilter });
+      setQueueJobs(listed.jobs ?? []);
+    } catch (error) { setFailure(errorMessage(error)); }
+    finally { setQueueLoading(false); }
+  }
+
+  async function retryQueueJob(id: string) {
+    try {
+      await callCommand('video.retry', { id });
+      setNotice(t('queueRetried'));
+      await loadQueue(queueFilter);
+    } catch (error) { setFailure(errorMessage(error)); }
+  }
+
+  function QueueRow(job: VideoJob) {
+    const active = job.state === 'submitting' || job.state === 'queued' || job.state === 'in_progress';
+    const updatedAt = job.updatedAt ? Date.parse(job.updatedAt) : NaN;
+    return <li key={job.id} className={`queue-row state-${job.state}`}>
+      <div className="queue-main">
+        <span className={`queue-pill state-${job.state}`}>{t(`queueState_${job.state}`) || job.state}</span>
+        <strong>{job.title?.trim() || t('queueUntitled')}</strong>
+        {Number.isFinite(updatedAt) && <small>{t('queueUpdated', { time: relativeTime(updatedAt, Date.now(), locale) })}</small>}
+      </div>
+      {job.prompt && <p className="queue-prompt">{job.prompt}</p>}
+      {active && <div className="queue-progress"><div style={{ width: `${Math.min(100, Math.max(0, job.progress ?? 0))}%` }} /></div>}
+      {job.error?.message && <p className="queue-error">{job.error.message}</p>}
+      {job.downloadError && <p className="queue-error">{t('queueDownloadFailed', { message: job.downloadError })}</p>}
+      {job.outputPath && <p className="queue-path">{job.outputPath}</p>}
+      <div className="queue-actions">
+        {job.outputPath && <button className="ghost" onClick={() => void callCommand('video.revealOutput', { id: job.id })}>{t('queueReveal')}</button>}
+        {job.state === 'failed' && <button className="ghost" onClick={() => void retryQueueJob(job.id)}>{t('queueRetry')}</button>}
+      </div>
+    </li>;
+  }
+
+  function Queue() {
+    const filters: VideoQueueFilter[] = ['all', 'active', 'completed', 'failed', 'draft'];
+    return AppShell(<main className="content"><div className="page-heading"><div><h1>{t('queueTitle')}</h1><p>{t('queueHint')}</p></div><button className="primary" disabled={queueLoading} onClick={() => void refreshQueue()}>{t(queueLoading ? 'queueRefreshing' : 'queueRefresh')}</button></div>
+      <nav className="queue-filters" aria-label={t('queueTitle')}>{filters.map((item) => <button key={item} className={queueFilter === item ? 'active' : ''} onClick={() => { setQueueFilter(item); void loadQueue(item); }}>{t(`queueFilter_${item}`)}</button>)}</nav>
+      <p className="queue-stale">{t('queueStaleHint')}</p>
+      {queueJobs.length === 0 ? <div className="queue-empty">{t('queueEmpty')}</div> : <ul className="queue-list">{queueJobs.map((job) => QueueRow(job))}</ul>}
+    </main>);
   }
 
   function Settings() {
@@ -1499,7 +1563,7 @@ export default function App() {
 
   function Sidebar() {
     const globalItems = ['library', 'assets', 'queue', 'settings'] as const;
-    return <aside className="sidebar"><button className="wordmark" onClick={() => setStage('library')}>{t('appName')}</button><nav className="global-nav" aria-label={t('mainNavigation')}>{globalItems.map((item) => <button key={item} className={(item === 'settings' ? stage === 'settings' : item === 'library' && stage !== 'settings') ? 'active' : ''} disabled={item !== 'library' && item !== 'settings'} onClick={() => { if (item === 'library' || item === 'settings') setStage(item); }}>{t(`nav_${item}`)}</button>)}</nav>{drama && <div className="project-nav"><p>{t('productionFlow')}</p><strong>{drama.title}</strong>{stageOrder.map((item, index) => <button key={item} className={stage === item ? 'active' : ''} onClick={() => setStage(item)}><span>{String(index + 1).padStart(2, '0')}</span>{t(`stage_${item}`)}</button>)}</div>}<div className="sidebar-foot"><span>{t('localPlugin')}</span><button onClick={() => setLocale(locale === 'zh-Hans' ? 'en' : 'zh-Hans')}>{locale === 'zh-Hans' ? 'EN' : '中文'}</button></div></aside>;
+    return <aside className="sidebar"><button className="wordmark" onClick={() => setStage('library')}>{t('appName')}</button><nav className="global-nav" aria-label={t('mainNavigation')}>{globalItems.map((item) => <button key={item} className={(item === 'settings' || item === 'queue') ? (stage === item ? 'active' : '') : (item === 'library' && stage !== 'settings' && stage !== 'queue' ? 'active' : '')} disabled={item === 'assets'} onClick={() => { if (item !== 'assets') setStage(item); }}>{t(`nav_${item}`)}</button>)}</nav>{drama && <div className="project-nav"><p>{t('productionFlow')}</p><strong>{drama.title}</strong>{stageOrder.map((item, index) => <button key={item} className={stage === item ? 'active' : ''} onClick={() => setStage(item)}><span>{String(index + 1).padStart(2, '0')}</span>{t(`stage_${item}`)}</button>)}</div>}<div className="sidebar-foot"><span>{t('localPlugin')}</span><button onClick={() => setLocale(locale === 'zh-Hans' ? 'en' : 'zh-Hans')}>{locale === 'zh-Hans' ? 'EN' : '中文'}</button></div></aside>;
   }
 
   // 这一组是渲染函数，不是组件，调用点一律写成 Foo() 而不是 <Foo />。
@@ -1508,6 +1572,14 @@ export default function App() {
   // 整棵子树，所有受控输入框打一个字就掉焦点。
   // Esc 关掉放大图层。挂在 window 上而不是图层自己身上：焦点可能还在触发它的
   // 那个头像按钮上，图层拿不到键盘事件。
+  // 只在进入队列页时拉一次列表。不设定时器：轮询会在用户没看的时候持续
+  // 打上游。
+  useEffect(() => {
+    if (stage !== 'queue') return;
+    void loadQueue(queueFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
+
   useEffect(() => {
     if (!zoomed) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setZoomed(null); };
@@ -1893,6 +1965,7 @@ export default function App() {
 
   let body = Library();
   if (stage === 'settings') body = Settings();
+  if (stage === 'queue') body = Queue();
   if (stage === 'planning') body = Planning();
   if (stage === 'characters') body = Characters();
   if (stage === 'script') body = Script();
