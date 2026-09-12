@@ -80,7 +80,9 @@ declare global {
         /** 按 streamID 停一条在跑的对话。桥 2.3.0 起可用，旧宿主上是 undefined。 */
         cancel?(streamID: string): Promise<{ cancelled: boolean }>;
         providers(): Promise<{ providers: ProviderEntry[] }>;
-        generateImage(request: { prompt: string; provider: 'some-im'; model: ImageModel; size: '1024x1024' | '1536x1024' | '1024x1536' }): Promise<ImageResult>;
+        // referenceImagePaths：参照图的本地绝对路径，宿主负责钳制路径并上传
+        // 换成公网 URL（网关只接 URL）。最多 9 张。省略或空数组即纯文生图。
+        generateImage(request: { prompt: string; provider: 'some-im'; model: ImageModel; size: '1024x1024' | '1536x1024' | '1024x1536'; referenceImagePaths?: string[] }): Promise<ImageResult>;
       };
       skills?: {
         list(): Promise<{ skills: SkillEntry[] }>;

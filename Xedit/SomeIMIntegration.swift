@@ -419,6 +419,8 @@ struct SomeIMGeneratedImage: Equatable, Sendable {
 
 enum SomeIMClient {
     static let willDeepClientID = "willdeep"
+    /// 网关对参照图的张数上限，见 muchtoken `internal/asyncmedia/capabilities.go`。
+    static let maximumReferenceImages = 9
     static let customerPortalURL = URL(string: "https://some.im/customer")!
     /// Customer identity, login, subscription, and app-update APIs live on
     /// some.im. Model relay selection (for example api.niuwoai.com in China)
@@ -970,7 +972,8 @@ enum SomeIMClient {
         prompt: String,
         size: String = "1024x1024",
         model overrideModel: String? = nil,
-        outputDirectory: URL? = nil
+        outputDirectory: URL? = nil,
+        referenceImageURLs: [String] = []
     ) async throws -> SomeIMGeneratedImage {
         try await generateImage(
             prompt: prompt,
@@ -979,8 +982,35 @@ enum SomeIMClient {
             outputDirectory: outputDirectory,
             settings: SomeIMIntegrationStore.loadSettings(),
             apiKey: SomeIMIntegrationStore.loadAPIKey(),
-            session: AgentNetworkSupport.defaultSession()
+            session: AgentNetworkSupport.defaultSession(),
+            referenceImageURLs: referenceImageURLs
         )
+    }
+
+    /// 把一组本地图片上传成公网 URL，供上面那两个函数当参照图用。内容哈希
+    /// 命中缓存就不重复上传——同一张脸会在很多镜头、很多集里反复用到。
+    static func uploadReferenceImages(_ fileURLs: [URL]) async throws -> [String] {
+        guard !fileURLs.isEmpty else { return [] }
+        let settings = SomeIMIntegrationStore.loadSettings().normalized
+        let apiKey = SomeIMIntegrationStore.loadAPIKey()
+        let session = AgentNetworkSupport.defaultSession()
+        var uploaded: [String] = []
+        for fileURL in fileURLs {
+            let key = try SomeIMReferenceImageUpload.contentKey(forContentsOf: fileURL)
+            if let hit = SomeIMReferenceImageCache.shared.cached(contentKey: key) {
+                uploaded.append(hit.publicURL)
+                continue
+            }
+            let image = try await SomeIMReferenceImageUpload.upload(
+                fileURL: fileURL,
+                inferenceBaseURL: settings.baseURL,
+                apiKey: apiKey,
+                session: session
+            )
+            SomeIMReferenceImageCache.shared.store(contentKey: key, image: image)
+            uploaded.append(image.publicURL)
+        }
+        return uploaded
     }
 
     static func generateImage(
@@ -990,7 +1020,11 @@ enum SomeIMClient {
         outputDirectory: URL?,
         settings: SomeIMIntegrationSettings,
         apiKey: String,
-        session: URLSession
+        session: URLSession,
+        /// 参照图，已经是可取的公网 URL。本地文件要先经
+        /// `SomeIMReferenceImageUpload` 换成 URL——网关只接 URL，见那个文件
+        /// 顶部的说明。空数组即纯文生图，与改动前完全一致。
+        referenceImageURLs: [String] = []
     ) async throws -> SomeIMGeneratedImage {
         let normalized = settings.normalized
         guard normalized.enabled else {
@@ -1013,11 +1047,29 @@ enum SomeIMClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         AgentNetworkSupport.applyStandardHeaders(to: &request)
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "prompt": trimmedPrompt,
             "size": size
         ]
+        // 上限 9 张是网关的（internal/asyncmedia/capabilities.go）。超了就如实
+        // 报错而不是悄悄截断——少送一张脸，出来的图错得不显眼，最难查。
+        let references = referenceImageURLs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !references.isEmpty {
+            guard references.count <= maximumReferenceImages else {
+                throw AgentToolError.invalidArgument(
+                    "some.im accepts at most \(maximumReferenceImages) reference images, got \(references.count)."
+                )
+            }
+            // 两种写法都带上：网关会把它们归一化去重，而不同上游读的是不同
+            // 那一个（严格 edits 读首图，GRSAI 读数组）。
+            body["image_url"] = references[0]
+            body["reference_image_url"] = references[0]
+            body["image_urls"] = references
+            body["reference_image_urls"] = references
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
 
         let (data, response) = try await session.data(for: request)

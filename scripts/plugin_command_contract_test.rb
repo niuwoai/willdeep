@@ -200,6 +200,44 @@ add_check.call(
   "AgentPluginWebView must be .id()-tagged by destination so makeNSView re-runs on a plugin switch."
 )
 
+# Reference images travel as local paths, so the clamp in the bridge is the only
+# boundary: without it a plugin page could make the host read an arbitrary file
+# and UPLOAD it to a public URL. None of this produces a compile error if it
+# regresses, and a missing face only makes the generated image subtly wrong.
+bridge_source = File.read(File.join(repo_root, "Xedit/AgentPluginAIBridge.swift"), encoding: "UTF-8")
+video_studio_app = File.read(
+  File.join(repo_root, "PluginExamples/video-studio/ui/src/App.tsx"), encoding: "UTF-8"
+)
+
+add_check.call(
+  "reference image paths are clamped to the plugin's own media root",
+  bridge_source.include?("referenceImageOutsidePluginData") &&
+    bridge_source.include?("resolvingSymlinksInPath") &&
+    bridge_source.include?("deletingLastPathComponent() == root"),
+  "uploadedReferenceImages must reject symlinks and anything outside the plugin's generated-media folder."
+)
+
+add_check.call(
+  "reference image count is capped at the gateway limit in both layers",
+  bridge_source.include?("maximumReferenceImages") &&
+    File.read(File.join(repo_root, "Xedit/SomeIMIntegration.swift"), encoding: "UTF-8")
+      .include?("maximumReferenceImages"),
+  "The 9-image cap must be enforced in the plugin validator and in the some.im client."
+)
+
+add_check.call(
+  "video-studio sends reference images by filePath, not mediaURL",
+  video_studio_app.include?("entry.portrait.filePath") &&
+    !video_studio_app.match?(/referenceImagePaths[^\n]*mediaURL/),
+  "mediaURL is a willdeep-plugin:// URL the host cannot upload; the reference argument needs filePath."
+)
+
+add_check.call(
+  "character portrait generation stays text-only",
+  video_studio_app.include?("drawImages(character.visualPrompt, candidateCount, [])"),
+  "Generating a character's own portrait must not attach that character as its own reference."
+)
+
 add_check.call(
   "scheme handler pluginID follows the mounted destination",
   page_host_source.include?("coordinator.schemeHandler?.pluginID = destination.pluginID"),

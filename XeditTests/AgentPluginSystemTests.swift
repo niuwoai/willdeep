@@ -1018,6 +1018,104 @@ struct AgentPluginSystemTests {
         #expect(request.prompt == "cinematic portrait")
         #expect(request.model == "nano-banana-2")
         #expect(request.size == "1024x1536")
+        // 不传参照图时必须还是纯文生图：这条守的是「加了参照图没改坏老路径」。
+        #expect(request.referenceImagePaths.isEmpty)
+    }
+
+    @Test
+    func pluginImageRequestCarriesReferencePathsWithinTheGatewayLimit() {
+        let paths = (0..<3).map { "/tmp/face-\($0).png" }
+        guard case .success(let request) = AgentPluginImageRequestValidator.request(from: [
+            "prompt": "two people at a desk",
+            "referenceImagePaths": paths + ["", "   "],
+        ]) else {
+            Issue.record("带参照图的合法请求不该被拒")
+            return
+        }
+        // 空串被滤掉，不会变成一条指向根目录的路径送进钳制逻辑。
+        #expect(request.referenceImagePaths == paths)
+
+        let tooMany = (0..<(AgentPluginImageRequest.maximumReferenceImages + 1)).map { "/tmp/f\($0).png" }
+        #expect(
+            AgentPluginImageRequestValidator.request(from: ["prompt": "p", "referenceImagePaths": tooMany])
+                == .failure(.tooManyReferenceImages(tooMany.count))
+        )
+        // 非字符串元素直接忽略，而不是让整条请求失败——页面递来的是 JSON。
+        guard case .success(let mixed) = AgentPluginImageRequestValidator.request(from: [
+            "prompt": "p", "referenceImagePaths": ["/tmp/a.png", 7, ["nested"]],
+        ]) else {
+            Issue.record("混了非字符串元素也应当取出可用的那些")
+            return
+        }
+        #expect(mixed.referenceImagePaths == ["/tmp/a.png"])
+    }
+
+    @Test
+    func referenceImageUploadEndpointStaysOnTheConsolePrefix() throws {
+        // 上传在 /api/v1，推理在 /v1。这两个前缀混了会 404，而 404 的现场
+        // 只看得到「参照图没生效」。
+        #expect(
+            try SomeIMReferenceImageUpload.endpoint(inferenceBaseURL: "https://some.im/v1").absoluteString
+                == "https://some.im/api/v1/customer/tmp-files"
+        )
+        // 自建/测试环境带端口和多级路径时也要落到同一个前缀上。
+        #expect(
+            try SomeIMReferenceImageUpload.endpoint(inferenceBaseURL: "http://127.0.0.1:8080/gateway/v1/").absoluteString
+                == "http://127.0.0.1:8080/api/v1/customer/tmp-files"
+        )
+        #expect(throws: (any Error).self) {
+            _ = try SomeIMReferenceImageUpload.endpoint(inferenceBaseURL: "not a url")
+        }
+    }
+
+    @Test
+    func referenceImageUploadRejectsNonImagesAndReadsPublicURL() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("reference-upload-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // 服务端是按魔术字节嗅探的，所以叫 .png 的文本文件必须在本地就被拒，
+        // 而不是花一次上传换一个 4xx。
+        let liar = root.appendingPathComponent("liar.png")
+        try Data("not an image".utf8).write(to: liar)
+        #expect(throws: (any Error).self) {
+            _ = try SomeIMReferenceImageUpload.imageExtension(forContentsOf: liar)
+        }
+
+        let png = root.appendingPathComponent("real.bin")
+        try (Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + Data(repeating: 0, count: 32))
+            .write(to: png)
+        #expect(try SomeIMReferenceImageUpload.imageExtension(forContentsOf: png) == "png")
+
+        let nested = try SomeIMReferenceImageUpload.parse(
+            response: Data(#"{"data":{"public_url":"https://cdn.example/a.png","ttl_seconds":3600}}"#.utf8)
+        )
+        #expect(nested.publicURL == "https://cdn.example/a.png")
+        #expect(nested.expiresAt > Date())
+        // 中继若把 data 拆掉了也要认，否则换一层代理就整条链路失效。
+        let bare = try SomeIMReferenceImageUpload.parse(
+            response: Data(#"{"public_url":"https://cdn.example/b.png"}"#.utf8)
+        )
+        #expect(bare.publicURL == "https://cdn.example/b.png")
+        #expect(throws: (any Error).self) {
+            _ = try SomeIMReferenceImageUpload.parse(response: Data(#"{"data":{}}"#.utf8))
+        }
+    }
+
+    @Test
+    func referenceImageCacheExpiresBeforeTheServerCopyDoes() {
+        let cache = SomeIMReferenceImageCache()
+        cache.store(contentKey: "fresh", image: .init(
+            publicURL: "https://cdn.example/fresh.png", expiresAt: Date().addingTimeInterval(3600)
+        ))
+        // 只剩十秒的那条视为失效：请求发出去之后才过期最难查。
+        cache.store(contentKey: "expiring", image: .init(
+            publicURL: "https://cdn.example/expiring.png", expiresAt: Date().addingTimeInterval(10)
+        ))
+        #expect(cache.cached(contentKey: "fresh")?.publicURL == "https://cdn.example/fresh.png")
+        #expect(cache.cached(contentKey: "expiring") == nil)
+        #expect(cache.cached(contentKey: "missing") == nil)
     }
 
     @Test

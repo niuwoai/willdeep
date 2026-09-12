@@ -13,7 +13,10 @@ import type { Notice } from './bridge';
 import './styles.css';
 import './co-creation.css';
 
-const imageModels: ImageModel[] = ['gpt-image-2', 'nano-banana-2'];
+// nano-banana 这一族的主打能力就是多张参照图下的人物一致性，做「同一个角色
+// 跨镜头跨集不走形」它更对路；gpt-image 那套强在按指令改图，人脸保真弱一些。
+// 两个都支持参照图，所以只是换默认值，不裁能力。
+const imageModels: ImageModel[] = ['nano-banana-2', 'gpt-image-2'];
 
 // crypto.randomUUID 标了 [SecureContext]，插件页跑在自定义 scheme
 // willdeep-plugin:// 下，非安全上下文里这个方法根本不存在。宿主自己注入的
@@ -130,8 +133,13 @@ export default function App() {
   const [assistantProvider, setAssistantProvider] = useState('');
   const [assistantModel, setAssistantModel] = useState('');
   const [loadingModels, setLoadingModels] = useState(false);
-  const [imageModel, setImageModel] = useState<ImageModel>('gpt-image-2');
-  const [candidateCount, setCandidateCount] = useState(4);
+  const [imageModel, setImageModel] = useState<ImageModel>('nano-banana-2');
+  // 4 → 2。附了参照图之后网关的计费口径从 text_to_image 跳到
+  // multi_image_to_image，一次 4 张比纯文生图贵不少。2 张够挑，也不至于让
+  // 人在不知情下翻倍。
+  const [candidateCount, setCandidateCount] = useState(2);
+  /// 这一帧要把哪些角色的脸当参照图递上去。按镜头预勾选，一律可改。
+  const [frameCastIDs, setFrameCastIDs] = useState<string[]>([]);
   const [videoCount, setVideoCount] = useState(2);
   const [idea, setIdea] = useState('');
   const [plannerMessages, setPlannerMessages] = useState<PlannerMessage[]>([]);
@@ -330,6 +338,14 @@ export default function App() {
   // 差异面板该留着，runEpisodeRequest 正是靠 setShowEpisodeDiff(true) 把它
   // 打开的，合在一起会被这次同步立刻关掉。
   useEffect(() => { setShowEpisodeDiff(false); }, [episode?.id]);
+
+  // 换镜头时重算预勾选。依赖里带上 rev：AI 刚改完这一镜的剧情，出场角色很
+  // 可能变了，预勾选该跟着重算。用户在同一镜上的手动改动不会被覆盖，因为
+  // rev 只在落盘后才变。
+  useEffect(() => {
+    setFrameCastIDs(presetCastIDs(shot));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shot?.id, shot?.rev, drama?.id]);
 
   useEffect(() => {
     if (!shot) { setShotDraft(emptyShot((episode?.shots.length ?? 0) + 1)); return; }
@@ -662,7 +678,31 @@ export default function App() {
 
   // 并发发起，逐个收口。早先是串行 for 循环，六张要等六倍时间；中途抛错还会
   // 跳过循环之后的刷新，前面已经扣过费的图一张也显示不出来。
-  async function drawImages(prompt: string, count: number) {
+  /// 已锁定形象图的角色，附参照图只能从这里挑：没锁过的角色没有「那张脸」。
+  function castWithLockedFace() {
+    return (drama?.characters ?? []).flatMap((item) => {
+      const portrait = item.candidates?.find((candidate) => candidate.id === item.selectedCandidateID);
+      return portrait?.filePath ? [{ id: item.id, name: item.name, portrait }] : [];
+    });
+  }
+
+  /// 预勾选：角色名字在本镜任何一处文本里出现过就勾上。
+  ///
+  /// 刻意不只认对白说话人——落盘实测无对白镜头的 dialogue 是空数组，而分镜里
+  /// 无对白镜头很常见，只认说话人会让预勾选在大量镜头上恒为空，等于没有。
+  /// 只是预勾选，一律可改，所以匹配错的代价是取消一个勾。
+  function presetCastIDs(target: Shot | undefined) {
+    if (!target) return [];
+    const haystack = [
+      target.summary, target.actionStart, target.actionEnd, target.startPrompt, target.endPrompt,
+      ...(target.dialogue ?? []).map((line) => line.speaker),
+    ].join('\n').normalize('NFC');
+    return castWithLockedFace()
+      .filter((entry) => entry.name.trim() && haystack.includes(entry.name.trim().normalize('NFC')))
+      .map((entry) => entry.id);
+  }
+
+  async function drawImages(prompt: string, count: number, referenceImagePaths: string[] = []) {
     const bridge = window.willdeep?.ai?.generateImage;
     if (!bridge) throw new Error('imageBridgeMissing');
     // 早先是 allSettled 一次把 count 张全发出去。实测网关回 502
@@ -675,6 +715,9 @@ export default function App() {
       async (index) => {
         const image = await bridge({
           prompt: variedPrompt(prompt, index), provider: 'some-im', model: imageModel, size: '1024x1536',
+          // 递本地路径而不是字节：这些文件本来就在宿主自己的生成目录里，宿主
+          // 会钳制路径、上传换成公网 URL 再发给网关（网关只接 URL）。
+          referenceImagePaths,
         });
         setDrawProgress((current) => (current ? { ...current, done: current.done + 1 } : current));
         return image;
@@ -696,7 +739,9 @@ export default function App() {
     if (!drama || !character.id || !character.visualPrompt.trim()) { setFailure(t('saveCharacterFirst')); return; }
     setBusy('characterImage'); setFailure('');
     try {
-      const { done, failed, firstFailure } = await drawImages(character.visualPrompt, candidateCount);
+      // 给角色画形象图时不带参照图：拿自己的脸当参照没有意义，而且这一步就是
+      // 在从无到有地定这张脸。显式传空数组，不靠默认值。
+      const { done, failed, firstFailure } = await drawImages(character.visualPrompt, candidateCount, []);
       for (const result of done) {
         await callCommand('drama.recordCharacterImage', { dramaID: drama.id, characterID: character.id, prompt: character.visualPrompt, ...result });
       }
@@ -1410,7 +1455,10 @@ export default function App() {
     try {
       const savedShotID = await persistShot();
       if (!savedShotID) throw new Error(t('saveShotFailed'));
-      const { done, failed, firstFailure } = await drawImages(prompt, candidateCount);
+      const faces = castWithLockedFace().filter((entry) => frameCastIDs.includes(entry.id));
+      const { done, failed, firstFailure } = await drawImages(
+        prompt, candidateCount, faces.map((entry) => entry.portrait.filePath),
+      );
       for (const result of done) {
         await callCommand('drama.recordImage', { dramaID: drama.id, episodeID: episode.id, shotID: savedShotID, kind, prompt, ...result });
       }
@@ -1794,8 +1842,41 @@ export default function App() {
     return <section className="frame-column"><div className="frame-title"><div><span>{kind === 'start' ? t('startLabel') : t('endLabel')}</span><div><h2>{t(kind === 'start' ? 'startFrame' : 'endFrame')}</h2><p>{t(kind === 'start' ? 'startFrameHint' : 'endFrameHint')}</p></div></div><small>{candidates.length} {t('candidates')}</small></div><textarea disabled={busy === 'shot-ask' || busy === 'frame-ask'} className="prompt-box" value={prompt} placeholder={t('framePromptPlaceholder')} onChange={(event) => setShotDraft({ ...shotDraft, [kind === 'start' ? 'startPrompt' : 'endPrompt']: event.target.value })} /><div className="candidate-grid">{candidates.map((candidate) => <button className={selectedID === candidate.id ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseFrame(kind, candidate.id)}><img src={candidate.mediaURL} alt={t('frameCandidate')} /><span>{selectedID === candidate.id ? t('selected') : t('select')}</span></button>)}{candidates.length === 0 && <div className="candidate-empty">{t('noCandidates')}</div>}</div><button className="primary wide" disabled={!!busy || !shot || !!shot.draft || !!shot.draftOnly} onClick={() => void generateFrames(kind)}>{busy === kind ? t('generatingImages') : t('generateCandidates', { count: candidateCount })}</button></section>;
   }
 
+  /// 参照图角色选择。放在两栏首尾帧上面，因为首帧和尾帧用同一组脸——
+  /// 同一个镜头里出场的人不会中途换。
+  function FrameCast() {
+    const cast = castWithLockedFace();
+    const unlocked = (drama?.characters ?? []).length - cast.length;
+    return <div className="frame-cast">
+      <div className="frame-cast-head">
+        <strong>{t('frameCastTitle')}</strong>
+        <small>{frameCastIDs.length > 0 ? t('frameCastCount', { count: frameCastIDs.length }) : t('frameCastNone')}</small>
+      </div>
+      {cast.length === 0
+        ? <p className="frame-cast-empty">{t('frameCastEmpty')}</p>
+        : <div className="frame-cast-row">{cast.map((entry) => {
+          const active = frameCastIDs.includes(entry.id);
+          return <button
+            key={entry.id}
+            className={active ? 'frame-cast-chip active' : 'frame-cast-chip'}
+            aria-pressed={active}
+            disabled={!!busy}
+            // 函数式更新，不要读闭包里的 frameCastIDs：两次点击落在同一个
+            // 渲染帧里时，后一次会基于更新前的数组算，把前一次的勾选丢掉。
+            onClick={() => setFrameCastIDs((current) => (current.includes(entry.id)
+              ? current.filter((id) => id !== entry.id)
+              : [...current, entry.id]))}
+          >
+            <img src={entry.portrait.mediaURL} alt={entry.name} />
+            <span>{entry.name || t('untitledCharacter')}</span>
+          </button>;
+        })}</div>}
+      {unlocked > 0 && <p className="frame-cast-hint">{t('frameCastUnlocked', { count: unlocked })}</p>}
+    </div>;
+  }
+
   function Frames() {
-    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor co-creation-workspace"><div className="shot-content">{ShotDraftReview()}<div className="page-heading compact"><div><p className="eyebrow">{shot?.title || t('selectShot')}</p><h1>{t('frameTitle')}</h1><p>{t('frameHint')}</p></div><div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div></div><button className="ghost" disabled={!shot || !!busy} onClick={() => void saveShot()}>{t('saveFrameDraft')}</button><div className="frames-grid">{FrameColumn('start')}{FrameColumn('end')}</div></div>{drama && episode && shot && <FrameCoCreation key={shot.id} drama={drama} episode={episode} shot={shot} provider={assistantProvider} model={assistantModel} routing={ModelRouting('compact')} t={t} onUpdate={applyDrama} blocked={hasUnsavedShot()} buildSystem={() => stageSystemPrompt('frames', 'frameCoCreationSystem')} onBusyChange={(running) => setBusy(running ? 'frame-ask' : '')} />}</section></div></main></div>);
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor co-creation-workspace"><div className="shot-content">{ShotDraftReview()}<div className="page-heading compact"><div><p className="eyebrow">{shot?.title || t('selectShot')}</p><h1>{t('frameTitle')}</h1><p>{t('frameHint')}</p></div><div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div></div><button className="ghost" disabled={!shot || !!busy} onClick={() => void saveShot()}>{t('saveFrameDraft')}</button>{FrameCast()}<div className="frames-grid">{FrameColumn('start')}{FrameColumn('end')}</div></div>{drama && episode && shot && <FrameCoCreation key={shot.id} drama={drama} episode={episode} shot={shot} provider={assistantProvider} model={assistantModel} routing={ModelRouting('compact')} t={t} onUpdate={applyDrama} blocked={hasUnsavedShot()} buildSystem={() => stageSystemPrompt('frames', 'frameCoCreationSystem')} onBusyChange={(running) => setBusy(running ? 'frame-ask' : '')} />}</section></div></main></div>);
   }
 
   function Video() {

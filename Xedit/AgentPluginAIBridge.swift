@@ -129,10 +129,24 @@ nonisolated struct AgentPluginImageRequest: Equatable, Sendable {
     let prompt: String
     let model: String
     let size: String
+    /// 参照图的**本地绝对路径**，由宿主负责上传换 URL。页面递路径而不是
+    /// 字节：一张脸 2 MB，base64 之后近 3 MB，走 WebKit 桥来回抄一遍纯属
+    /// 浪费，而这些文件本来就在宿主自己的生成目录里。视频生成那条路早就
+    /// 是这么做的（referenceImagePath）。空数组即纯文生图。
+    let referenceImagePaths: [String]
 
     static let allowedModels = ["gpt-image-2", "nano-banana-2"]
     static let allowedSizes = ["1024x1024", "1536x1024", "1024x1536"]
     static let maximumCharacters = 8_000
+    /// 与网关一致的上限，见 `SomeIMClient.maximumReferenceImages`。
+    static let maximumReferenceImages = 9
+
+    init(prompt: String, model: String, size: String, referenceImagePaths: [String] = []) {
+        self.prompt = prompt
+        self.model = model
+        self.size = size
+        self.referenceImagePaths = referenceImagePaths
+    }
 }
 
 nonisolated struct AgentPluginImageResult: Equatable, Sendable {
@@ -182,6 +196,10 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
     case invalidImageRequest
     case invalidImageModel(String)
     case invalidImageSize(String)
+    case tooManyReferenceImages(Int)
+    /// 参照图必须落在本插件自己的生成目录里。页面递的是路径，所以这道钳制
+    /// 是唯一的边界：少了它，一个插件页就能让宿主去读任意文件并上传出去。
+    case referenceImageOutsidePluginData(String)
 
     var errorDescription: String? {
         switch self {
@@ -204,6 +222,10 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
         case .invalidImageRequest: return "The image prompt is empty or too long."
         case .invalidImageModel(let model): return "Unsupported some.im image model: \(model)"
         case .invalidImageSize(let size): return "Unsupported image size: \(size)"
+        case .tooManyReferenceImages(let count):
+            return "At most \(AgentPluginImageRequest.maximumReferenceImages) reference images are allowed, got \(count)."
+        case .referenceImageOutsidePluginData(let path):
+            return "Reference image is outside this plugin's generated-media folder: \(path)"
         }
     }
 }
@@ -227,7 +249,15 @@ nonisolated enum AgentPluginImageRequestValidator {
         guard AgentPluginImageRequest.allowedSizes.contains(size) else {
             return .failure(.invalidImageSize(size))
         }
-        return .success(AgentPluginImageRequest(prompt: prompt, model: model, size: size))
+        let rawPaths = (raw["referenceImagePaths"] as? [Any] ?? []).compactMap { $0 as? String }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard rawPaths.count <= AgentPluginImageRequest.maximumReferenceImages else {
+            return .failure(.tooManyReferenceImages(rawPaths.count))
+        }
+        return .success(AgentPluginImageRequest(
+            prompt: prompt, model: model, size: size, referenceImagePaths: rawPaths
+        ))
     }
 }
 
@@ -571,6 +601,38 @@ extension AppState {
         )
     }
 
+    /// 把页面递上来的参照图路径钳到本插件自己的生成目录里，再上传换 URL。
+    ///
+    /// 这道钳制是唯一的边界：页面递的是路径，少了它，一个插件页就能指使宿主
+    /// 去读任意文件并**上传到公网**。判据和取图那条一致——规范化之后父目录
+    /// 必须恰好等于本插件的媒体根，并且拒绝符号链接（否则根目录里放一个链接
+    /// 就能指出去）。
+    private func uploadedReferenceImages(
+        pluginID: AgentPluginID,
+        paths: [String],
+        mediaRoot: URL
+    ) async throws -> [String] {
+        guard !paths.isEmpty else { return [] }
+        let root = mediaRoot.standardizedFileURL.resolvingSymlinksInPath()
+        var fileURLs: [URL] = []
+        for path in paths {
+            let candidate = URL(fileURLWithPath: path).standardizedFileURL
+            guard candidate.isFileURL, candidate.path.hasPrefix("/") else {
+                throw AgentPluginAIError.referenceImageOutsidePluginData(path)
+            }
+            let values = try? candidate.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
+            guard values?.isSymbolicLink != true, values?.isRegularFile == true else {
+                throw AgentPluginAIError.referenceImageOutsidePluginData(path)
+            }
+            let resolved = candidate.resolvingSymlinksInPath()
+            guard resolved.deletingLastPathComponent() == root else {
+                throw AgentPluginAIError.referenceImageOutsidePluginData(path)
+            }
+            fileURLs.append(resolved)
+        }
+        return try await SomeIMClient.uploadReferenceImages(fileURLs)
+    }
+
     func runPluginImageGeneration(
         pluginID: AgentPluginID,
         request: AgentPluginImageRequest
@@ -584,11 +646,17 @@ extension AppState {
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
+        let referenceURLs = try await uploadedReferenceImages(
+            pluginID: pluginID,
+            paths: request.referenceImagePaths,
+            mediaRoot: outputDirectory
+        )
         let image = try await SomeIMClient.generateImage(
             prompt: request.prompt,
             size: request.size,
             model: request.model,
-            outputDirectory: outputDirectory
+            outputDirectory: outputDirectory,
+            referenceImageURLs: referenceURLs
         )
         let filename = image.fileURL.lastPathComponent
         let encoded = filename.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlPathAllowed) ?? filename
