@@ -80,6 +80,14 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         AIPipe.flush()
         _ = AgentKernelEventStore.flushPendingWrites()
         MainActor.assumeIsolated {
+            // Backstop for a quit that never passed through
+            // applicationShouldTerminate. There is no time left to escalate to
+            // SIGKILL here, so the signaled identities are dropped on purpose;
+            // the normal path below already waited out their grace period and
+            // leaves nothing alive for this sweep to find.
+            _ = AgentAppTerminationJobSweep.terminateJobs(
+                in: EditorAppStateRegistry.shared.appStatesForTerminationCheck
+            )
             AgentTelemetry.flushBeforeTermination()
         }
     }
@@ -93,12 +101,27 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         }
         isFlushingBeforeTermination = true
         AIPipe.flush()
+        // Background jobs are our children: the moment this process exits they
+        // are reparented to launchd, still holding ports and CPU, with no UI
+        // left that can reach them. Signal them first so their grace period
+        // overlaps the disk work below instead of being added to it.
+        let sweepStartedAt = Date()
+        let signaledProcesses = AgentAppTerminationJobSweep.terminateJobs(
+            in: EditorAppStateRegistry.shared.appStatesForTerminationCheck
+        )
         // Do not synchronously block AppKit while a large transcript is still
         // encoding/writing. macOS keeps the app alive until we reply, while the
         // main run loop remains responsive instead of showing a beachball.
         DispatchQueue.global(qos: .utility).async {
             AgentSessionStore.flushPendingWrites()
             _ = AgentKernelEventStore.flushPendingWrites()
+            // SIGKILL whatever ignored SIGTERM. This has to happen before the
+            // reply: the registry's own delayed escalation lives on a queue
+            // that dies with the app, so waiting here is the only chance.
+            AgentAppTerminationJobSweep.escalate(
+                signaledProcesses,
+                startedAt: sweepStartedAt
+            )
             DispatchQueue.main.async {
                 sender.reply(toApplicationShouldTerminate: true)
             }

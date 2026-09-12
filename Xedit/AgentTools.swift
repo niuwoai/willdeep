@@ -177,17 +177,31 @@ enum AgentProcessSupport {
         rootPID: pid_t,
         gracePeriod: TimeInterval = 2
     ) {
-        guard rootPID > 0 else { return }
-        let trackedPIDs = descendantPIDs(of: rootPID) + [rootPID]
-        let trackedIdentities = trackedPIDs.compactMap(ProcessIdentity.init(pid:))
-        for pid in trackedPIDs {
-            _ = Darwin.kill(pid, SIGTERM)
-        }
+        let trackedIdentities = signalProcessTreeForShutdown(rootPID: rootPID)
+        guard !trackedIdentities.isEmpty else { return }
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + gracePeriod) {
             for identity in trackedIdentities where identity.stillMatchesCurrentProcess {
                 _ = Darwin.kill(identity.pid, SIGKILL)
             }
         }
+    }
+
+    /// SIGTERM the tree and hand the tracked identities back instead of
+    /// scheduling the SIGKILL fallback. App termination needs this split: the
+    /// delayed escalation above rides a queue inside this process, so a quit
+    /// that exits before the grace period elapses never delivers it, and every
+    /// child that ignored SIGTERM survives as an orphan.
+    @discardableResult
+    nonisolated static func signalProcessTreeForShutdown(
+        rootPID: pid_t
+    ) -> [ProcessIdentity] {
+        guard rootPID > 0 else { return [] }
+        let trackedPIDs = descendantPIDs(of: rootPID) + [rootPID]
+        let trackedIdentities = trackedPIDs.compactMap(ProcessIdentity.init(pid:))
+        for pid in trackedPIDs {
+            _ = Darwin.kill(pid, SIGTERM)
+        }
+        return trackedIdentities
     }
 
     /// Protect the delayed SIGKILL from PID reuse: a short-lived child may

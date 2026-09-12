@@ -1192,6 +1192,35 @@ final class AgentJobRegistry: ObservableObject {
         }
     }
 
+    /// App quit: end every alive job this app spawned locally, so nothing is
+    /// reparented to launchd where no UI can reach it again. See
+    /// `AgentAppTerminationJobSweep` for why `.persistent` is included and
+    /// remote daemon work is not.
+    ///
+    /// Completions are suppressed throughout — a closing app must not post a
+    /// finish notification or queue a wake-up for a model turn that will never
+    /// run. Returns the signaled identities because the usual delayed SIGKILL
+    /// rides a queue that dies with the app; the caller escalates instead.
+    func terminateAliveJobsForAppTermination() -> [AgentProcessSupport.ProcessIdentity] {
+        var identities: [AgentProcessSupport.ProcessIdentity] = []
+        for job in jobs where AgentAppTerminationJobSweep.shouldTerminateOnQuit(job) {
+            guard let proc = processes[job.id], proc.process.isRunning else {
+                // Locally managed executors own no pid of their own; their
+                // cancellation hook is the only way to stop them.
+                _ = killForStoppedTurn(id: job.id)
+                continue
+            }
+            suppressedCompletionJobIDs.insert(job.id)
+            proc.markExplicitKill()
+            identities.append(
+                contentsOf: AgentProcessSupport.signalProcessTreeForShutdown(
+                    rootPID: proc.process.processIdentifier
+                )
+            )
+        }
+        return identities
+    }
+
     /// Lifecycle cleanup is intentionally quiet: the phase-transition turn
     /// already explains why the server ended, so no completion event should
     /// wake another model round merely to announce SIGTERM.

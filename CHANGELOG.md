@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.372.0-rc4 - 2026-09-12
+
+### Fixed
+
+- **退出 App 不再把后台作业丢给 launchd 自生自灭。** Agent 起的后台命令是本进程的子进程，退出时 `applicationWillTerminate` / `applicationShouldTerminate` 只做落盘 flush，一个都不管。结果是 dev server、watch、跑了一半的测试全被 launchd 收养继续跑，端口照占 CPU 照烧，而唯一能看见它们的作业抽屉随窗口一起没了——用户既不知道还有东西在跑，也没有任何入口去停。现在退出时统一清场。这和 rc3 是同一个病的两头：rc3 修的是测试桩留下的孤儿，这条修的是产品本身留下的。
+  - **`.persistent` 也一起杀，这是刻意的。** lifetime 回答的是「活过这一回合 / 这个阶段 / 这个目标」，从来不是「活过这个 App」：下次启动没有任何一条路径会去认领本机残留的 pid，放过的作业等于永远失联。而且 `.persistent` 大多不是用户点出来的，是非目标会话里起 dev server 时推断出来的默认值——正好是最容易被落下的那一类。
+  - **不加第二个确认框。** `AppTerminationGuard` 早就把「有存活作业」算进退出敏感活动，该问的那一次已经问过了；再弹一个只是让同一件事问两遍。
+  - **远端 daemon 作业不动。** 它不在本机跑，退出也谈不上孤儿，退出回执才是下次启动恢复结果的依据；在这里发取消等于把不属于本机的那份证据销毁掉。
+  - **SIGKILL 的兜底得自己等。** `terminateProcessTree` 的升级是挂在本进程队列上的 `asyncAfter`，App 先退了就永远不会送达，忽略 SIGTERM 的子进程照样活着。所以退出路径拆成两半：主线程先发 SIGTERM 并把进程身份带走，后台队列落完盘再补 SIGKILL，然后才回 `reply(toApplicationShouldTerminate:)`。宽限期从发信号那一刻算起，落盘耗掉的时间算在里面——正常情况下子进程早就没了，这条路一秒都不多花。
+  - 清场全程压掉完成通知与完成事件：App 都在关了，没有哪个模型回合还能读到它们。
+
+### Notes
+
+- 强杀（Force Quit）、崩溃、断电仍然管不了，AppKit 拦不到，这和 `AppTerminationGuard` 的边界一致。
+- 新测试里有一条是真发 SIGKILL 的：用 rc3 新建的 `AgentJobFixtureCommand.idleIgnoringTerm()` 起一个故意不理 TERM 的 shell，验证它会被升级杀掉——这正是旧代码丢掉的那一路。所有长驻桩都走 rc3 那个带死线的入口，测试自己不会再制造孤儿。
+
+### 用户影响
+
+- 退出 WillDeep 后，Agent 起的后台命令会跟着结束，不再有看不见的残留进程占着端口。
+- 确实想让某个服务活过 App 的话，现在得在 App 外面自己起（比如终端里 `nohup`）；App 内起的一律随 App 结束。
+
 ## 1.372.0-rc3 - 2026-09-12
 
 ### Fixed
