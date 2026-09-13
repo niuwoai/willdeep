@@ -278,15 +278,10 @@ struct AgentPluginCenterPage: View {
                 }
                 if !manifest.contributes.settings.isEmpty {
                     Divider()
-                    DisclosureGroup(L10n.Plugins.settings) {
-                        VStack(spacing: 9) {
-                            ForEach(manifest.contributes.settings) { setting in
-                                AgentPluginSettingRow(pluginID: record.pluginID, setting: setting)
-                            }
-                        }
-                        .padding(.top, 8)
-                    }
-                    .font(.system(size: 12, weight: .medium))
+                    AgentPluginSettingsDisclosure(
+                        pluginID: record.pluginID,
+                        settings: manifest.contributes.settings
+                    )
                 }
             }
         }
@@ -707,6 +702,34 @@ private struct AgentPluginApprovalActionButtonStyle: ButtonStyle {
     }
 }
 
+/// 插件设置的折叠区。
+///
+/// 不用 `DisclosureGroup(_:content:)` 那个便利初始化器：它只把左边的箭头做成
+/// 可点区域，标题文字点不动。用户看到「设置」两个字摆在那儿，点上去没反应，
+/// 只能去戳那个几像素宽的三角。这里自己持有展开状态，把整行都变成可点。
+private struct AgentPluginSettingsDisclosure: View {
+    let pluginID: AgentPluginID
+    let settings: [AgentPluginSettingContribution]
+    @State private var isExpanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(spacing: 9) {
+                ForEach(settings) { setting in
+                    AgentPluginSettingRow(pluginID: pluginID, setting: setting)
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Text(L10n.Plugins.settings)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { isExpanded.toggle() }
+        }
+        .font(.system(size: 12, weight: .medium))
+    }
+}
+
 private struct AgentPluginSettingRow: View {
     let pluginID: AgentPluginID
     let setting: AgentPluginSettingContribution
@@ -730,8 +753,38 @@ private struct AgentPluginSettingRow: View {
                 }
             }
             Spacer(minLength: 8)
-            editor
-                .frame(width: 230)
+            VStack(alignment: .trailing, spacing: 3) {
+                editor
+                statusBadge
+            }
+            .frame(width: 230)
+        }
+    }
+
+    /// 存没存进去必须看得见。
+    ///
+    /// 这些框是边打边存的，没有保存按钮——不给反馈的话用户只能盯着框猜自己到底
+    /// 存没存上，secret 框尤其糟：它连自己刚打的内容都不显示，一个空框既可能是
+    /// 「没设置」也可能是「已经存好了」，两种状态长得一模一样。
+    @ViewBuilder
+    private var statusBadge: some View {
+        switch setting.type {
+        case .secret, .string, .number:
+            HStack(spacing: 3) {
+                if value.isEmpty {
+                    Text(L10n.Plugins.settingUnset)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(L10n.Plugins.settingSaved)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .font(.system(size: 9))
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        case .boolean, .enumeration:
+            EmptyView()
         }
     }
 
@@ -752,7 +805,10 @@ private struct AgentPluginSettingRow: View {
             }
             .labelsHidden()
         case .secret:
-            SecureField("", text: Binding(get: { value }, set: save))
+            SecureField(
+                value.isEmpty ? L10n.Plugins.settingUnset : L10n.Plugins.settingSecretStored,
+                text: Binding(get: { value }, set: save)
+            )
         case .string, .number:
             TextField("", text: Binding(get: { value }, set: save))
         }
