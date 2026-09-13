@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.372.0-rc11 - 2026-09-13
+
+### Fixed
+
+- **智能审核老让人点确认，问题不在裁判判得严，在于很多命令压根没送到裁判面前。** 翻了 8 月以来的审计日志：裁判真上场的 491 次里放行了 82.5%，掉线 11.6%（其中 41 次是网关 502）。而人工审批的头号理由是「命令引用了敏感路径或类凭据值」，320 次排第一。这个标记会置位打字确认，打字确认又一票否决送裁判的资格，所以它一旦误判，命令就直接落到人手上，裁判连看都看不到。逐条回放后，里面混着两类纯粹的子串误伤：
+  - **`.env` 是裸子串匹配，kubectl 的 `containers[0].envFrom` 一头撞上去。** `kubectl get deployment -o jsonpath='{...envFrom}'` 这种纯读查询被判成读密钥，`.env[?(@.name=="X")]` 的 jsonpath 同理。现在按 `/` 切段判末段，只有 `.env` 本身和 `.env.local` 这样的才算，`.envFrom`、`.environment` 不再命中。
+  - **`ssh -i ~/.ssh/id_rsa` 里的私钥被当成在读密钥。** 那把钥匙是用来登录的，正是它存在的意义。于是每条上服务器的运维命令都要人工点一次。现在只豁免 `ssh`/`scp`/`sftp` 的 `-i` 取值本身；`ssh host 'cat ~/.ssh/id_rsa'`、`scp host:~/.ssh/id_rsa .` 这些真去读密钥的形态照常拦。`rsync -i` 是 `--itemize-changes`，故意不在豁免名单里。
+- **恶意命令黑名单里那条「凭据外泄」的例外保护，实际上等于没有。** 它本来应该兜住误报——判定命令有没有上传语义，没有就放行。但 `uploadMarkers` 里放着一个 `"@"`，意味着任何 `user@host` 的 ssh/scp 都满足「上传语义」；`post`、`put` 也是裸子串，`output`、`input`、`compose`、`postgres` 全都命中。等于这个例外对真实命令永远为真。现在上传标记必须是独立的 flag 或 `@file` 形态。
+  - 同一个函数里的出口命令也是裸子串匹配，`journalctl -u niuwo-mail-service` 里的 `mail ` 被当成发信出口。日志里有实锤：一条纯读的远程排障 `ssh … journalctl …` 被判成私钥外泄，直接 deny。现在出口命令必须真的是某一段的命令头。
+  - 三处改动都不放宽真实防护：`cat ~/.ssh/id_rsa | curl --data @-`、`tar czf - ~/.aws/credentials | nc` 这些照样拦，新加的测试把两个方向都锁住了。
+
 ## 1.372.0-rc10 - 2026-09-13
 
 ### Fixed

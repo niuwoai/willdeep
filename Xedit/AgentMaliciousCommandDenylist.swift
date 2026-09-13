@@ -247,28 +247,45 @@ nonisolated enum AgentMaliciousCommandDenylist {
     /// 凭据来源与网络出口**同时**出现才算。单独 `cat .env` 在完全访问下
     /// 放行——那是排配置，不是外泄；单独 `curl https://api…` 也放行。
     private static func exfiltrationMatch(in command: String) -> Match? {
-        let lowered = command.lowercased()
+        let lowered = credentialScanText(command)
         let credentialNeedles = [
             "/.ssh/id_", "id_rsa", "id_ed25519", "id_ecdsa", "/.aws/credentials",
             "/.gnupg", "keychain", "security find-generic-password",
-            "security dump-keychain", "/.config/gh/hosts", ".env", "credentials.json",
+            "security dump-keychain", "/.config/gh/hosts", "credentials.json",
             "/.docker/config.json", "/.kube/config", "/.netrc"
         ]
-        guard let credential = credentialNeedles.first(where: { lowered.contains($0) }) else {
+        var credential = credentialNeedles.first(where: { lowered.contains($0) })
+        if credential == nil, referencesDotEnvFile(lowered) {
+            credential = ".env"
+        }
+        guard let credential else {
             return nil
         }
-        let egressNeedles = [
-            "curl ", "wget ", "nc ", "ncat ", "netcat ", "scp ", "rsync ",
-            "ftp ", "sftp ", "mail ", "sendmail ", "http post", "requests.post",
-            "base64 | curl", "openssl s_client"
+        // 出口命令必须真的**是**某一段的命令头。裸子串匹配会把
+        // `journalctl -u some-mail-service` 里的 `mail ` 当成发信出口，审计
+        // 日志里有实锤：一条纯读的 `ssh … journalctl …` 被判成私钥外泄。
+        let egressHeads: Set<String> = [
+            "curl", "wget", "nc", "ncat", "netcat", "scp", "rsync",
+            "ftp", "sftp", "mail", "sendmail"
         ]
-        guard let egress = egressNeedles.first(where: { lowered.contains($0) }) else {
+        let egressSubstrings = ["http post", "requests.post", "openssl s_client"]
+        let egress = segmentHeads(in: lowered).first(where: { egressHeads.contains($0) })
+            ?? egressSubstrings.first(where: { lowered.contains($0) })
+        guard let egress else {
             return nil
         }
         // 例外：把凭据**取回本机**不是外泄（`scp server:~/.ssh/config .`）。
         // 只在凭据出现在出口命令的输入侧时才算，这里用一个保守判据：
         // 出口命令带上传语义（POST/--data/-d/-T/@file）或凭据在管道左侧。
-        let uploadMarkers = ["--data", " -d ", "--upload-file", " -t ", "@", "post", "put"]
+        // `@` 曾经在这个列表里，于是每一条 `user@host` 的 ssh/scp 都命中
+        // 「上传语义」，例外保护形同虚设；`post` / `put` 裸子串同样会被
+        // `output`、`input`、`compose`、`postgres` 命中。现在上传标记必须是
+        // 独立的 flag 或 `@file` 形态的取值，不再靠子串碰运气。
+        let uploadMarkers = [
+            "--data", "--data-binary", "--data-raw", " -d ", "--upload-file",
+            " -t ", " --form", " -f ", "--request post", "--request put",
+            "-x post", "-x put", "http post", "http put"
+        ]
         let credentialIsUpstream = lowered.range(of: credential).map { range in
             lowered.range(of: "|").map { $0.lowerBound > range.lowerBound } ?? false
         } ?? false
@@ -279,6 +296,65 @@ nonisolated enum AgentMaliciousCommandDenylist {
             reason: "凭据/私钥（\(credential)）与网络出口（\(egress.trimmingCharacters(in: .whitespaces))）出现在同一条命令里",
             segment: command
         )
+    }
+
+    // MARK: - 外泄判据的小工具
+
+    /// 扫凭据前先摘掉 `ssh`/`scp`/`sftp` 的 `-i <私钥>`：那是**拿钥匙登录**，
+    /// 不是把钥匙发出去。留着它，每条 `ssh -i ~/.ssh/id_rsa root@host` 都会
+    /// 被判成外泄而直接 deny，连裁判都见不到。远端 `cat ~/.ssh/id_rsa`、
+    /// `scp host:~/.ssh/id_rsa .` 这些真正读取密钥的形态照常命中。
+    private static func credentialScanText(_ command: String) -> String {
+        let lowered = command.lowercased()
+        var scanned: [String] = []
+        var index = 0
+        let tokens = lowered.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        var sshFamilyActive = false
+        while index < tokens.count {
+            let token = tokens[index]
+            let bare = token.trimmingCharacters(in: CharacterSet(charactersIn: "'\"`;|&(){}"))
+            if ["ssh", "scp", "sftp"].contains(where: { bare == $0 || bare.hasSuffix("/\($0)") }) {
+                sshFamilyActive = true
+            }
+            if sshFamilyActive, token == "-i" {
+                index += 2
+                continue
+            }
+            if sshFamilyActive, token.hasPrefix("-i"), !token.hasPrefix("--"), token.count > 2 {
+                index += 1
+                continue
+            }
+            scanned.append(token)
+            index += 1
+        }
+        return scanned.joined(separator: " ")
+    }
+
+    /// `.env` 只有落在路径末段才是凭据文件。`containers[0].envfrom`、
+    /// `.env[?(@.name=="x")]` 这类 kubectl jsonpath 不是读密钥。与
+    /// `AgentToolAuthorization.referencesDotEnvFile` 同一判据，两处门禁口径
+    /// 必须一致，否则一层放行另一层照拦，用户仍然要点。
+    private static func referencesDotEnvFile(_ lowered: String) -> Bool {
+        lowered
+            .split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" })
+            .contains { token in
+                token
+                    .split(separator: "/", omittingEmptySubsequences: false)
+                    .contains { $0 == ".env" || $0.hasPrefix(".env.") }
+            }
+    }
+
+    /// 每个命令段的头一个词（按 `;` `|` `&` 以及 `$(`、反引号切段）。
+    private static func segmentHeads(in lowered: String) -> [String] {
+        lowered
+            .split(whereSeparator: { ";|&`".contains($0) || $0 == "\n" })
+            .compactMap { segment in
+                segment
+                    .split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "(" })
+                    .first
+                    .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "'\"$")) }
+            }
+            .filter { !$0.isEmpty }
     }
 
     // MARK: - 小工具

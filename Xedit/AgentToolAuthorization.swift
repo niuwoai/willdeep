@@ -354,7 +354,7 @@ enum AgentSandboxPolicy {
 
     nonisolated private static let sensitivePathFragments: [String] = [
         "/.ssh", "/.gnupg", "/.aws", "/.config/gh", "/library/keychains",
-        ".env", "id_rsa", "id_ed25519"
+        "id_rsa", "id_ed25519"
     ]
 
     /// Credential nouns are intentionally boundary-matched. Product and
@@ -2144,12 +2144,62 @@ enum AgentSandboxPolicy {
         if sensitivePathFragments.contains(where: { lower.contains($0) }) {
             return true
         }
+        if referencesDotEnvFile(lower) {
+            return true
+        }
         if sensitiveOptionNameLooksSensitive(lower) {
             return true
         }
         return sensitiveCredentialMarkers.contains { marker in
             containsIdentifierBoundedMarker(marker, in: lower)
         }
+    }
+
+    /// 只有这三个命令的 `-i` 表示身份密钥。`rsync -i` 是
+    /// `--itemize-changes`，与凭据无关，故意不在列内。
+    nonisolated private static let sshIdentityHeads: Set<String> = ["ssh", "scp", "sftp"]
+
+    /// `ssh -i ~/.ssh/id_rsa host` 里的私钥是**认证材料**，不是被读出来外
+    /// 传的目标——这正是 SSH 密钥存在的意义。把它算作敏感读，会让每一条
+    /// 上服务器的运维命令都升到打字确认，而打字确认一票否决送裁判的资格。
+    ///
+    /// 只剔除 `-i` 的取值本身（含 `-i<path>` 黏连形态）。命令里其余 token
+    /// 照常扫描：`ssh host 'cat ~/.ssh/id_rsa'` 的远端读取、`scp
+    /// host:~/.ssh/id_rsa .` 的取回，都仍然命中。
+    nonisolated private static func sshTokensExcludingIdentityFile(
+        _ rest: [String]
+    ) -> [String] {
+        var scanned: [String] = []
+        var index = 0
+        while index < rest.count {
+            let token = rest[index]
+            if token == "-i" {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-i"), !token.hasPrefix("--"), token.count > 2 {
+                index += 1
+                continue
+            }
+            scanned.append(token)
+            index += 1
+        }
+        return scanned
+    }
+
+    /// `.env` 只有落在路径末段才是凭据文件。裸子串匹配会把 kubectl 的
+    /// `containers[0].envFrom` 和 `.env[?(@.name=="X")]` 这类 jsonpath 判成
+    /// 读密钥——审计日志里这是「敏感路径」误伤的头号形态：纯只读的
+    /// `kubectl get deployment -o jsonpath=…` 被顶到打字确认，而打字确认
+    /// 恰恰一票否决了送裁判的资格，于是每一条都必须人工点。
+    ///
+    /// 判据：按 `/` 切段后，某一段本身是 `.env`，或以 `.env.` 开头
+    /// （`.env.local`、`.env.production`）。`.envfrom`、`.env[`、
+    /// `.environment` 都不再命中；`~/.env`、`/srv/app/.env.local` 照常命中。
+    nonisolated private static func referencesDotEnvFile(_ lower: String) -> Bool {
+        lower
+            .split(separator: "/", omittingEmptySubsequences: false)
+            .contains { $0 == ".env" || $0.hasPrefix(".env.") }
     }
 
     /// A credential noun used as the sole pattern of a piped text filter is
@@ -2191,6 +2241,9 @@ enum AgentSandboxPolicy {
         tokens: [String]
     ) -> [String] {
         let rest = Array(tokens.dropFirst())
+        if sshIdentityHeads.contains(where: { head == $0 || head.hasSuffix("/\($0)") }) {
+            return sshTokensExcludingIdentityFile(rest)
+        }
         guard head == "git" || head.hasSuffix("/git"),
               rest.contains(where: { $0.lowercased() == "commit" }) else {
             return rest
@@ -2231,7 +2284,13 @@ enum AgentSandboxPolicy {
         additionalWorkspaceRoots: [URL]
     ) -> Bool {
         let lower = token.lowercased()
+        // `.env` 单独判：它已从 sensitivePathFragments 里拿出来（那份列表
+        // 是裸子串匹配，会把 kubectl 的 `.envFrom` 一并判成密钥），但豁免
+        // 侧的语义没变——工作区内的 `./.env` 仍是真凭据文件，和 `~/.ssh`
+        // 一样永不豁免。漏掉这一行，工作区内的 `.env` 就会被当成「词撞名」
+        // 放行。
         guard !sensitivePathFragments.contains(where: { lower.contains($0) }),
+              !referencesDotEnvFile(lower),
               !sensitiveOptionNameLooksSensitive(lower) else {
             return false
         }
