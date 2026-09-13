@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "todo": {
-      "command": "/usr/bin/ruby",
-      "args": ["${pluginRoot}/server/todo.rb"],
-      "startup_timeout_sec": 10
-    }
-  }
-}

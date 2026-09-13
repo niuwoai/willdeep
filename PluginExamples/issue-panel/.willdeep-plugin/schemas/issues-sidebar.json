@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "components": [{
-    "id":"issues","kind":"section","titleKey":"destination.issues","children":[
-      {"id":"issue-1","kind":"row","titleKey":"issue.first","subtitleKey":"issue.first.detail","systemImage":"circle"},
-      {"id":"issue-2","kind":"row","titleKey":"issue.second","subtitleKey":"issue.second.detail","systemImage":"circle.lefthalf.filled"}
-    ]
-  }]
-}

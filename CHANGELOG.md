@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.372.0-rc8 - 2026-09-13
+
+### Changed
+
+- **11 个插件拆成了独立仓库，`PluginExamples/` 下改成 submodule。** 每个插件在 `github.com/niuwoai/willdeep-<名字>` 有自己的仓库，带着它在本仓库里的真实提交历史（`git subtree split` 按目录抽出，不是从快照重新开始）。抽完逐个核对过：十个插件与替换前**逐 blob 完全一致**，比的是「路径 + blob 哈希」的全量清单，不是文件数。
+  - 路径没变，仍然是 `PluginExamples/<id>`，所以 Xcode 里那段拷贝内置插件的脚本一个字都不用改。八个内置插件的打包清单逐条查过，`.codex-plugin`、`.willdeep-plugin`、`mcp.json`、`server`、`schemas`、`skills`、`ui/dist`、`ui/dist/client` 全部就位。
+  - **代价写在这里，免得以后有人踩**：clone 要带 `--recursive`，否则 `PluginExamples/` 下是 11 个空目录，构建会在拷贝插件那一步炸；改插件从此是两次提交（插件仓库一次、本仓库更新指针一次）；11 个仓库都是 private，构建机器需要读权限。CI 的三处 checkout 已加 `submodules: recursive`。
+  - 短剧插件那个仓库此前停在 0.2.1，而本仓库里那份已经走到 0.17.0，两边大幅分叉。新 main 换成本仓库这份的完整历史，旧的 0.2.1 完整保留在 `legacy-0.2.1` 分支，一个提交没删。旧仓库独有的发布工作流、`.gitignore` 和三个 Ruby 脚本取回来了，其中两个脚本对不上新代码，照新行为改好而不是删断言迁就。
+  - 插件同时发了 0.18.0：提交视频任务失败时界面不再报成功。详见插件仓库的 CHANGELOG。
+
+### Known issues
+
+- 本机全量 3218 例 failed=6，仍是满载下的计时红（两条 `Time limit was exceeded: 60.000 seconds`、一条进程树没被及时升级、一条 worker 首次联络 13 秒超出 10 秒窗口）。4 个 suite 单独复跑 28 例全绿，与本次改动零交集。
+- submodule 化的关键验证做了：构建产物里 8 个内置插件全部就位，其中短剧插件是 0.18.0。
+
 ## 1.372.0-rc7 - 2026-09-13
 
 ### Added

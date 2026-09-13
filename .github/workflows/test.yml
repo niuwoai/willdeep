@@ -29,6 +29,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # 插件已经拆成独立仓库，PluginExamples/ 下是 submodule。不拉的话
+          # 那里是 11 个空目录，构建会在拷贝内置插件那一步炸。
+          submodules: recursive
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -58,6 +62,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # 插件已经拆成独立仓库，PluginExamples/ 下是 submodule。不拉的话
+          # 那里是 11 个空目录，构建会在拷贝内置插件那一步炸。
+          submodules: recursive
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -80,6 +88,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # 插件已经拆成独立仓库，PluginExamples/ 下是 submodule。不拉的话
+          # 那里是 11 个空目录，构建会在拷贝内置插件那一步炸。
+          submodules: recursive
 
       - name: Select Xcode
         run: |

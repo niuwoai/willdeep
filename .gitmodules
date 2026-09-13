@@ -1,0 +1,33 @@
+[submodule "PluginExamples/arcade"]
+	path = PluginExamples/arcade
+	url = git@github.com:niuwoai/willdeep-arcade.git
+[submodule "PluginExamples/favorites"]
+	path = PluginExamples/favorites
+	url = git@github.com:niuwoai/willdeep-favorites.git
+[submodule "PluginExamples/hive-defense"]
+	path = PluginExamples/hive-defense
+	url = git@github.com:niuwoai/willdeep-hive-defense.git
+[submodule "PluginExamples/issue-panel"]
+	path = PluginExamples/issue-panel
+	url = git@github.com:niuwoai/willdeep-issue-panel.git
+[submodule "PluginExamples/project-overview"]
+	path = PluginExamples/project-overview
+	url = git@github.com:niuwoai/willdeep-project-overview.git
+[submodule "PluginExamples/session-vitality"]
+	path = PluginExamples/session-vitality
+	url = git@github.com:niuwoai/willdeep-session-vitality.git
+[submodule "PluginExamples/tetris"]
+	path = PluginExamples/tetris
+	url = git@github.com:niuwoai/willdeep-tetris.git
+[submodule "PluginExamples/todo"]
+	path = PluginExamples/todo
+	url = git@github.com:niuwoai/willdeep-todo.git
+[submodule "PluginExamples/video-studio"]
+	path = PluginExamples/video-studio
+	url = git@github.com:niuwoai/willdeep-video-studio.git
+[submodule "PluginExamples/workshop-run"]
+	path = PluginExamples/workshop-run
+	url = git@github.com:niuwoai/willdeep-workshop-run.git
+[submodule "PluginExamples/history-recall"]
+	path = PluginExamples/history-recall
+	url = git@github.com:niuwoai/willdeep-history-recall.git

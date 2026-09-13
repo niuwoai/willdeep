@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "issue-manager": {
-      "command": "/usr/bin/ruby",
-      "args": ["${pluginRoot}/server/issue_manager.rb"],
-      "startup_timeout_sec": 10
-    }
-  }
-}
