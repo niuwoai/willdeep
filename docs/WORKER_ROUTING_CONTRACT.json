@@ -75,10 +75,11 @@
   "override_rationale": "模型只换 trade。安全相关的标志位仍归关键词路由：否则一个会改文件的请求可能因为小模型「有把握」就变成可自动派发。",
 
   "fallback_chain": [
-    "本地辅助模型（启用且勾选「Worker 派发判断先用本地」时）",
-    "会话默认模型",
-    "纯关键词判决（前两者都不可用，或返回不可用答案时）"
+    "本地辅助模型（启用、勾选「Worker 派发判断先用本地」，且模型已驻留 Ollama 时）",
+    "纯关键词判决（本地模型不可用，或返回不可用答案时）"
   ],
+  "fallback_stages": ["local_auxiliary", "keyword"],
+  "fallback_chain_rationale": "刻意没有远程一级。1.317.0-rc8 把 workerRoutingConfigurationCandidates(fallback:) 整个删除，判路不再动用会话默认模型，也就不计费——远程判路每次 1.3-2.0s 且收益不成比例。本契约此前把「会话默认模型」列为第二级，与代码不符且无守卫覆盖，2026-09-14 修正并补上 fallback_stages 断言。fallback_chain 保持字符串数组形状以免打断 rs 侧既有解析；结构化断言走 fallback_stages。",
   "unusable_reply_cases": [
     "超时（classifier_timeout_seconds）",
     "空 content（本地 Gemma 4 查不到答案时返回 eval_count=1 的空串）",

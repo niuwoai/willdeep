@@ -48,6 +48,15 @@ nonisolated enum AgentWorkerRoutingModel {
     /// router reads, so both tiers see the same evidence.
     static let classifiedPrefixLength = 600
 
+    /// The fallback ladder, mirroring the shared contract's `fallback_stages`.
+    ///
+    /// There is deliberately no remote rung: 1.317.0-rc8 deleted
+    /// `workerRoutingConfigurationCandidates(fallback:)` so classification
+    /// never spends the session's paid model. Re-adding one means changing
+    /// this list, which the contract guard then forces you to justify in
+    /// `docs/WORKER_ROUTING_CONTRACT.json` as well.
+    static let fallbackStages = ["local_auxiliary", "keyword"]
+
     struct Candidate: Equatable, Sendable {
         let id: String
         let purpose: String

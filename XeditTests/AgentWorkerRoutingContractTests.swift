@@ -46,6 +46,8 @@ struct AgentWorkerRoutingContractTests {
         let excludedProfiles: [Excluded]
         let modelMayOverride: [String]
         let modelMustNotOverride: [String]
+        let fallbackStages: [String]
+        let fallbackChain: [String]
 
         enum CodingKeys: String, CodingKey {
             case schema
@@ -60,6 +62,8 @@ struct AgentWorkerRoutingContractTests {
             case excludedProfiles = "excluded_profiles"
             case modelMayOverride = "model_may_override"
             case modelMustNotOverride = "model_must_not_override"
+            case fallbackStages = "fallback_stages"
+            case fallbackChain = "fallback_chain"
         }
     }
 
@@ -100,6 +104,23 @@ struct AgentWorkerRoutingContractTests {
     func noneChoiceMatchesContract() throws {
         let contract = try Self.loadContract()
         #expect(AgentWorkerRoutingModel.noneChoice == contract.noneChoice)
+    }
+
+    /// 回落级次。这个字段此前不在 Contract 里，于是契约把「会话默认模型」
+    /// 列为第二级、而代码在 1.317.0-rc8 早已删掉远程回落，两边不一致躺了
+    /// 十几个 rc 都没红。判路不动用付费模型是既有决定，值得被守住。
+    @Test
+    func fallbackStagesMatchContract() throws {
+        let contract = try Self.loadContract()
+        #expect(AgentWorkerRoutingModel.fallbackStages == contract.fallbackStages)
+    }
+
+    /// 人类可读的 fallback_chain 与结构化的 fallback_stages 必须同进同退，
+    /// 否则修了一个忘了另一个，下一个人读到的仍是错的那份。
+    @Test
+    func fallbackChainDescribesEveryStage() throws {
+        let contract = try Self.loadContract()
+        #expect(contract.fallbackChain.count == contract.fallbackStages.count)
     }
 
     // MARK: - 候选清单

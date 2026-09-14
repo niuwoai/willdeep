@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.373.0-rc4 - 2026-09-14
+
+### Fixed
+
+- **双端路由契约的 `fallback_chain` 与代码不一致，躺了十几个 rc 没被发现。** 契约把「会话默认模型」列为判路的第二级回落，但 `workerRoutingConfigurationCandidates(fallback:)` 早在 1.317.0-rc8 就整个删除了——判路从那时起只用本地模型，不可用就直接落关键词，不动用付费模型。
+  - 没红的原因很直白：`AgentWorkerRoutingContractTests` 的 `Contract` 结构体里**根本没有这个字段**。守卫测试只断言它解出来的那些键，没解的键漂多远都无所谓。
+  - 修法是补断言而不是只改文本：新增结构化的 `fallback_stages`，代码侧对应 `AgentWorkerRoutingModel.fallbackStages`，两者必须逐项相等；另加一条断言要求人类可读的 `fallback_chain` 与 `fallback_stages` 条目数一致，免得下次只修一个。
+  - `fallback_chain` 保持字符串数组的形状没动，因为 willdeep-rs 侧镜像同一份契约、可能正在解析它；结构化断言走新增的并列字段。
+
+### Added
+
+- **`docs/WORKER_ROUTING_VETO_DESIGN.md`**：Worker 路由的本地模型否决权设计。关键词继续在首字前零成本给判决，判决落在特权档（`ops_runner` / `terminal_operator`）时并行问一次本地模型，在第一个工具边界前到位；模型只能降级，不能把任何请求升级成特权档，缺席或超时一律维持关键词判决。
+  - 并行而非同步，是因为 `NEXT_TASKS_2026-09-03` §4 不变量 1 禁止首字前出现 Worker 的 await；而 `AgentWorkerRouteGuard` 的拦截点本就在工具边界，判决赶在那之前到位即可。
+  - 附 49 天真实流量统计（297 个会话 / 970 条请求）：ops 命中占 13.4%（去重 10.8%），词表 15 个词有 9 个零命中；rc3 那次词边界修复的实测净收益只有 2 条（1.5%），修不动由「部署」「重启服务」「systemctl」撑起的大头——这正是不再雕词表、改让模型否决的理由。
+
 ## 1.373.0-rc3 - 2026-09-14
 
 ### Fixed
