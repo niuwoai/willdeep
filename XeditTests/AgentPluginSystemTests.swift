@@ -1023,6 +1023,36 @@ struct AgentPluginSystemTests {
     }
 
     @Test
+    func pluginImageRequestAcceptsTheVerticalShortDramaSizes() {
+        // 9:16 是手机短剧的标准画幅。放不开这一档，插件出的首尾帧最竖只能到
+        // 2:3，比 9:16 宽 17%，视频侧只好自己裁切首帧——人物位置和景别当场走样。
+        for size in ["1080x1920", "1080x1440", "1920x1080"] {
+            guard case .success(let request) = AgentPluginImageRequestValidator.request(from: [
+                "prompt": "a girl on a rooftop",
+                "model": "nano-banana-2",
+                "size": size,
+            ]) else {
+                Issue.record("\(size) 应该是合法画幅")
+                return
+            }
+            #expect(request.size == size)
+        }
+    }
+
+    @Test
+    func pluginImageRequestKeepsTheSquareDefaultWhenSizeIsOmitted() {
+        // allowedSizes 的**第一个**就是缺省值。往表头插一档竖屏，等于悄悄改掉
+        // 所有不传 size 的插件的出图比例，而它们一行代码都没动。
+        guard case .success(let request) = AgentPluginImageRequestValidator.request(from: [
+            "prompt": "a plain icon",
+        ]) else {
+            Issue.record("不传尺寸的请求不该被拒")
+            return
+        }
+        #expect(request.size == "1024x1024")
+    }
+
+    @Test
     func pluginImageRequestCarriesReferencePathsWithinTheGatewayLimit() {
         let paths = (0..<3).map { "/tmp/face-\($0).png" }
         guard case .success(let request) = AgentPluginImageRequestValidator.request(from: [

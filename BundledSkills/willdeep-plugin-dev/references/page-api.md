@@ -115,13 +115,26 @@ const { providers } = await window.willdeep.ai.providers();
 const image = await window.willdeep.ai.generateImage({
   prompt: '电影感竖屏人物定妆照，冷色侧光',
   provider: 'some-im',
-  model: 'gpt-image-2', // 或 nano-banana-2
-  size: '1024x1536'
+  model: 'nano-banana-2', // 或 gpt-image-2
+  size: '1080x1920'
 });
 // { mediaURL, filePath, model, providerID: 'some-im' }
 ```
 
-宿主只接受 `some-im`、`gpt-image-2` / `nano-banana-2` 和三种受控尺寸；提示词最多 8000 字。API Key 始终留在 Keychain。生成文件写入当前插件隔离的数据目录，页面通过只读 `mediaURL` 展示；单个媒体文件上限 32 MiB。
+`size` 只接受这六档，**不传时默认 `1024x1024`**：
+
+| 尺寸 | 比例 | 说明 |
+| --- | --- | --- |
+| `1024x1024` | 1:1 | 默认值 |
+| `1536x1024` | 3:2 | gpt-image 的横屏档 |
+| `1024x1536` | 2:3 | gpt-image 的竖屏档 |
+| `1080x1920` | 9:16 | 手机竖屏短剧的标准画幅 |
+| `1080x1440` | 3:4 | 竖屏 |
+| `1920x1080` | 16:9 | 横屏 |
+
+后三档 `gpt-image-2` 出不了（它只有前三档），宿主不按模型再拦一道——**该由页面按自己用的模型收敛**，送错了上游会报错，而那时候钱已经花掉了。
+
+宿主只接受 `some-im` 和 `gpt-image-2` / `nano-banana-2`；提示词最多 8000 字。API Key 始终留在 Keychain。生成文件写入当前插件隔离的数据目录，页面通过只读 `mediaURL` 展示；单个媒体文件上限 32 MiB。
 
 ## 引用技能（需要 `skills.read`）
 

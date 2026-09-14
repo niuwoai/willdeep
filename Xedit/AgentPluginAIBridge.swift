@@ -136,7 +136,26 @@ nonisolated struct AgentPluginImageRequest: Equatable, Sendable {
     let referenceImagePaths: [String]
 
     static let allowedModels = ["gpt-image-2", "nano-banana-2"]
-    static let allowedSizes = ["1024x1024", "1536x1024", "1024x1536"]
+    /// 页面能要的画幅。**第一个是默认值**（页面不传 size 时用它），所以
+    /// 1024x1024 必须留在最前面——换个顺序就等于悄悄改掉所有不传尺寸的插件。
+    ///
+    /// 前三档是 gpt-image 系自己支持的尺寸，后三档是竖屏短剧要用的：9:16
+    /// （1080x1920）是手机短剧的标准画幅，红果、抖音都按它出片；3:4 和 16:9
+    /// 补齐另外两个常见比例。加这三档的直接原因是短剧工坊插件——它出的首尾帧
+    /// 要和随后那段视频同比例，而这张表里最竖的一档只到 2:3，比 9:16 宽 17%，
+    /// 于是视频侧只能自己裁切首帧，人物位置和景别当场走样。
+    ///
+    /// 尺寸本身不经这里转换：`SomeIMClient.generateImage` 把它原样放进
+    /// `/images/generations` 的 body，网关主路径整包透传。也就是说这张表是
+    /// 整条链路上唯一的白名单，放开它就够。
+    ///
+    /// 注意 gpt-image 系出不了后三档——这里不按模型再拦一道，因为模型能力会
+    /// 变而这张表不会跟着变；该由插件按自己用的模型收敛（短剧工坊就是这么做的），
+    /// 真送错了上游会如实报错。
+    static let allowedSizes = [
+        "1024x1024", "1536x1024", "1024x1536",
+        "1080x1920", "1080x1440", "1920x1080",
+    ]
     static let maximumCharacters = 8_000
     /// 与网关一致的上限，见 `SomeIMClient.maximumReferenceImages`。
     static let maximumReferenceImages = 9
