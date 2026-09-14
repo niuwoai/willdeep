@@ -1,6 +1,6 @@
 # Worker 路由：本地模型否决权设计
 
-> Last updated: 2026-09-14 | 状态：**待决策**
+> Last updated: 2026-09-14 | 状态：**已确认，实施中**
 > 关联版本：基于 1.373.0-rc3（develop @ 4db470e5）
 > 适用范围：Xedit（WillDeep macOS App）、willdeep-rs（镜像契约）
 > 关联文档：[REVIEW_2026-09-03_WORKER_ROUTING_LATENCY.md](REVIEW_2026-09-03_WORKER_ROUTING_LATENCY.md)、[NEXT_TASKS_2026-09-03_WORKER_LATENCY.md](NEXT_TASKS_2026-09-03_WORKER_LATENCY.md)、[WORKER_ROUTING_CONTRACT.json](WORKER_ROUTING_CONTRACT.json)
@@ -140,7 +140,30 @@ composer 上方显示「委派给「运维」Worker」。用户的反应是：
 
 ## 3. 已拍板的决策
 
-（待用户 review，见 §15）
+2026-09-14 用户逐条确认，全部采用默认假设。详见 §16。
+
+| # | 决策 | 推论 |
+| --- | --- | --- |
+| 1 | 09-17 的判路模型去留，按本文档方向定：保留模型路径，用途改为否决特权档，generalist 兜底补判同时保留 | `refineRouteDecisionWithModelIfNeeded` 不删；`NEXT_TASKS` 任务 E.2 的"删除"选项作废 |
+| 2 | 否决范围只含 `ops_runner` + `terminal_operator` | `test_fixer` / `build_fixer` 不产生强制后果，不进否决路径 |
+| 3 | 标签先显示「运维」，否决后跳变成「实现」 | 不引入"判决未定"这个中间 UI 状态 |
+| 4 | 路由模型与 `summaryModel` 解耦不提前，留在 P3 | P1 的实测效果受用户 summaryModel 选择影响，需在验收时记录当时用的是哪个模型 |
+| 5 | 审计记请求原文前缀，截断 200 字符 | `route-veto.jsonl` 含用户输入片段，与 `judge.jsonl` 同级敏感度 |
+| 6 | 其余词表暂不加词边界 | 同类病灶保留，但无强制后果 |
+
+### 3.1 thinking 必须关（用户 2026-09-14 明确要求）
+
+核实结论：**这条路径上已经关死**。
+
+| 环节 | 位置 | 结论 |
+| --- | --- | --- |
+| 路由配置的 provider | `Xedit/AgentLocalModelSupport.swift:172` | 硬编码 `providerID: AgentProviderPreset.ollamaID` |
+| 本地判定 | `Xedit/AgentLocalModelSupport.swift:195` | `providerID == "ollama"` → `isLocalProvider` 为真 |
+| 注入 | `Xedit/AgentClientOpenAIChat.swift:617` / `:633` | 三个字段一起发：`reasoning_effort: "none"`、`reasoning: {effort: "none"}`、`think: false` |
+
+`think: false` 只在内置 Ollama provider 上发（`includeOllamaThinkingFlag`）；其他 loopback 兼容端点只收 OpenAI 形状字段。由于路由配置硬编码走内置 ollama preset，否决路径不受此限制影响。
+
+**残留风险与对策**：若模型仍无视这些字段而思考，表现是空 content（`done_reason=length`），走 `unusable_reply_cases` → `uphold` → 功能**静默失效**。对策：§8.2 审计必须单独记 `unusable` 原因，验收时检查空回复率（见 §12.4）。
 
 ## 4. 总体架构
 
@@ -378,14 +401,21 @@ P1 之前先做 P0，因为契约不一致会让 P2 的守卫测试建在错误�
 
 ## 15. 待确认问题
 
-| # | 问题 | 我的默认假设 | 影响 |
-| --- | --- | --- | --- |
-| 1 | 2026-09-17 的「判路模型去留」决策，是否就按本文档的方向定（改用途而非退役）？ | 按本文档定：保留模型路径，用途从"填补兜底档"改为"否决特权档"；原有的 generalist 兜底补判**同时保留** | 决定 P1 做不做，以及要不要删 `refineRouteDecisionWithModelIfNeeded` |
-| 2 | 否决范围只含 `ops_runner` + `terminal_operator`，还是也含 `test_fixer` / `build_fixer`（96 分，但不 enforce）？ | 只含前两个。后两者不产生强制后果，判错代价小 | 影响触发频率与模型调用量 |
-| 3 | 工种标签在否决到位前怎么显示？ | 先显示关键词结果（「运维」），否决后跳变成「实现」 | 备选：未定时显示中性文案，代价是多一个 UI 状态 |
-| 4 | P3（路由模型与 summaryModel 解耦）要不要提到 P1 之前？ | 不提前。先让否决路径跑起来拿数据，再决定值不值得多一个配置项 | 若用户的 summaryModel 是 e4b，P1 的实测效果会偏差 |
-| 5 | `route-veto.jsonl` 记不记请求原文前缀？ | 记，截断 200 字符 | 排查价值高，但会把用户请求落到审计文件里；若有顾虑改为只记 `matchedMarker` 与哈希 |
-| 6 | rc3 已给 `operationsMarkers` 加了词边界，其余词表（terminalMarkers、mutatingMarkers 等）要不要一并加？ | 暂不。它们没有 enforce 后果，且 `"add "` 这类带尾空格的词已有边界防护 | 影响面小，但属于同类病灶 |
+无。六条已于 2026-09-14 全部拍板，见 §3 与 §16。
+
+## 16. 已确认决策（2026-09-14）
+
+用户逐条确认，六条全部采用文档给出的默认假设，另追加一条硬性要求：
+
+> 4. 不提前。**而且我们一定要关 thinking 啊。**
+
+thinking 的核实结论见 §3.1：当前路径已关死（三字段齐发），残留风险是模型无视字段导致空回复、功能静默失效，对策是审计单独记 `unusable` 原因并在验收时检查空回复率。
+
+实施顺序按 §11：P0（契约修正）→ P1（否决路径主体）→ P2（契约 veto 段 + i18n）。P3 / P4 待定。
+
+### 16.1 落地后补记的实现要点
+
+（实现完成后回写：实际落地与设计的差异、踩到的坑。）
 
 ## 附：相关文档
 
