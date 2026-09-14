@@ -26,7 +26,6 @@ description: WillDeep 在本机写了哪些目录、各存什么、排错时该�
 | `projects.json` | 项目与目录归属 | 同一路径同时出现在"项目"和裸文件夹里 |
 | `roundtable-documents/` | 专家圆桌产出的文档 | 找圆桌结论 |
 | `terminal-shortcuts/` | 终端快捷命令 | 备份自定义命令 |
-| `app-backups/` | 应用自动留的备份 | 升级出问题时回滚参考 |
 
 ## C.2 偏好与凭据
 

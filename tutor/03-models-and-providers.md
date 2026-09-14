@@ -27,12 +27,16 @@ description: 省心托管、自带 API Key、自定义服务商与本地模型�
 2. 浏览器里完成登录，页面提示可以继续后回到 WillDeep。
 3. 回来应该看到"some.im 账号已连接"，下面显示账号和剩余积分。
 
+**国内用户先看"区域"**：这一页可以选中国（`api.niuwoai.com`）、国际（`some.im`）或自定义。连不上、一直转圈，多半是区域选错了，不是账号问题。
+
 登录之后，"新标签页默认模型"有两个选择：
 
 - **省心托管**：新会话默认交给托管路由，由它按任务挑模型。你随时能在输入区手动改。
 - **DeepSeek V4 Flash**：新会话固定用这个具体模型。
 
 托管路由的工作方式值得了解一下，因为它会影响你的花费和体验：每一轮请求之前，客户端先用一个轻量裁判模型判断这次是编程任务还是通用任务、复杂度多高，再决定本轮实际用哪个档位的模型。输出如果出现重复循环、空回复或者被截断，会自动升档重试；同一个会话内**只升不降**。
+
+托管也不是只能听天由命：输入框的模型按钮里有一个托管档位菜单，可以手动挑 Flash / Pro / Premium，挑过之后按钮上会显示成"省心托管 · Pro"这样。默认是自动判定，遇到难题又不想等它自己升档时，直接挑 Pro。
 
 发给托管的请求带两个标识头：一个会话 ID、一个工作区 ID。工作区 ID 是本机随机生成的，不是你的真实路径。裁判请求和日志里不放本地路径、用户名、API Key 和 session token。
 
@@ -55,8 +59,10 @@ description: 省心托管、自带 API Key、自定义服务商与本地模型�
 | Google Gemini | `https://generativelanguage.googleapis.com` | Gemini |
 | DeepSeek | `https://api.deepseek.com` | OpenAI Chat |
 | DashScope（阿里） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI Chat |
-| Kimi / Moonshot | `https://api.moonshot.cn/v1` | OpenAI Chat |
+| Kimi | `https://api.moonshot.cn/v1` | OpenAI Chat |
+| Moonshot | `https://api.moonshot.cn/v1` | OpenAI Chat |
 | OpenRouter | `https://openrouter.ai/api/v1` | OpenAI Chat |
+| AnyRouter | `https://anyrouter.top/v1` | OpenAI Chat |
 | SiliconFlow（硅基流动） | `https://api.siliconflow.cn/v1` | OpenAI Chat |
 | some.im | `https://some.im/v1` | OpenAI Chat |
 | Ollama / Local OpenAI | `http://127.0.0.1:11434/v1` | OpenAI Chat |
