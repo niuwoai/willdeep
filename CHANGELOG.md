@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.373.0-rc1 - 2026-09-14
+
+### Changed
+
+- **命令安全判定层搬进了 WillDeepCore 包，改一行的反馈从十几分钟变成 0.97 秒。**
+  `AgentShellCommandParser`、`AgentSafeCommand`、`AgentPackageCommandPolicy`、
+  `AgentMaliciousCommandDenylist` 四个文件共 2,472 行，加上从
+  `AgentToolAuthorizationSupport` 拆出的 `shellTokens` / `sshHostIndex` /
+  `sshRemoteCommand` 三个纯字符串函数。它们是一个完整单元：命令怎么切段、
+  切出来的段危不危险、是不是确定性恶意。
+  - 收益是实测的：包内 `swift build` 0.97 秒，`swift test` 62 个用例 0.61 秒。
+    同一批判据以前只能走 App target，建整个 App 十几分钟，跑完才知道一条字符串
+    判据写错没有。而它保护的恰恰是最不能出错的一层——哪些命令可以不经人工确认
+    就跑。
+  - 昨天修的那三条外泄误判（`ssh -i` 私钥登录、kubectl 的 `.envFrom`、
+    `journalctl -u xxx-mail` 撞出口词）现在有了秒级回归保护。
+  - 搬迁只撞了 3 轮编译错，2,472 行——远好于 P1 记录的「每 100 行撞一次」，
+    因为这批本来就是纯函数集合，公开面窄。
+  - **App 侧的行为一个字没变**：`AgentCommandAuthorization` 保留同名转调，既有
+    调用点一个都没改；私有辅助 `cleaned` 在 App 侧补了一份副本，而不是从包里
+    public 出来——包的公开面越小，改包内实现越不触发 App 重编，那正是这件事要
+    买的东西。
+
+### Notes
+
+- **L10n 那一刀本来是首选，查下来暂缓。** 它 churn 密度全仓最高、52 个文件全部
+  只 `import Foundation`，看起来最该先搬。但它有 **3,633 处 `String(localized:)`
+  且无一指定 bundle**，而 `Localizable.xcstrings` 在 App target 里。赌对了没事，
+  赌错就是所有非英文文案静默退回英文，**不会有任何编译错误**，测试也很难发现。
+  已有的 WillDeepCore 包里一处本地化调用都没有，这条路没人走过——所以必须先做
+  一次真机验证（搬一两个文件跑起来看中文），验证通过再谈剩下 50 个。
+- Authz 的核心 `AgentToolAuthorization`(2,408) / `AgentToolAuthorizationSupport`(867)
+  这次没搬：它们依赖 `AgentToolModels`，而后者带 UI/AppState。按边界规则「不为了
+  拆而拆」，得先把 `AgentToolModels` 的纯模型部分拆出来，那是独立的一刀。
+- 按最近 2000 个提交的改动分布，`AppState`(17.9%) 加杂项(38.3%) 合计 **56% 的改动
+  仍然会触发全量编译**。模块化买不到的东西就是买不到，别指望这次之后所有编译都变快。
+
 ## 1.372.0-rc11 - 2026-09-13
 
 ### Fixed

@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import WillDeepCore
 
 enum AgentSandboxAuditLog {
     struct Entry: Codable, Equatable {
@@ -481,102 +482,29 @@ enum AgentCommandAuthorization {
     }
 
     /// Trim once and check non-empty, used by MCP signature derivation.
+    // `cleaned` 是本类型自己的实现细节，包里也有一份同样的私有副本。
+    // 刻意不从包里 public 出来：包的公开面越小，改包内实现越不触发 App 重编。
     nonisolated fileprivate static func cleaned(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    // 这几个纯字符串处理函数已移入 WillDeepCore（包内与 SafeCommand 同模块，
+    // 避免包反向依赖 App）。这里保留同名转调，既有调用点一个都不用改。
     nonisolated static func sshRemoteCommand(from command: String) -> String? {
-        guard let tokens = shellTokens(from: command) else { return nil }
-        return sshRemoteCommand(from: tokens)
+        AgentShellCommandParser.sshRemoteCommand(from: command)
     }
 
     nonisolated static func sshRemoteCommand(from tokens: [String]) -> String? {
-        guard tokens.first?.lowercased() == "ssh",
-              let hostIndex = sshHostIndex(tokens),
-              hostIndex + 1 < tokens.count else {
-            return nil
-        }
-        return cleaned(tokens.dropFirst(hostIndex + 1).joined(separator: " "))
+        AgentShellCommandParser.sshRemoteCommand(from: tokens)
     }
 
     nonisolated static func sshHostIndex(_ tokens: [String]) -> Int? {
-        var index = 1
-        let optionsWithArgument: Set<String> = [
-            "-b", "-c", "-D", "-E", "-e", "-F", "-i", "-J", "-L", "-l", "-m",
-            "-O", "-o", "-p", "-Q", "-R", "-S", "-W", "-w"
-        ]
-        while index < tokens.count {
-            let token = tokens[index]
-            if token == "--" {
-                index += 1
-                continue
-            }
-            if optionsWithArgument.contains(token) {
-                index += 2
-                continue
-            }
-            if token.hasPrefix("-o") && token.count > 2 {
-                index += 1
-                continue
-            }
-            if token.hasPrefix("-") {
-                index += 1
-                continue
-            }
-            return index
-        }
-        return nil
+        AgentShellCommandParser.sshHostIndex(tokens)
     }
 
     nonisolated static func shellTokens(from command: String) -> [String]? {
-        var tokens: [String] = []
-        var current = ""
-        var activeQuote: Character?
-        var isEscaped = false
-
-        for character in command {
-            if isEscaped {
-                current.append(character)
-                isEscaped = false
-                continue
-            }
-            if character == "\\" {
-                isEscaped = true
-                continue
-            }
-            if let quote = activeQuote {
-                if character == quote {
-                    activeQuote = nil
-                } else {
-                    current.append(character)
-                }
-                continue
-            }
-            if character == "\"" || character == "'" {
-                activeQuote = character
-                continue
-            }
-            if character.isWhitespace {
-                if !current.isEmpty {
-                    tokens.append(current)
-                    current = ""
-                }
-                continue
-            }
-            if "|&;".contains(character) {
-                if character == "&", current.last == ">" {
-                    current.append(character)
-                    continue
-                }
-                return nil
-            }
-            current.append(character)
-        }
-        if !current.isEmpty {
-            tokens.append(current)
-        }
-        return tokens
+        AgentShellCommandParser.shellTokens(from: command)
     }
 }
 

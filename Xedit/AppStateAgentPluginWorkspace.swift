@@ -17,6 +17,7 @@
 import AppKit
 import Foundation
 import UserNotifications
+import WillDeepCore
 
 @MainActor
 extension AppState {

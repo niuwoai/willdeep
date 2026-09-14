@@ -29,21 +29,27 @@
 
 import Foundation
 
-nonisolated enum AgentMaliciousCommandDenylist {
+nonisolated public enum AgentMaliciousCommandDenylist {
     /// 一次命中的证据：给用户看的理由 + 触发它的那一段命令。
-    struct Match: Equatable, Sendable {
+    public struct Match: Equatable, Sendable {
         /// 稳定标识，用于审计与测试断言，不直接展示。
-        let ruleID: String
+        public let ruleID: String
         /// 一句话说明为什么这条被挡下来（中文，直接进审批卡）。
-        let reason: String
+        public let reason: String
         /// 命中的那一段（已按 shell 分段），便于用户核对。
-        let segment: String
+        public let segment: String
+
+        public init(ruleID: String, reason: String, segment: String) {
+            self.ruleID = ruleID
+            self.reason = reason
+            self.segment = segment
+        }
     }
 
     /// 整条命令按 shell 语义拆段后逐段过；任何一段命中即整条命中。
     /// 条件执行（`a || b`）里的任何一支都算——`|| rm -rf /` 不会因为
     /// 前面那支大概率成功就变得无害。
-    static func match(command: String) -> Match? {
+    public static func match(command: String) -> Match? {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         // 先看整条命令，再拆段。有两类规则拆完就看不见了：

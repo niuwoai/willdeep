@@ -14,22 +14,30 @@
 
 import Foundation
 
-nonisolated enum CommandSafety: Equatable, Sendable {
+nonisolated public enum CommandSafety: Equatable, Sendable {
     case alwaysSafe
     case alwaysDangerous
     case needsJudgment
 }
 
-nonisolated struct SafeShellExpansionResolution: Equatable, Sendable {
-    let command: String
-    let requiresJudgment: Bool
-    let substitutions: [String]
+nonisolated public struct SafeShellExpansionResolution: Equatable, Sendable {
+    public let command: String
+    public let requiresJudgment: Bool
+    public let substitutions: [String]
+
+    // public struct 的成员初始化器默认是 internal，跨模块构造不出来。
+    // 包内目前是唯一构造方，补上显式 public init 免得将来又撞一次。
+    public init(command: String, requiresJudgment: Bool, substitutions: [String]) {
+        self.command = command
+        self.requiresJudgment = requiresJudgment
+        self.substitutions = substitutions
+    }
 }
 
-nonisolated enum SafeCommand {
+nonisolated public enum SafeCommand {
     // MARK: - Public API
 
-    static let safeCommandSubstitutionPlaceholder = "__willdeep_safe_command_substitution__"
+    public static let safeCommandSubstitutionPlaceholder = "__willdeep_safe_command_substitution__"
     private static let maximumCommandSubstitutionDepth = 6
     private static let databaseCombinedExecuteFlags: Set<Character> = [
         "A", "B", "N", "f", "n", "r", "s", "t", "v", "w"
@@ -41,7 +49,7 @@ nonisolated enum SafeCommand {
     /// otherwise any needs-judgment segment → needsJudgment; otherwise
     /// all-safe → safe). Empty input is dangerous (we don't auto-run
     /// nothing).
-    static func classify(command: String) -> CommandSafety {
+    public static func classify(command: String) -> CommandSafety {
         classify(command: command, commandSubstitutionDepth: 0)
     }
 
@@ -50,14 +58,14 @@ nonisolated enum SafeCommand {
     /// workspace-write sandbox so hooks cannot write outside the workspace or
     /// reach the network. Chained commands and other Git mutations do not
     /// inherit this exception.
-    static func isLocalGitCommit(command: String) -> Bool {
+    public static func isLocalGitCommit(command: String) -> Bool {
         guard let expansionResolution = resolveProvablySafeShellExpansions(in: command),
               !expansionResolution.requiresJudgment,
               let chain = AgentShellCommandParser.parse(expansionResolution.command),
               chain.segments.count == 1,
               !chain.requiresBackgroundJudgment,
               let segment = chain.segments.first,
-              let tokens = AgentCommandAuthorization.shellTokens(from: segment.text),
+              let tokens = AgentShellCommandParser.shellTokens(from: segment.text),
               tokens.first?.lowercased() == "git",
               let subcommandIndex = gitSubcommandIndex(tokens: tokens) else {
             return false
@@ -143,7 +151,7 @@ nonisolated enum SafeCommand {
     /// Unknown payloads, destructive payloads, backticks, process substitution,
     /// arithmetic expansion, unsupported nesting, and malformed quotes return
     /// `nil`, preserving the typed human-confirmation boundary.
-    static func resolveProvablySafeShellExpansions(
+    public static func resolveProvablySafeShellExpansions(
         in command: String
     ) -> SafeShellExpansionResolution? {
         resolveProvablySafeShellExpansions(in: command, commandSubstitutionDepth: 0)
@@ -303,7 +311,7 @@ nonisolated enum SafeCommand {
 
     /// Commands whose entire output is read-only and side-effect free.
     /// Matched on the first token of a segment.
-    static let alwaysSafeFirstTokens: Set<String> = [
+    public static let alwaysSafeFirstTokens: Set<String> = [
         // directory navigation — only changes shell state, no FS writes.
         // Command-substitution forms like `cd $(...)` are already blocked
         // upstream by the `$(` needle check, so we don't need to filter
@@ -372,13 +380,13 @@ nonisolated enum SafeCommand {
     /// independently of this classifier. NOTE: every token here must also be
     /// in AgentSandboxPolicy.lowRiskWriteHeads, otherwise the sandbox treats
     /// the command as read-only and blocks the write. (Added 1.78.0-rc15.)
-    static let safeWorkspaceCreateTokens: Set<String> = [
+    public static let safeWorkspaceCreateTokens: Set<String> = [
         "mkdir", "touch", "mktemp"
     ]
 
     /// Commands that COULD be safe but whose argument shape matters.
     /// `git`, `find`, `xargs`, etc.: dispatched to a per-tool checker.
-    static let conditionalFirstTokens: Set<String> = [
+    public static let conditionalFirstTokens: Set<String> = [
         "git", "find", "xargs", "ssh", "scp", "rsync", "kubectl",
         "journalctl", "systemctl", "timedatectl", "resolvectl", "hostnamectl",
         "mysql", "mariadb",
@@ -405,7 +413,7 @@ nonisolated enum SafeCommand {
     /// half of `find . | xargs rm` is its own segment whose tokens are
     /// `["xargs", "rm"]` — the `rm` token here triggers .alwaysDangerous,
     /// closing the `xargs rm` hole the previous needle list missed.
-    static let dangerousTokens: Set<String> = [
+    public static let dangerousTokens: Set<String> = [
         // file removal — all forms (was: "rm ", "rm\t", "rmdir")
         "rm", "rmdir",
         // privilege escalation
@@ -429,7 +437,7 @@ nonisolated enum SafeCommand {
     /// no whitespace at all, `dd if=` embeds an `=` inside the first
     /// "token", `mkfs.` is a prefix that `mkfs.ext4` / `mkfs.hfs` etc.
     /// share. Kept short on purpose — every entry is a known one-off.
-    static let dangerousSubstrings: [String] = [
+    public static let dangerousSubstrings: [String] = [
         ":(){:|:&};:",
         "dd if=",
         "mkfs."
@@ -440,7 +448,7 @@ nonisolated enum SafeCommand {
     /// flag"). Plain `cp src dst` falls back to .needsJudgment. The
     /// flagged forms (`cp -r`, `cp -R`, `ln -s`, `ln -f`) are the
     /// destructive shapes (recursive overwrite, replace symlinks).
-    static let dangerousHeadsWithFlag: Set<String> = ["cp", "ln"]
+    public static let dangerousHeadsWithFlag: Set<String> = ["cp", "ln"]
 
     /// Shell 控制流关键字，自身带一个真正的命令负载：`do echo hi`、
     /// `then git status`、`if grep -q x f`、`while read line`。剥掉
@@ -462,7 +470,7 @@ nonisolated enum SafeCommand {
     /// not a full shell parser — anything fancier than literal quoting
     /// (heredocs, escape continuations) falls back to .needsJudgment by
     /// way of the dangerous-needle scan.
-    static func splitPipeline(_ command: String) -> [String] {
+    public static func splitPipeline(_ command: String) -> [String] {
         AgentShellCommandParser.parse(command)?.segments.map(\.text) ?? []
     }
 
@@ -470,7 +478,7 @@ nonisolated enum SafeCommand {
     /// values can be removed locally before AI review. This is deliberately
     /// structural rather than a substring check: quoted prose mentioning
     /// "curl" must not relax credential handling for an unrelated command.
-    static func containsNetworkFetcherInvocation(_ command: String) -> Bool {
+    public static func containsNetworkFetcherInvocation(_ command: String) -> Bool {
         guard let chain = AgentShellCommandParser.parse(command) else { return false }
         for segment in chain.segments {
             var tokens = commandTokensSkippingEnvironmentAssignments(tokenize(segment.text))
@@ -602,7 +610,7 @@ nonisolated enum SafeCommand {
     /// login name) may inherit the recursively proven safety of the remote
     /// command. This is the common shape used by unattended log inspections.
     private static func classifySSH(tokens: [String]) -> CommandSafety {
-        guard let hostIndex = AgentCommandAuthorization.sshHostIndex(tokens),
+        guard let hostIndex = AgentShellCommandParser.sshHostIndex(tokens),
               hostIndex + 1 < tokens.count else {
             return .needsJudgment
         }
@@ -627,7 +635,7 @@ nonisolated enum SafeCommand {
             }
         }
 
-        guard let remoteCommand = AgentCommandAuthorization.sshRemoteCommand(from: tokens) else {
+        guard let remoteCommand = AgentShellCommandParser.sshRemoteCommand(from: tokens) else {
             return .needsJudgment
         }
         return classify(command: remoteCommand)
@@ -1222,7 +1230,7 @@ nonisolated enum SafeCommand {
     /// a network judge round trip (and a manual approval when that judge is
     /// unavailable), while mutations such as apply/delete/exec/port-forward
     /// still fall through to intelligent review.
-    static func classifyKubectl(tokens: [String]) -> CommandSafety {
+    public static func classifyKubectl(tokens: [String]) -> CommandSafety {
         guard tokens.count >= 2 else { return .alwaysSafe }
 
         let lowered = tokens.map { $0.lowercased() }
@@ -1290,7 +1298,7 @@ nonisolated enum SafeCommand {
     /// literal query while keeping mutations, credential-bearing invocations,
     /// multiple statements, and an unbounded interactive client behind typed
     /// human confirmation.
-    static func classifyDatabaseClient(
+    public static func classifyDatabaseClient(
         firstToken: String,
         tokens: [String]
     ) -> CommandSafety {
@@ -1560,7 +1568,7 @@ nonisolated enum SafeCommand {
     /// Minimal POSIX-ish tokenizer: splits on whitespace outside quotes.
     /// Quote bodies are kept as a single token with quotes stripped so
     /// downstream checks see the literal text.
-    static func tokenize(_ segment: String) -> [String] {
+    public static func tokenize(_ segment: String) -> [String] {
         var tokens: [String] = []
         var current = ""
         var inSingle = false

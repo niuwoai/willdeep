@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import WillDeepCore
 
 struct AgentAlwaysAllowedCommand: Codable, Equatable, Identifiable {
     let id: UUID

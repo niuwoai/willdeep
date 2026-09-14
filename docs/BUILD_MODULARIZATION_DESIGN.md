@@ -1,6 +1,8 @@
 # 构建分层设计：把单模块工程切出可独立编译的核心包
 
-> Last updated: 2026-09-12 | 状态：**P1 已实现（1.370.0-rc1）**，P3 未启动（按决策 3，先看 P1 收益）
+> Last updated: 2026-09-14 | 状态：**P1 已实现（1.370.0-rc1）**；**P3 第一刀已实现（1.373.0-rc1）**：
+> 命令安全判定层 2,472 行进包，改一行的反馈从十几分钟降到 0.97 秒。L10n 那一刀因
+> `String(localized:)` 的 bundle 归属未经实测，暂缓（见 P3 小节）。
 > 关联版本：基于 1.368.0-rc3（develop @ 562cd5cb）
 > 适用范围：Xedit（WillDeep macOS App）的构建拓扑与测试执行路径
 > 关联文档：`TESTING.md`、`docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md`
@@ -161,6 +163,64 @@ protocol/typealias`。
 
 `AgentContextRunwayPolicy`、`AgentDaemonEventCursor`、`AgentFileObservationLedger`、
 `AgentGitCommitAttribution`、`AgentLeakedToolCallText`、`AgentMarkdownTableFormatter`。
+
+
+## P3 第一刀：命令安全判定层（2026-09-14，1.373.0-rc1）
+
+### 搬了什么
+
+`AgentShellCommandParser`(299) / `AgentSafeCommand`(1,636) /
+`AgentPackageCommandPolicy`(138) / `AgentMaliciousCommandDenylist`(399)，
+共 **2,472 行**，外加从 `AgentToolAuthorizationSupport` 里拆出的
+`shellTokens` / `sshHostIndex` / `sshRemoteCommand` 三个纯字符串函数（97 行）。
+
+这四个文件是一个完整功能单元：命令怎么切段、切出来的段危不危险、是不是
+确定性恶意。它们零 UI、零 AppState、**零本地化调用**——最后一条是能搬的
+关键，见下文。
+
+### 实测收益
+
+| | 搬之前 | 搬之后 |
+|---|---|---|
+| 改一行后拿到反馈 | 十几分钟（建 App） | **0.97 秒**（`swift build`） |
+| 跑这批判据的测试 | 十几分钟 + 156 秒 | **0.61 秒**（62 用例 / 7 suite） |
+
+### 搬迁实际撞了几次
+
+**3 轮，2,472 行。** 远好于 P1 记的「每 100 行撞一次」——原因是这批文件
+本来就是纯函数集合，公开面窄。三轮分别是：
+
+1. 包内 `AgentSafeCommand` 还在调 App 侧的 `AgentCommandAuthorization`
+   （所以那三个函数必须跟着进包）。
+2. `Match` / `SafeShellExpansionResolution` 这类**嵌套类型和实例属性**没标
+   public——批量脚本只覆盖了顶层声明和 static 成员。
+3. `cleaned` 这个私有辅助被一起搬走，App 侧还有 5 处在用。**修法是在 App
+   侧补一份副本，而不是从包里 public 出来**：包的公开面越小，改包内实现
+   越不触发 App 重编，那正是这件事要买的东西。
+
+### L10n 那一刀为什么没动
+
+原计划 L10n 是第一刀（churn 密度 2.24 全仓最高，52 个文件全部只
+`import Foundation`）。查下来卡在一个硬约束上：
+
+**3,633 处 `String(localized:)`，无一指定 bundle**，而
+`Localizable.xcstrings` 在 App target 里。`String(localized:)` 的 `bundle`
+参数默认走 `Bundle.main`，理论上搬进包仍然读得到 App bundle——但这个结论
+**没有实测支撑**，而且已有的 WillDeepCore 包里一处本地化调用都没有，这条
+路没人走过。
+
+赌错的代价是所有非英文文案静默退回英文，**不会有任何编译错误**，也很难被
+测试发现。所以 L10n 必须先做一次真机验证（搬 1-2 个文件进包，跑起来看中文
+是否正常），验证通过再谈剩下 50 个。这一步没做，就不搬。
+
+### 下一刀的候选与已知阻碍
+
+`AgentToolAuthorization`(2,408) 和 `AgentToolAuthorizationSupport`(867) 是
+Authz 的核心，但它们依赖 `AgentToolModels`（`AgentJSONValue` /
+`AgentToolRisk` / `AgentToolCall`），而 `AgentToolModels` 带 UI/AppState。
+按边界规则第 3 条「不为了拆而拆」，它们**现在搬不动**——除非先把
+`AgentToolModels` 里的纯模型部分拆出来。那是独立的一刀，不要和这次混在
+一起评估。
 
 ## 原待确认问题（已按默认执行）
 

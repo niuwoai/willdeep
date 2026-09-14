@@ -12,6 +12,7 @@
 import AppKit
 import Foundation
 import Testing
+import WillDeepCore
 @testable import WillDeep
 
 @Suite

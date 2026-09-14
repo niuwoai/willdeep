@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WillDeepCore
 @testable import WillDeep
 
 @Suite("SSH Agent 只读诊断审批")

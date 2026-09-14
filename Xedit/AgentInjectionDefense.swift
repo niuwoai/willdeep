@@ -28,6 +28,7 @@
 //
 
 import Foundation
+import WillDeepCore
 
 enum AgentInjectionDefense {
 

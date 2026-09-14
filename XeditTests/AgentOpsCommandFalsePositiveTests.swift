@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WillDeepCore
 @testable import WillDeep
 
 /// 审计日志（sandbox.jsonl / judge.jsonl，2026-08→09）里「敏感路径或类凭据值」

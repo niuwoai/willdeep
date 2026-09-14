@@ -9,6 +9,7 @@
 
 import AppKit
 import Foundation
+import WillDeepCore
 
 extension AppState {
     nonisolated static func unattendedDispatchApprovalSource(

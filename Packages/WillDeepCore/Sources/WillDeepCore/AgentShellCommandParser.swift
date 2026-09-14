@@ -12,7 +12,7 @@
 
 import Foundation
 
-nonisolated enum AgentShellConnector: String, Equatable, Sendable {
+nonisolated public enum AgentShellConnector: String, Equatable, Sendable {
     case sequence
     case and
     case or
@@ -20,29 +20,29 @@ nonisolated enum AgentShellConnector: String, Equatable, Sendable {
     case background
 }
 
-nonisolated struct AgentShellSegment: Equatable, Sendable {
-    let text: String
-    let connectorFromPrevious: AgentShellConnector?
-    let connectorToNext: AgentShellConnector?
+nonisolated public struct AgentShellSegment: Equatable, Sendable {
+    public let text: String
+    public let connectorFromPrevious: AgentShellConnector?
+    public let connectorToNext: AgentShellConnector?
 
-    var runsInPipeline: Bool {
+    public var runsInPipeline: Bool {
         connectorFromPrevious == .pipeline || connectorToNext == .pipeline
     }
 }
 
-nonisolated struct AgentShellCommandChain: Equatable, Sendable {
-    let segments: [AgentShellSegment]
-    let hasTrailingBackgroundJob: Bool
+nonisolated public struct AgentShellCommandChain: Equatable, Sendable {
+    public let segments: [AgentShellSegment]
+    public let hasTrailingBackgroundJob: Bool
 
-    var requiresBackgroundJudgment: Bool {
+    public var requiresBackgroundJudgment: Bool {
         hasTrailingBackgroundJob || segments.contains {
             $0.connectorFromPrevious == .background || $0.connectorToNext == .background
         }
     }
 }
 
-nonisolated enum AgentShellCommandParser {
-    static func parse(_ command: String) -> AgentShellCommandChain? {
+nonisolated public enum AgentShellCommandParser {
+    public static func parse(_ command: String) -> AgentShellCommandChain? {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -218,7 +218,7 @@ nonisolated enum AgentShellCommandParser {
     /// Shell metacharacters inside quotes are data. Command substitution is
     /// still active inside double quotes, so only single-quoted contents are
     /// ignored by `containsExecutableSubstitution`.
-    static func containsExecutableSubstitution(_ command: String) -> Bool {
+    public static func containsExecutableSubstitution(_ command: String) -> Bool {
         var activeQuote: Character?
         var escaped = false
         var index = command.startIndex
@@ -257,7 +257,7 @@ nonisolated enum AgentShellCommandParser {
         return activeQuote != nil || escaped
     }
 
-    static func unquotedText(_ command: String) -> String? {
+    public static func unquotedText(_ command: String) -> String? {
         var output = ""
         var activeQuote: Character?
         var escaped = false
@@ -295,5 +295,110 @@ nonisolated enum AgentShellCommandParser {
     private static func isCommentBoundary(_ current: String) -> Bool {
         guard let last = current.last else { return true }
         return last.isWhitespace
+    }
+}
+
+// MARK: - shell token / ssh 解析
+//
+// 原先长在 AgentToolAuthorizationSupport 的 AgentCommandAuthorization 里。
+// 它们是纯字符串处理，而 SafeCommand 要用它们；留在 App 侧会让包反向
+// 依赖宿主，所以跟着解析器一起进包，App 侧留同名转调。
+extension AgentShellCommandParser {
+    nonisolated private static func cleaned(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    nonisolated public static func sshRemoteCommand(from command: String) -> String? {
+        guard let tokens = shellTokens(from: command) else { return nil }
+        return sshRemoteCommand(from: tokens)
+    }
+
+    nonisolated public static func sshRemoteCommand(from tokens: [String]) -> String? {
+        guard tokens.first?.lowercased() == "ssh",
+              let hostIndex = sshHostIndex(tokens),
+              hostIndex + 1 < tokens.count else {
+            return nil
+        }
+        return cleaned(tokens.dropFirst(hostIndex + 1).joined(separator: " "))
+    }
+
+    nonisolated public static func sshHostIndex(_ tokens: [String]) -> Int? {
+        var index = 1
+        let optionsWithArgument: Set<String> = [
+            "-b", "-c", "-D", "-E", "-e", "-F", "-i", "-J", "-L", "-l", "-m",
+            "-O", "-o", "-p", "-Q", "-R", "-S", "-W", "-w"
+        ]
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                index += 1
+                continue
+            }
+            if optionsWithArgument.contains(token) {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-o") && token.count > 2 {
+                index += 1
+                continue
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            return index
+        }
+        return nil
+    }
+
+    nonisolated public static func shellTokens(from command: String) -> [String]? {
+        var tokens: [String] = []
+        var current = ""
+        var activeQuote: Character?
+        var isEscaped = false
+
+        for character in command {
+            if isEscaped {
+                current.append(character)
+                isEscaped = false
+                continue
+            }
+            if character == "\\" {
+                isEscaped = true
+                continue
+            }
+            if let quote = activeQuote {
+                if character == quote {
+                    activeQuote = nil
+                } else {
+                    current.append(character)
+                }
+                continue
+            }
+            if character == "\"" || character == "'" {
+                activeQuote = character
+                continue
+            }
+            if character.isWhitespace {
+                if !current.isEmpty {
+                    tokens.append(current)
+                    current = ""
+                }
+                continue
+            }
+            if "|&;".contains(character) {
+                if character == "&", current.last == ">" {
+                    current.append(character)
+                    continue
+                }
+                return nil
+            }
+            current.append(character)
+        }
+        if !current.isEmpty {
+            tokens.append(current)
+        }
+        return tokens
     }
 }

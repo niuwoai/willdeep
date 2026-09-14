@@ -9,7 +9,7 @@
 
 import Foundation
 
-enum AgentPackageCommandPolicy {
+public enum AgentPackageCommandPolicy {
     nonisolated private static let packageManagers: Set<String> = ["npm", "pnpm", "yarn"]
     nonisolated private static let globalInstallFlags: Set<String> = ["-g", "--global", "--location=global"]
     nonisolated private static let safeScripts: Set<String> = [
@@ -20,11 +20,11 @@ enum AgentPackageCommandPolicy {
     nonisolated private static let pnpmInstallCommands: Set<String> = ["install", "i", "add"]
     nonisolated private static let yarnInstallCommands: Set<String> = ["install", "add"]
 
-    nonisolated static func isPackageManager(_ head: String) -> Bool {
+    nonisolated public static func isPackageManager(_ head: String) -> Bool {
         packageManagers.contains(head.lowercased())
     }
 
-    nonisolated static func classify(firstToken: String, tokens: [String]) -> CommandSafety {
+    nonisolated public static func classify(firstToken: String, tokens: [String]) -> CommandSafety {
         let manager = firstToken.lowercased()
         guard isPackageManager(manager) else { return .needsJudgment }
         guard tokens.count >= 2 else { return .alwaysSafe }
@@ -52,7 +52,7 @@ enum AgentPackageCommandPolicy {
         return safeScripts.contains(script) ? .alwaysSafe : .needsJudgment
     }
 
-    nonisolated static func isDependencyInstallCommand(tokens: [String]) -> Bool {
+    nonisolated public static func isDependencyInstallCommand(tokens: [String]) -> Bool {
         guard let head = tokens.first?.lowercased(), isPackageManager(head) else {
             return false
         }
@@ -81,7 +81,7 @@ enum AgentPackageCommandPolicy {
     /// `--prefix`). Such commands write where the sandbox denies writes
     /// anyway, so they earn neither auto-approval nor the workspace network
     /// grant that ordinary in-workspace builds get.
-    nonisolated static func hasGlobalInstallScope(_ tokens: [String]) -> Bool {
+    nonisolated public static func hasGlobalInstallScope(_ tokens: [String]) -> Bool {
         hasDisallowedWorkspaceScope(tokens)
     }
 

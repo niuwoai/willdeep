@@ -25,6 +25,7 @@
 
 import AppKit
 import Foundation
+import WillDeepCore
 @preconcurrency import UserNotifications
 
 enum AgentToolApprovalNotifier {

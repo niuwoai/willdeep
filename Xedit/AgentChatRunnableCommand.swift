@@ -23,6 +23,7 @@
 //
 
 import Foundation
+import WillDeepCore
 
 nonisolated enum AgentChatRunnableCommand {
     /// 认这些围栏语言标签。`console` / `shellsession` 刻意不收：那类块按

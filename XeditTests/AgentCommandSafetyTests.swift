@@ -9,6 +9,7 @@
 
 import Testing
 import Foundation
+import WillDeepCore
 @testable import WillDeep
 
 /// Ceiling for headless `run_command` spawns driven from tests. Mirrors the

@@ -29,6 +29,7 @@
 import Foundation
 import Combine
 import OSLog
+import WillDeepCore
 
 private let agentSubagentLog = Logger(subsystem: "com.willdeep.agent", category: "subagent")
 

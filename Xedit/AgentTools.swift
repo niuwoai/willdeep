@@ -16,6 +16,7 @@
 
 import Foundation
 import Darwin
+import WillDeepCore
 
 nonisolated enum AgentRunCommandExecutionPolicy {
     enum ActivityKind: Equatable {

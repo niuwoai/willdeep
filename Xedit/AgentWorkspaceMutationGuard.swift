@@ -13,6 +13,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import WillDeepCore
 
 nonisolated struct AgentWorkspaceRevision: Equatable, Sendable {
     let repositoryRootPath: String
