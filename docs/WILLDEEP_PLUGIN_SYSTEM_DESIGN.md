@@ -86,7 +86,10 @@ MCP Resource 在进入目的地、宿主刷新 generation 或用户手动刷新�
 - `getContext()`
 - `selectItem(itemID)`
 - `refresh()`
-- `executeCommand(commandID, arguments)`
+- `executeCommand(commandID, arguments)` —— **resolve 的是 JSON 字符串，不是对象**
+  （`sendCommandResult(requestID:result:error:)` 的 `result` 就是 `String?`）。这一条
+  属于跨宿主契约：共享插件包一律 `JSON.parse(raw)`，另一端若回对象，页面拿到的是
+  `"[object Object]"`，每条命令都在解析那一步炸掉。willdeep-rs 2026-09-14 正是踩了这一条。
 - MCP Apps 标准 `ui/initialize` / `ui/notifications/initialized` 握手、上下文通知、`tools/call` 与同服务 `resources/read`
 
 MCP App 资源必须使用与清单一致的 `ui://` URI，并返回 `text/html;profile=mcp-app`；资源与 Bridge 消息均有体积上限。页面不能直接访问文件、网络、进程、Keychain 或 AppState。所有真实动作都必须映射到清单中声明的命令。
@@ -209,7 +212,33 @@ host action、菜单挂载点。一侧先支持了某一项，另一侧原本会
 
 仍然判非法的只有结构性错误：`schemaVersion` 不认识、引用悬空、重复 ID、
 页面缺必填字段、`mcpApp` 的 `resourceURI` 不是 `ui://`、secret 设置没有
-`credentials.use`。
+`credentials.use`、`networkDomains` 写法不合 schema 的 pattern。
+
+最后一条是刻意不降级的：那份名单是 `window.willdeep.net.fetch` 唯一的门，
+不是可选的展示项。`https://example.com`、`example.com:443` 这类写法装得上却
+**永远匹配不中任何主机**，插件作者只会拿到一个解释不了的
+`networkHostNotDeclared`——一条写法含糊的规则等于一扇关不上的门。
+落点 `AgentPluginPackageLoader.isValidNetworkDomain`，rs 侧同名规则在
+`plugin/manifest.rs` 的 `is_valid_domain`。
+
+### 包内容的边界：哪些东西不算包的一部分
+
+`.git`、`node_modules`、`.cache` **任意层级、任意类型**都不进 digest，安装时
+也一并剪掉。两条约束缺一不可：
+
+1. **排除按路径段判定，不看深度、不看类型。** 插件前端通常在 `ui/node_modules`，
+   只在顶层跳过等于没跳：那 5000 个依赖文件既不是插件内容，又要在每次列插件时
+   被哈希一遍，还会被复制进两端共用的安装目录。git worktree 在包里留下的 `.git`
+   是一个普通**文件**而不是目录，只按目录跳同样漏掉。
+2. **指纹与安装剪枝必须认同一份名单。** 一侧跳过、另一侧留下（或反过来），同一个
+   包在「装之前」与「装之后」就有两个指纹，安装报 proposalChanged，而错误信息
+   看着像并发改写。rs 正是栽在这一条上：那边复制按名字剪任意类型、指纹只跳目录，
+   结果带 worktree 的短剧工坊整个包装不上。本仓此前两侧都只处理顶层 `.git`，
+   是对称的，没有这个故障——但名单一旦扩大，对称性就要一起维护。
+
+两端还必须用**同一份名单**，否则同一个包在两个宿主里有两个 digest，
+「包内容变了」会在两端之间来回误报。落点 `AgentPluginPackageLoader
+.digestExcludedPathComponents` 与 rs `plugin/package.rs` 的 `collect_files`。
 
 记录下来的条目在插件中心显示为「本宿主不支持」（rs 侧是 `plugin install` /
 `info` / `approve` 的 `unsupported here` 一行）。不显示的话，用户只会看到某个
@@ -220,9 +249,19 @@ host action、菜单挂载点。一侧先支持了某一项，另一侧原本会
 `plugin/manifest.rs` 的 `UnsupportedItems`。
 
 **页面能力用 `window.willdeep.capabilities` 探测，不要靠宿主名判断。**
-两个宿主的能力集不同（rs 目前只有 `context`、`commands`、`ai.complete`、
-`ai.providers`），而且会各自增长；判据是能力清单，不是 `version`，两端的
-号段互不比较大小。
+判据是能力清单，不是 `version`，两端的号段互不比较大小。
+
+rs 2026-09-14（0.73.0-rc1）把 Web 宿主补到了桥 2.5.0，此前只有 `context`、
+`commands`、`ai.complete`、`ai.providers` 四项。现在两端的差集只剩一项：
+**rs 没有 `ai.reasoning`**（它的 `ai.complete` 不流式，不发思考增量），
+所以那一项不出现在 rs 的 `capabilities` 里——宿主不该声明自己不发的事件，
+否则页面会白等一个永远不来的 `willdeep:ai-reasoning`。
+
+还有一处差别不体现在能力清单里，但插件作者要知道：**「弹个文件选择框」不是
+跨宿主可移植的动作**。本仓的做法是插件自己在 MCP 服务里弹原生框；rs 的界面在
+浏览器、服务可能在另一台机器上，那个框会弹在没人看的屏幕上然后超时，所以 rs
+宿主把这类命令接管为「浏览器选文件 + 上传」，再把落地的服务端路径按原工具的
+形状交回插件。插件两端都不用改，但**新写选文件能力时不要假设原生框可用**。
 
 ## 8. 注册、安装与生命周期
 

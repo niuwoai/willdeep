@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.375.0-rc3 - 2026-09-14
+
+### Fixed
+
+- **从源码目录装插件时，前端依赖和嵌套的版本库状态会被算进内容指纹、并原样搬进共享安装目录。** 此前只有**顶层**的 `.git` 被排除，`ui/node_modules` 那 5000 个依赖文件既进指纹（每次列插件都要哈希一遍），又被复制进 `~/.willdeep/plugins/`——而那个目录是与 willdeep-rs 共用的，98 MB 装机产物两端都得背着。git worktree 在包里留下的嵌套 `.git` 文件同理。
+  - 改成按**路径段**排除 `.git` / `node_modules` / `.cache`，不看深度也不看它是目录还是文件；指纹计算与安装剪枝共用同一份名单（`AgentPluginPackageLoader.digestExcludedPathComponents`）。两侧必须认同一份名单，否则同一个包在「装之前」和「装之后」会算出两个指纹，安装会报 proposalChanged——willdeep-rs 就是在这一点上翻车的（那边复制按名字剪任意类型、指纹只跳目录，于是短剧工坊整个包装不上），这次一并对齐避免重演。
+  - 两端现在对同一个包算出同一个 digest。已装插件不受影响——实测共享目录里的包都不含这三类路径，指纹不变，不会出现「包内容已变」误报。
+
+- **`networkDomains` 写错格式不再静默失效。** 此前一条都不校验，而代发请求做的是精确匹配或 `*.` 后缀匹配：`https://example.com`、`example.com:443` 这类写法装得上却永远匹配不中任何主机，插件作者拿到的是一个解释不了的 `networkHostNotDeclared`，而他明明在清单里写了那个域名。现在按共享 schema 的 pattern 在装的时候就拒，并说明正确写法。
+  - 这一条刻意**不**走「认不出就降级」：那份名单是 `net.fetch` 唯一的门，不是可选展示项。
+  - 新增契约测试直接拿 schema 里的 pattern 与宿主判定逐例对账，防止两端各自漂移。
+
+### Changed
+
+- 插件系统设计文档补上三条跨宿主契约：`executeCommand` resolve 的是 **JSON 字符串**而不是对象（另一端回对象时页面会报 `"[object Object]" is not valid JSON`）、包内容排除名单、以及「弹原生文件框不是跨宿主可移植的动作」。同时更新 rs 的能力现状：它已补齐到桥 2.5.0，两端差集只剩 `ai.reasoning`。
+
 ## 1.375.0-rc2 - 2026-09-14
 
 ### Fixed

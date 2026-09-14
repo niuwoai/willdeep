@@ -241,6 +241,12 @@ nonisolated enum AgentPluginPackageLoader {
             }
         }
 
+        for domain in manifest.networkDomains where !isValidNetworkDomain(domain) {
+            throw AgentPluginPackageError.invalidContribution(
+                "networkDomains entry \(domain) must be api.example.com or *.example.com"
+            )
+        }
+
         let destinations = manifest.contributes.destinations
         let sidebars = manifest.contributes.sidebars
         let pages = manifest.contributes.pages
@@ -676,6 +682,56 @@ nonisolated enum AgentPluginPackageLoader {
         return URL(fileURLWithPath: String(cString: pointer), isDirectory: standardized.hasDirectoryPath)
     }
 
+    /// `networkDomains` 里一条的形状，与共享 schema 的 `pattern` 逐字对应：
+    /// `api.example.com` 或 `*.example.com`，至少两段，标签首尾是字母数字。
+    ///
+    /// 此前这里一条都不校验，而 `AgentPluginNetworkProxy.isAllowed` 做的是
+    /// 精确匹配或 `*.` 后缀匹配。于是 `https://example.com`、`example.com:443`
+    /// 这类写法能装上，却**永远匹配不中任何主机**——插件作者拿到的是
+    /// `networkHostNotDeclared`，而他明明在清单里写了那个域名。一条写法含糊的
+    /// 规则等于一扇关不上的门，宁可在装的时候就说清楚。
+    ///
+    /// 拒装而不是降级：这份名单是 `net.fetch` 唯一的门，不是可选的展示项。
+    /// willdeep-rs `plugin/manifest.rs` 的 `is_valid_domain` 是同一份规则。
+    static func isValidNetworkDomain(_ value: String) -> Bool {
+        let host = value.hasPrefix("*.") ? String(value.dropFirst(2)) : value
+        guard !host.isEmpty, host.count <= 253, host.contains(".") else { return false }
+        return host.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { label in
+            !label.isEmpty
+                && label.count <= 63
+                && !label.hasPrefix("-")
+                && !label.hasSuffix("-")
+                && label.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+        }
+    }
+
+    /// 不进 digest 的路径段：版本库内部状态与装机产物。
+    ///
+    /// 判断按**路径段**做，不看深度也不看它是目录还是文件：
+    ///
+    /// - `node_modules` 只在顶层跳等于没跳，插件的前端通常在 `ui/node_modules`。
+    ///   一个包里 5000 个依赖文件既不是插件内容，又要在每次列插件时被哈希一遍，
+    ///   还会被复制进与 willdeep-rs 共用的安装目录。
+    /// - git worktree 的 `.git` 是一个**普通文件**（里面写着 gitdir 指向哪），
+    ///   只按目录跳同样漏掉。
+    ///
+    /// **改这份名单时，`AgentPluginInstaller.pruneExcludedContents` 必须同步**：
+    /// 一侧跳过、另一侧留下，同一个包在「装之前」与「装之后」就有两个 digest，
+    /// 安装会报 proposalChanged，而错误信息看着像并发改写。willdeep-rs 正是
+    /// 栽在这一条上（那边复制按名字剪任意类型、digest 只跳目录，结果带
+    /// worktree 的包整个装不上）。
+    ///
+    /// 这份名单还必须与 willdeep-rs `plugin/package.rs` 的 `collect_files` 一致：
+    /// 两端对**同一个包**必须算出同一个 digest，否则「包内容变了」会在两个宿主
+    /// 之间来回误报。
+    static let digestExcludedPathComponents: Set<String> = [".git", "node_modules", ".cache"]
+
+    static func isExcludedFromDigest(relativePath: String) -> Bool {
+        relativePath
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .contains { digestExcludedPathComponents.contains(String($0)) }
+    }
+
     private static func packageDigest(_ root: URL) throws -> String {
         let manager = FileManager.default
         guard let enumerator = manager.enumerator(
@@ -689,7 +745,7 @@ nonisolated enum AgentPluginPackageLoader {
         var totalBytes: Int64 = 0
         for case let url as URL in enumerator {
             let relative = url.path.replacingOccurrences(of: root.path + "/", with: "")
-            if relative == ".git" || relative.hasPrefix(".git/") {
+            if isExcludedFromDigest(relativePath: relative) {
                 if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
                     enumerator.skipDescendants()
                 }

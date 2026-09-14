@@ -160,10 +160,7 @@ nonisolated enum AgentPluginInstaller {
         let incoming = pluginRoot.appendingPathComponent(".incoming-\(UUID().uuidString)", isDirectory: true)
         do {
             try FileManager.default.copyItem(at: proposal.stagedPackageURL, to: incoming)
-            let gitMetadata = incoming.appendingPathComponent(".git", isDirectory: true)
-            if FileManager.default.fileExists(atPath: gitMetadata.path) {
-                try FileManager.default.removeItem(at: gitMetadata)
-            }
+            try pruneExcludedContents(at: incoming)
             let installed = try AgentPluginPackageLoader.load(
                 packageURL: incoming,
                 source: .installed,
@@ -250,6 +247,36 @@ nonisolated enum AgentPluginInstaller {
         if let stagingRoot,
            stagingRoot.lastPathComponent.hasPrefix("willdeep-plugin-stage-") {
             try? FileManager.default.removeItem(at: stagingRoot)
+        }
+    }
+
+    /// 把不属于插件内容的东西从待安装目录里剪掉：版本库内部状态与装机产物。
+    ///
+    /// 名单与 `AgentPluginPackageLoader.digestExcludedPathComponents` 必须**同一份**：
+    /// digest 跳过、复制却留下（或反过来）时，同一个包在装之前与装之后会算出两个
+    /// 指纹，安装报 proposalChanged。此前两侧都只处理顶层 `.git`，是对称的；名单
+    /// 扩大之后，这份对称性要跟着一起维护。
+    ///
+    /// 直接收益是把 98 MB 的 `node_modules` 挡在共享安装目录之外：那个目录
+    /// macOS 版与 willdeep-rs 共用，塞进去的装机产物两端都要背着。
+    private static func pruneExcludedContents(at root: URL) throws {
+        let manager = FileManager.default
+        guard let enumerator = manager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: []
+        ) else { return }
+        var doomed: [URL] = []
+        for case let url as URL in enumerator
+        where AgentPluginPackageLoader.digestExcludedPathComponents.contains(url.lastPathComponent) {
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                enumerator.skipDescendants()
+            }
+            // 边遍历边删会让枚举器踩空，先记下来，遍历完再删。
+            doomed.append(url)
+        }
+        for url in doomed where manager.fileExists(atPath: url.path) {
+            try manager.removeItem(at: url)
         }
     }
 
