@@ -615,6 +615,28 @@ extension AppState {
                 Tell the user when an action is local vs remote if it matters.
                 """
             }
+            // Side-panel terminal host state. After the dynamic marker, like
+            // everything else that flips mid-session — one `ssh` changes it,
+            // so it can never join the cached stable prefix. Reads only what
+            // the host already observed; probing here would type into the
+            // user's live PTY on every turn.
+            if let terminalBlock = AgentTerminalHostContext.promptBlock(
+                tabs: agentTerminalController.tabs.map { tab in
+                    AgentTerminalHostContext.TabSummary(
+                        title: tab.title,
+                        hostLine: tab.hostLine,
+                        isActive: tab.id == agentTerminalController.activeTab?.id,
+                        isKnownRemote: {
+                            if case .remote = tab.hostState { return true }
+                            return false
+                        }(),
+                        isUncertain: tab.hostState.trustedIdentity == nil
+                    )
+                },
+                terminalToolsLoaded: runtime.loadedToolPacks.contains(.terminal)
+            ) {
+                assembledPrompt += "\n\(terminalBlock)"
+            }
             if activeExperts.contains(.shortDrama), let latestImageChoice = runtime.latestImageChoice {
                 assembledPrompt += "\n\n\(latestImageChoice.systemPromptBlock)"
             }
