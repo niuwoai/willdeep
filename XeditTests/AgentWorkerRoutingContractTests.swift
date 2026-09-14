@@ -48,6 +48,33 @@ struct AgentWorkerRoutingContractTests {
         let modelMustNotOverride: [String]
         let fallbackStages: [String]
         let fallbackChain: [String]
+        let veto: Veto
+
+        /// 特权档否决。每个字段都必须在这里声明——P0 的教训：
+        /// Contract 没解析的键，漂多远都不会红。
+        struct Veto: Decodable {
+            let enabledProfiles: [String]
+            let verdictFormatLine: String
+            let timeoutSeconds: Int
+            let onUnusableReply: String
+            let modelMay: [String]
+            let modelMustNot: [String]
+            let downgradeSource: String
+            let auditLog: String
+            let auditRecordsUpheld: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case enabledProfiles = "enabled_profiles"
+                case verdictFormatLine = "verdict_format_line"
+                case timeoutSeconds = "timeout_seconds"
+                case onUnusableReply = "on_unusable_reply"
+                case modelMay = "model_may"
+                case modelMustNot = "model_must_not"
+                case downgradeSource = "downgrade_source"
+                case auditLog = "audit_log"
+                case auditRecordsUpheld = "audit_records_upheld"
+            }
+        }
 
         enum CodingKeys: String, CodingKey {
             case schema
@@ -64,6 +91,7 @@ struct AgentWorkerRoutingContractTests {
             case modelMustNotOverride = "model_must_not_override"
             case fallbackStages = "fallback_stages"
             case fallbackChain = "fallback_chain"
+            case veto
         }
     }
 
@@ -121,6 +149,53 @@ struct AgentWorkerRoutingContractTests {
     func fallbackChainDescribesEveryStage() throws {
         let contract = try Self.loadContract()
         #expect(contract.fallbackChain.count == contract.fallbackStages.count)
+    }
+
+    // MARK: - 特权档否决
+
+    @Test
+    func vetoScopeMatchesContract() throws {
+        let contract = try Self.loadContract()
+        #expect(Set(contract.veto.enabledProfiles) == AgentWorkerRoutingVeto.vetoableProfileIDs)
+        #expect(contract.veto.timeoutSeconds == Int(AgentWorkerRoutingModel.timeout))
+        #expect(AgentWorkerRoutingVeto.systemPrompt().contains(contract.veto.verdictFormatLine))
+    }
+
+    /// 否决范围与模型菜单的排除清单必须完全重合。
+    ///
+    /// 这两张表是同一条约束的两面：菜单排除它们是不让模型**提名**特权档，
+    /// 否决范围包含它们是允许模型**撤销**特权档。任何一边多一个或少一个，
+    /// 都意味着存在一个「模型能提名却不能撤销」或「能撤销却不在排除清单里」
+    /// 的工种——前者是权限扩张，后者是两条路径打架。
+    @Test
+    func vetoScopeAndMenuExclusionAgreeOnPrivilegedDestinations() throws {
+        let contract = try Self.loadContract()
+        let excluded = Set(contract.excludedProfiles.map(\.id))
+        for profileID in contract.veto.enabledProfiles {
+            #expect(excluded.contains(profileID), "\(profileID) 可被否决却不在模型菜单的排除清单里")
+        }
+    }
+
+    /// 单向性的契约侧断言。代码侧的断言在 AgentWorkerRoutingVetoTests。
+    @Test
+    func contractForbidsTheModelFromNominatingOrChoosing() throws {
+        let contract = try Self.loadContract()
+        #expect(contract.veto.modelMay == ["downgrade_privileged_decision"])
+        #expect(contract.veto.modelMustNot.contains("nominate_privileged_profile"))
+        #expect(contract.veto.modelMustNot.contains("choose_downgrade_target"))
+        #expect(contract.veto.downgradeSource == "keyword_reclassification_skipping_privileged_branches")
+        // 读不懂就维持——这是整个设计的安全方向。
+        #expect(contract.veto.onUnusableReply == "uphold")
+    }
+
+    /// 维持的判决也要落审计。写死在契约里，因为这条一旦被"优化"掉，
+    /// 「模型静默失效」和「模型从没误判」就再也分不开了。
+    @Test
+    func vetoAuditRecordsUpheldVerdictsToo() throws {
+        let contract = try Self.loadContract()
+        #expect(contract.veto.auditRecordsUpheld)
+        #expect(contract.veto.auditLog == "AgentAudit/route-veto.jsonl")
+        #expect(AgentRouteVetoAuditLog.url?.lastPathComponent == "route-veto.jsonl")
     }
 
     // MARK: - 候选清单

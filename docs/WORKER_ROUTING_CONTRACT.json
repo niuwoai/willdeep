@@ -80,6 +80,24 @@
   ],
   "fallback_stages": ["local_auxiliary", "keyword"],
   "fallback_chain_rationale": "刻意没有远程一级。1.317.0-rc8 把 workerRoutingConfigurationCandidates(fallback:) 整个删除，判路不再动用会话默认模型，也就不计费——远程判路每次 1.3-2.0s 且收益不成比例。本契约此前把「会话默认模型」列为第二级，与代码不符且无守卫覆盖，2026-09-14 修正并补上 fallback_stages 断言。fallback_chain 保持字符串数组形状以免打断 rs 侧既有解析；结构化断言走 fallback_stages。",
+  "veto": {
+    "summary": "特权档否决。关键词判到 enabled_profiles 里的工种时，宿主并行问一次本地模型这是否真是运维工作；模型只能否决（降级），不能提名。1.374.0-rc1 起 Swift 侧已实现，rs 侧待排期。",
+    "enabled_profiles": ["ops_runner", "terminal_operator"],
+    "enabled_profiles_rationale": "只有这两个的 enforces_delegated_execution 无视委派策略恒为真，判错会在工具边界拦住直接编辑。test_fixer / build_fixer 同为 96 分但不强制，判错只是选了个次优工种，不值一次模型往返。",
+    "verdict_format_line": "格式：{\"upheld\":true或false,\"confidence\":0到100的整数}",
+    "verdict_format_rationale": "与 routing 判决一样必须点名键。不点名时本地 gemma4 会改吐别的键名，解析器认不出就永远静默维持——功能看着装好了其实一次没生效。",
+    "timeout_seconds": 8,
+    "on_unusable_reply": "uphold",
+    "model_may": ["downgrade_privileged_decision"],
+    "model_must_not": ["nominate_privileged_profile", "choose_downgrade_target"],
+    "downgrade_source": "keyword_reclassification_skipping_privileged_branches",
+    "downgrade_source_rationale": "降级目标由关键词表二次分类给出，不由模型选。结果确定性、可从请求原文复现，且从构造上落不到特权档——模型只决定「要不要跳过那两个分支」这一个布尔量。这是 excluded_profiles 那条约束在否决路径上依然成立的原因：否决只减证据，从不凭空制造证据。",
+    "boolean_parsing_rationale": "判决的 upheld 必须是真布尔或 \"true\"/\"false\" 字符串。JSON 数字不算——JSONSerialization 把数字桥接成 NSNumber，而 NSNumber as? Bool 对 0/1 都会成功，于是 {\"upheld\":0} 会变成一次凭空的否决。Swift 侧用 CFBooleanGetTypeID 区分；其他语言实现需各自确认等价语义。",
+    "audit_log": "AgentAudit/route-veto.jsonl",
+    "audit_records_upheld": true,
+    "audit_rationale": "维持的也要写。本设计最可能的失效是模型无视 think:false 返回空内容、次次维持；只记否决行时日志为空，而空日志既可能是「从没误判」也可能是「从没工作」，两者必须可区分。"
+  },
+
   "unusable_reply_cases": [
     "超时（classifier_timeout_seconds）",
     "空 content（本地 Gemma 4 查不到答案时返回 eval_count=1 的空串）",

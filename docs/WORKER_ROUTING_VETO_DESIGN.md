@@ -1,6 +1,6 @@
 # Worker 路由：本地模型否决权设计
 
-> Last updated: 2026-09-14 | 状态：**部分落地（1.374.0-rc1）**
+> Last updated: 2026-09-14 | 状态：**部分落地（1.374.0-rc2）**
 > 关联版本：基于 1.373.0-rc3（develop @ 4db470e5）
 > 适用范围：Xedit（WillDeep macOS App）、willdeep-rs（镜像契约）
 > 关联文档：[REVIEW_2026-09-03_WORKER_ROUTING_LATENCY.md](REVIEW_2026-09-03_WORKER_ROUTING_LATENCY.md)、[NEXT_TASKS_2026-09-03_WORKER_LATENCY.md](NEXT_TASKS_2026-09-03_WORKER_LATENCY.md)、[WORKER_ROUTING_CONTRACT.json](WORKER_ROUTING_CONTRACT.json)
@@ -440,7 +440,10 @@ thinking 的核实结论见 §3.1：当前路径已关死（三字段齐发）�
 
 也就是说**两种配置下都不会出现设计里描述的那次跳变**，§3 决策 3 讨论的那个取舍在当前实现下不成立。功能行为不受影响（guard 读的是 decision，不是卡片），但文档的 UI 描述偏乐观了，标注为待验证；真要让标签反映否决，需要另接一条不依赖卡片的路径，属于 P2 之后的事。
 
-**四、P1 未做、留给 P2 的部分**：契约的 `veto` 段（§5.3）、设置页文案与 i18n（§10）。P1 只落了运行时与审计。
+**四、P2 已补齐（1.374.0-rc2）**：契约 `veto` 段（§5.3）与守卫断言、设置页文案五语言同步（§10）。
+顺带修正了一句已经不准确的旧文案——原文说「只有含糊请求会询问本地 LLM」，否决问的是特权档而非含糊请求。
+
+剩余未做：P3（路由模型与 `summaryModel` 解耦）、P4（willdeep-rs 侧实现）。§16.1 第三条那个 UI 标签的待验证项也仍未处理。
 
 ## 附：相关文档
 

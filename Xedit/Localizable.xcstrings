@@ -6148,31 +6148,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The LLM model handles local chat, session titles, context compression, and Worker routing decisions; the vision model is used only for image understanding. Only ambiguous requests consult an already loaded local LLM. Cold models warm in the background while the current turn keeps the keyword route. When disabled, routing also stays keyword-only and never calls the remote session model. Routing decisions support local Ollama only."
+            "value" : "The LLM model handles local chat, session titles, context compression, and Worker routing decisions; the vision model is used only for image understanding. Two kinds of request consult an already loaded local LLM: ambiguous ones, and ones the keywords routed to operations — for the latter the model can only downgrade a wrong operations call, never promote a request into operations. Cold models warm in the background while the current turn keeps the keyword route. When disabled, routing stays keyword-only and never calls the remote session model. Routing decisions support local Ollama only."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo LLM se usa para el chat local, los títulos de sesión, la compresión de contexto y las decisiones de enrutamiento de Worker; el modelo de visión solo procesa imágenes. Solo las solicitudes ambiguas consultan un LLM local ya cargado. Los modelos fríos se precalientan en segundo plano mientras el turno actual conserva la ruta por palabras clave. Si se desactiva, el enrutamiento también usa solo palabras clave y nunca llama al modelo remoto de la sesión. Las decisiones de enrutamiento solo admiten Ollama local."
+            "value" : "El modelo LLM se usa para el chat local, los títulos de sesión, la compresión de contexto y las decisiones de enrutamiento de Worker; el modelo de visión solo procesa imágenes. Dos tipos de solicitud consultan un LLM local ya cargado: las ambiguas y las que las palabras clave enviaron a operaciones; en el segundo caso el modelo solo puede revertir una clasificación errónea, nunca convertir una solicitud en operaciones. Los modelos fríos se precalientan en segundo plano mientras el turno actual conserva la ruta por palabras clave. Si se desactiva, el enrutamiento usa solo palabras clave y nunca llama al modelo remoto de la sesión. Las decisiones de enrutamiento solo admiten Ollama local."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le modèle LLM gère le chat local, les titres de session, la compression du contexte et les décisions de routage Worker ; le modèle de vision sert uniquement à comprendre les images. Seules les requêtes ambiguës consultent un LLM local déjà chargé. Les modèles froids sont préchauffés en arrière-plan tandis que le tour courant conserve le routage par mots-clés. Si l’option est désactivée, le routage reste également limité aux mots-clés et n’appelle jamais le modèle distant de la session. Les décisions de routage ne prennent en charge qu’Ollama en local."
+            "value" : "Le modèle LLM gère le chat local, les titres de session, la compression du contexte et les décisions de routage Worker ; le modèle de vision sert uniquement à comprendre les images. Deux types de requêtes consultent un LLM local déjà chargé : les requêtes ambiguës et celles que les mots-clés ont routées vers l’exploitation — dans ce second cas le modèle peut seulement annuler un classement erroné, jamais faire passer une requête en exploitation. Les modèles froids sont préchauffés en arrière-plan tandis que le tour courant conserve le routage par mots-clés. Si l’option est désactivée, le routage reste limité aux mots-clés et n’appelle jamais le modèle distant de la session. Les décisions de routage ne prennent en charge qu’Ollama en local."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM モデルはローカルチャット、セッションタイトル、コンテキスト圧縮、Worker の振り分け判断に使用し、画像理解モデルは画像処理だけに使用します。曖昧な要求だけが、すでに読み込まれているローカル LLM に問い合わせます。コールドモデルはバックグラウンドで予熱し、現在のターンはキーワード判定をそのまま使います。オフの場合もキーワード判定だけを使い、セッションのリモートモデルは呼び出しません。振り分け判断はローカルの Ollama のみ対応です。"
+            "value" : "LLM モデルはローカルチャット、セッションタイトル、コンテキスト圧縮、Worker の振り分け判断に使用し、画像理解モデルは画像処理だけに使用します。すでに読み込まれているローカル LLM に問い合わせるのは 2 種類の要求です。曖昧な要求と、キーワードが「運用」に振り分けた要求で、後者ではモデルは誤った運用判定を取り消せるだけで、要求を運用に格上げすることはできません。コールドモデルはバックグラウンドで予熱し、現在のターンはキーワード判定をそのまま使います。オフの場合はキーワード判定だけを使い、セッションのリモートモデルは呼び出しません。振り分け判断はローカルの Ollama のみ対応です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。只有含糊请求会询问已驻留的本地 LLM；冷模型后台预热，本轮直接走关键词。关闭后也直接走关键词，不调用会话远程模型。派发判断仅支持本机 Ollama。"
+            "value" : "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。有两类请求会询问已驻留的本地 LLM：含糊的请求，以及被关键词判成「运维」的请求——后者只能由模型撤销误判，模型无法把任何请求升级成运维。冷模型后台预热，本轮直接走关键词。关闭后直接走关键词，不调用会话远程模型。派发判断仅支持本机 Ollama。"
           }
         }
       }
