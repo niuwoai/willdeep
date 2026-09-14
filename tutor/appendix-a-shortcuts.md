@@ -131,7 +131,7 @@ willdeep-app .
 |---|---|
 | `@workspace` | 把工作区根目录和文件列表带上 |
 | `@<文件名或相对路径>` | 引用某个文件 |
-| `@scout` `@generalist` `@implementer` `@tester` `@reviewer` `@ops-runner` | 点名一个 Worker 来做这一轮 |
+| `@scout` `@generalist` `@implementer` `@tester` `@reviewer` `@ops_runner` | 点名一个 Worker 来做这一轮 |
 
 选中之后 `@token` 会从输入框消失，变成上方的一个 chip。Worker 只有一个槽位，再点一个就换人。
 
