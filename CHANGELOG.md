@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.375.0-rc4 - 2026-09-15
+
+### Removed
+
+- **删掉 composer 里已经没人用的插件选择器 `AgentPluginPickerPill`。** 它最后一个挂载点在 1.357.0-rc3 就被摘掉了——那一版把「更多设置」里的插件选择行换成了沙箱开关和子 Agent 优先选项（见该版条目），插件浏览统一回插件中心。视图本身和它的 `PluginSkillGroup` 辅助结构却留在了 `AgentComposerPickers.swift` 里，半年来一直是编译进包但永远不会出现在任何界面上的死代码。
+  - 一并清掉随它失效的挂载脚手架：`ComposerOverflowControl.plugins` 这个枚举 case（rc3 之后已无任何 `contains(.plugins)` 判定）、文件头注释里那行能力清单，以及只服务于这个 pill 的 `plugin-picker.*` 五个文案键和 `composer.overflow.plugins`。
+  - **不是** rc482 那次 composer 性能改造的误伤：那次（1.109.0-rc482 去掉 `ViewThatFits`）是把插件选择器**收进**「更多 …」弹层，它在那之后还活着；真正的下线发生在 rc3，是有意为之。
+
+- **删掉孤立文案键 `composer.queue-send.help`。** 对应的 composer 排队发送图标在 1.194.0-rc20「移除 composer 队列图标」时就删了，`L10n.Composer.queueSendHelp` 这个门面留了下来且再无调用方。
+
+### Fixed
+
+- **修好被 rc3 漏掉的版本号位点。** rc3 只更新了 Xcode `MARKETING_VERSION`、`product-overview.md` 和 CHANGELOG 三处，Go agent、Help / Computer Use Helper 两个 Info.plist、根 README 徽章、Chrome 扩展 manifest 与 README、以及两份 docs 的「当前版本 / 目标版本」行都还停在 1.375.0-rc2，`version_consistency` 因此在 develop 上是红的。本次已全部对齐，门禁恢复绿色。
+
+本次为纯删除与版本位点修复，四个在用的 pill（模型 / 模式 / 审批 / 更多）行为不变。
+
 ## 1.375.0-rc3 - 2026-09-14
 
 ### Fixed

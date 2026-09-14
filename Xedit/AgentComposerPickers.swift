@@ -19,7 +19,6 @@
 //   - `AgentApprovalModePickerPill`: per-session tool approval posture
 //     selector — request every time, smart approval, or workspace access.
 //     with one-way activation switches.
-//   - `AgentPluginPickerPill`: installed plugin/MCP capability browser.
 //   - `ComposerAdaptiveControlStrip`: progressively exposes overflow
 //     controls inline when the composer has room.
 //
@@ -375,7 +374,6 @@ struct WorkspacePickerPill: View {
 enum ComposerOverflowControl: Hashable {
     case approval
     case executor
-    case plugins
 }
 
 struct ComposerAdaptiveControlStrip: View {
@@ -401,141 +399,6 @@ struct ComposerAdaptiveControlStrip: View {
             ComposerOverflowPill(controls: [])
         }
         .focusable(false)
-    }
-}
-
-// MARK: - Plugin picker
-
-struct AgentPluginPickerPill: View {
-    @EnvironmentObject var appState: AppState
-    @State private var pluginSkills: [AgentSkillEntry] = []
-    @State private var mcpServers: [AgentMCPServerConfig] = []
-
-    var body: some View {
-        Menu {
-            if pluginGroups.isEmpty && mcpServers.isEmpty {
-                Text(L10n.PluginPicker.none)
-            }
-
-            if !pluginGroups.isEmpty {
-                Section(L10n.PluginPicker.installedPlugins("\(pluginGroups.count)")) {
-                    ForEach(pluginGroups, id: \.name) { group in
-                        if group.skills.count == 1, let skill = group.skills.first {
-                            Button {
-                                appState.attachAgentSkill(skill)
-                            } label: {
-                                pluginRow(name: group.displayName, checked: isSkillAttached(skill))
-                            }
-                            .focusable(false)
-                        } else {
-                            Menu(group.displayName) {
-                                ForEach(group.skills.prefix(12)) { skill in
-                                    Button {
-                                        appState.attachAgentSkill(skill)
-                                    } label: {
-                                        pluginRow(name: skill.name, checked: isSkillAttached(skill))
-                                    }
-                                    .focusable(false)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !mcpServers.isEmpty {
-                Section(L10n.PluginPicker.mcpServers("\(mcpServers.count)")) {
-                    ForEach(mcpServers.prefix(12)) { server in
-                        Label(server.name, systemImage: serverIcon(server))
-                            .focusable(false)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "puzzlepiece.extension")
-                    .font(.system(size: 10, weight: .semibold))
-                Text(L10n.PluginPicker.label)
-                    .font(.system(size: 11, weight: .medium))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .foregroundStyle(.secondary)
-            .background(Capsule(style: .continuous).fill(Color.secondary.opacity(0.10)))
-            .overlay(Capsule(style: .continuous).stroke(Color.secondary.opacity(0.25), lineWidth: 1))
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .focusable(false)
-        .fixedSize()
-        .help(L10n.PluginPicker.help)
-        .task {
-            await refresh()
-        }
-    }
-
-    private var pluginGroups: [PluginSkillGroup] {
-        let grouped = Dictionary(grouping: pluginSkills.filter { $0.source == .plugin }) { skill in
-            skill.identifier.split(separator: ":").first.map(String.init) ?? skill.identifier
-        }
-        return grouped.map { key, skills in
-            PluginSkillGroup(name: key, skills: skills.sorted { $0.name < $1.name })
-        }
-        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-    }
-
-    @ViewBuilder
-    private func pluginRow(name: String, checked: Bool) -> some View {
-        HStack {
-            Label(name, systemImage: "puzzlepiece.extension")
-            if checked {
-                Image(systemName: "checkmark")
-            }
-        }
-    }
-
-    private func isSkillAttached(_ skill: AgentSkillEntry) -> Bool {
-        appState.agentPendingSkills.contains { $0.identifier == skill.identifier }
-    }
-
-    private func serverIcon(_ server: AgentMCPServerConfig) -> String {
-        switch server.source {
-        case .cursor: return "cursorarrow.rays"
-        case .codex: return "terminal"
-        case .user: return "server.rack"
-        case .plugin: return "puzzlepiece.extension"
-        }
-    }
-
-    @MainActor
-    private func refresh() async {
-        let loadedSkills = await AgentSkillDirectory.listAsync(includeDisabled: false)
-        guard !Task.isCancelled else { return }
-        let loadedServers = await AgentMCPServerDirectory.listAsync(includeDisabled: false)
-        guard !Task.isCancelled else { return }
-        pluginSkills = loadedSkills
-        mcpServers = loadedServers
-    }
-
-    private struct PluginSkillGroup {
-        let name: String
-        let skills: [AgentSkillEntry]
-
-        var displayName: String {
-            switch name.lowercased() {
-            case "browser": return "Browser"
-            case "chrome": return "Chrome"
-            case "gmail": return "Gmail"
-            case "github": return "GitHub"
-            default:
-                return name
-                    .split(separator: "-")
-                    .map { $0.prefix(1).uppercased() + $0.dropFirst() }
-                    .joined(separator: " ")
-            }
-        }
     }
 }
 

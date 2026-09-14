@@ -395,20 +395,6 @@ nonisolated enum L10n {
         }
     }
 
-    enum PluginPicker {
-        static let help = String(localized: "plugin-picker.help", defaultValue: "Browse installed plugin skills and MCP capabilities.")
-        static func installedPlugins(_ a1: String) -> String {
-            let template = String(localized: "plugin-picker.installed-plugins", defaultValue: "%@ installed plugins")
-            return String(format: template, a1)
-        }
-        static let label = String(localized: "plugin-picker.label", defaultValue: "Plugins")
-        static func mcpServers(_ a1: String) -> String {
-            let template = String(localized: "plugin-picker.mcp-servers", defaultValue: "%@ MCP servers")
-            return String(format: template, a1)
-        }
-        static let none = String(localized: "plugin-picker.none", defaultValue: "No plugin capabilities found.")
-    }
-
     enum Composer {
         static let atPickerNoMatches = String(localized: "composer.at-picker.no-matches", defaultValue: "No matching files or workspace shortcuts")
         static let atPickerSearchPlaceholder = String(localized: "composer.at-picker.search-placeholder", defaultValue: "Search files or workspace...")
@@ -527,7 +513,6 @@ nonisolated enum L10n {
         static let savedSecretsTitle = String(localized: "composer.secret.saved-title", defaultValue: "Saved secrets")
         static let secretAliasRule = String(localized: "composer.secret.alias-rule", defaultValue: "Aliases become lowercase kebab-case placeholders. Saving the same alias updates its local value.")
         static let inputPlaceholder = String(localized: "composer.input.placeholder", defaultValue: "Ask anything... / commands, @ files/workspace, $ skills & plugins")
-        static let queueSendHelp = String(localized: "composer.queue-send.help", defaultValue: "Queue this message after the current turn")
         static let removeSecretHelp = String(localized: "composer.remove-secret.help", defaultValue: "Remove this secret row")
         static let secretLabelPlaceholder = String(localized: "composer.secret-label.placeholder", defaultValue: "Label, e.g. Production SSH password")
         static let secretValuePlaceholder = String(localized: "composer.secret-value.placeholder", defaultValue: "Secret value")
@@ -566,7 +551,6 @@ nonisolated enum L10n {
         static let overflowWorkspace = String(localized: "composer.overflow.workspace", defaultValue: "Workspace")
         static let overflowExecutor = String(localized: "composer.overflow.executor", defaultValue: "Executor")
         static let overflowApproval = String(localized: "composer.overflow.approval", defaultValue: "Approval")
-        static let overflowPlugins = String(localized: "composer.overflow.plugins", defaultValue: "Plugins")
     }
 
     enum AttachmentCitation {
