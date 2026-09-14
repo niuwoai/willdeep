@@ -66,6 +66,47 @@ nonisolated enum AgentTurnWatchdogPolicy {
         return max(stamp, turnStartedAt)
     }
 
+    /// Time spent waiting for the operator is not time a tool failed to
+    /// return.
+    ///
+    /// The idle clock starts at the last provider stream event — which is
+    /// *before* the approval card is even raised. While the card is up
+    /// `hasBlockingDecision` suppresses the banner, but nothing resets the
+    /// clock, so the moment the operator clicks approve the next 1 Hz tick
+    /// computes an idle of however long they took to decide. Step away for a
+    /// coffee and the command is greeted, at the instant it starts running,
+    /// with "run_command has not returned for 5 minutes" — plus a retry
+    /// button for a command that has not run at all yet.
+    ///
+    /// Detected on the falling edge rather than by patching every site that
+    /// clears a decision: approvals resolve through several paths (the card,
+    /// typed confirmation, the fast path in tool batching), and an edge is
+    /// one place that covers all of them.
+    static func clockResetForClearedBlock(
+        wasBlocked: Bool,
+        isBlocked: Bool,
+        now: Date
+    ) -> Date? {
+        guard wasBlocked, !isBlocked else { return nil }
+        return now
+    }
+
+    /// The stall threshold for a turn, widened to whatever budget the running
+    /// command actually asked for.
+    ///
+    /// `run_command` carries `timeout_seconds` (60s by default, up to 600s in
+    /// the foreground). Announcing a stall at 90s while the host itself is
+    /// prepared to wait 600s reports a problem that, by the host's own
+    /// accounting, does not exist yet. Pulling an image or installing
+    /// dependencies is exactly the shape that trips this.
+    ///
+    /// Deliberately not an inference from the command text: the host's slow
+    /// command detector does not know `docker pull`, and the card's title is
+    /// written by the model, so neither is evidence. The declared budget is.
+    static func stallThreshold(runningToolTimeouts: [TimeInterval]) -> TimeInterval {
+        max(stallThreshold, runningToolTimeouts.max() ?? 0)
+    }
+
     /// Visible silence long enough for tier-one reassurance, nil when the
     /// turn is either showing output or legitimately parked.
     static func quietSeconds(
@@ -92,12 +133,13 @@ nonisolated enum AgentTurnWatchdogPolicy {
         hasBlockingDecision: Bool,
         lastActivityAt: Date?,
         turnStartedAt: Date? = nil,
+        threshold: TimeInterval = stallThreshold,
         now: Date
     ) -> TimeInterval? {
         guard isResponding, !isAwaitingProviderSlot, !isCompressingContext, !hasBlockingDecision,
               let lastActivityAt else { return nil }
         let idle = now.timeIntervalSince(anchor(lastActivityAt, turnStartedAt: turnStartedAt))
-        return idle >= stallThreshold ? idle : nil
+        return idle >= threshold ? idle : nil
     }
 
     /// What the turn is actually waiting on. The distinction matters because
@@ -164,15 +206,25 @@ nonisolated enum AgentTurnWatchdogPolicy {
         return expected.filter { !answered.contains($0) }
     }
 
-    /// Model-facing. Names the calls that were lost so the model re-issues
-    /// them instead of assuming they ran.
+    /// Model-facing. Names the calls whose results were lost.
+    ///
+    /// Deliberately does not claim they never ran. A foreground command on a
+    /// remote host is run through `waitUntilExit()` and does not honour task
+    /// cancellation, so stopping this side leaves it executing on the far
+    /// side; `stopAgentResponse` only reaps registered background jobs. The
+    /// old wording ("that call never ran") told the model it was safe to
+    /// re-issue, which is how one `docker pull` becomes two.
     static func resumePrompt(danglingToolNames: [String]) -> String {
         let names = danglingToolNames.isEmpty ? "the last tool call" : danglingToolNames.map { "`\($0)`" }.joined(separator: ", ")
         return """
         \(resumePromptPrefix)
-        The previous turn ended before \(names) produced a result; that call never ran. \
-        Continue the task from where it stopped: re-issue the call if it is still needed, \
-        otherwise proceed with the next step. Do not repeat work that already has results above.
+        The previous turn ended before \(names) produced a result. Whether it ran is \
+        unknown — a foreground command on a remote host keeps going on the far side even \
+        after this side stops waiting, so the work may be finished, half-finished, or \
+        never started. Before re-issuing anything that is not safe to run twice, check \
+        the actual state first (list what exists, query the service, read the log). \
+        Then continue the task from where it stopped. Do not repeat work that already \
+        has results above.
         """
     }
 }
@@ -234,6 +286,22 @@ extension AppState {
     func scanAgentTurnsForStalls(now: Date = Date()) {
         for runtime in agentRuntimes.values {
             let blocking = runtime.toolCalls.contains { $0.status.isBlockingForUserDecision }
+            // 审批刚解除：把两个时钟推到现在。用户思考的那几分钟不是工具
+            // 没返回——在他点下确认之前，命令一个字节都还没跑。
+            if let reset = AgentTurnWatchdogPolicy.clockResetForClearedBlock(
+                wasBlocked: runtime.wasBlockedOnUserDecision,
+                isBlocked: blocking,
+                now: now
+            ) {
+                runtime.lastActivityAt = reset
+                runtime.lastVisibleOutputAt = reset
+                if runtime.isShowingWatchdogStallNotice {
+                    runtime.errorMessage = nil
+                    runtime.errorDetails = nil
+                    runtime.isShowingWatchdogStallNotice = false
+                }
+            }
+            runtime.wasBlockedOnUserDecision = blocking
             // Tier one: alive but showing nothing. Only ever changes the
             // strip label, and only publishes when the label would change.
             let quiet = AgentTurnWatchdogPolicy.quietSeconds(
@@ -271,6 +339,15 @@ extension AppState {
                 hasBlockingDecision: blocking,
                 lastActivityAt: runtime.lastActivityAt,
                 turnStartedAt: runtime.turnStartedAt,
+                threshold: AgentTurnWatchdogPolicy.stallThreshold(
+                    runningToolTimeouts: runtime.toolCalls.compactMap { call in
+                        guard call.status == .running,
+                              AgentTurnWatchdogPolicy.isRunningInCurrentTurn(
+                                  toolStartedAt: call.startedAt, turnStartedAt: runtime.turnStartedAt
+                              ) else { return nil }
+                        return call.arguments["timeout_seconds"]?.intValue().map(TimeInterval.init)
+                    }
+                ),
                 now: now
             ) else { continue }
             // Never paint over a real error; the stall notice is the mild

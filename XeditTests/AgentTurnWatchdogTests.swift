@@ -490,6 +490,101 @@ struct AgentTurnWatchdogTests {
         #expect(runtime.lastVisibleOutputAt == nil)
     }
 
+    // MARK: - 审批等待不算工具卡住
+
+    /// 计时起点是模型流式输出的最后一个事件，早于审批卡弹出。审批期间
+    /// 只是被 hasBlockingDecision 遮住，时钟并没有停——所以用户思考得越久，
+    /// 命令一开跑就越容易看到一条虚高的「已经 N 分钟没返回」。
+    @Test("审批解除的下降沿要重置时钟")
+    func clearingAnApprovalResetsTheClock() {
+        let now = Date()
+        // 卡片挂着的时候不重置：此刻还在等人，没有下降沿。
+        #expect(AgentTurnWatchdogPolicy.clockResetForClearedBlock(
+            wasBlocked: true, isBlocked: true, now: now
+        ) == nil)
+        // 刚点完确认：这一拍要把时钟推到现在。
+        #expect(AgentTurnWatchdogPolicy.clockResetForClearedBlock(
+            wasBlocked: true, isBlocked: false, now: now
+        ) == now)
+        // 从来没被阻塞过的普通回合不受影响。
+        #expect(AgentTurnWatchdogPolicy.clockResetForClearedBlock(
+            wasBlocked: false, isBlocked: false, now: now
+        ) == nil)
+        #expect(AgentTurnWatchdogPolicy.clockResetForClearedBlock(
+            wasBlocked: false, isBlocked: true, now: now
+        ) == nil)
+    }
+
+    /// 端到端：泡咖啡场景。审批等 5 分钟，点完确认后不该立刻被判成卡住。
+    @Test("等审批 5 分钟，批准后不该立刻报卡住")
+    func longApprovalWaitDoesNotImmediatelyStall() {
+        let approvedAt = Date()
+        let lastStreamEvent = approvedAt.addingTimeInterval(-300)
+
+        // 不重置的话：一批准就是 300 秒 idle，远超 90 秒阈值。
+        #expect(AgentTurnWatchdogPolicy.stalledSeconds(
+            isResponding: true, isAwaitingProviderSlot: false, isCompressingContext: false,
+            hasBlockingDecision: false, lastActivityAt: lastStreamEvent,
+            turnStartedAt: lastStreamEvent, now: approvedAt
+        ) != nil)
+
+        // 重置之后，时钟从批准那一刻重新起算。
+        let reset = AgentTurnWatchdogPolicy.clockResetForClearedBlock(
+            wasBlocked: true, isBlocked: false, now: approvedAt
+        )
+        #expect(AgentTurnWatchdogPolicy.stalledSeconds(
+            isResponding: true, isAwaitingProviderSlot: false, isCompressingContext: false,
+            hasBlockingDecision: false, lastActivityAt: reset,
+            turnStartedAt: lastStreamEvent, now: approvedAt.addingTimeInterval(30)
+        ) == nil)
+    }
+
+    // MARK: - 阈值尊重命令自己的预算
+
+    /// 一条申请了 600 秒的命令在 90 秒被喊「没有返回」，等于宿主在报告一个
+    /// 按它自己的账本还不存在的问题。
+    @Test("阈值取命令声明的预算与默认值中的较大者")
+    func thresholdWidensToTheDeclaredBudget() {
+        #expect(AgentTurnWatchdogPolicy.stallThreshold(runningToolTimeouts: []) == 90)
+        // 比默认短的预算不缩小阈值：60 秒超时的命令没必要更早报警。
+        #expect(AgentTurnWatchdogPolicy.stallThreshold(runningToolTimeouts: [60]) == 90)
+        #expect(AgentTurnWatchdogPolicy.stallThreshold(runningToolTimeouts: [600]) == 600)
+        // 并发多条时取最长的那条，否则短的那条会替长的那条报警。
+        #expect(AgentTurnWatchdogPolicy.stallThreshold(runningToolTimeouts: [60, 600, 120]) == 600)
+    }
+
+    @Test("600 秒预算的命令在 90 秒不算卡住")
+    func longBudgetCommandIsNotStalledAtNinetySeconds() {
+        let start = Date()
+        let threshold = AgentTurnWatchdogPolicy.stallThreshold(runningToolTimeouts: [600])
+
+        #expect(AgentTurnWatchdogPolicy.stalledSeconds(
+            isResponding: true, isAwaitingProviderSlot: false, isCompressingContext: false,
+            hasBlockingDecision: false, lastActivityAt: start, turnStartedAt: start,
+            threshold: threshold, now: start.addingTimeInterval(120)
+        ) == nil)
+
+        // 超出它自己申请的预算之后才报。
+        #expect(AgentTurnWatchdogPolicy.stalledSeconds(
+            isResponding: true, isAwaitingProviderSlot: false, isCompressingContext: false,
+            hasBlockingDecision: false, lastActivityAt: start, turnStartedAt: start,
+            threshold: threshold, now: start.addingTimeInterval(601)
+        ) != nil)
+    }
+
+    // MARK: - 恢复提示不许说谎
+
+    /// 旧文案对模型说「that call never ran」。前台远端命令在本地回合停掉后
+    /// 仍在对端跑着，这句话会让模型放心地重发一条正在执行的命令。
+    @Test("恢复提示不得断言命令从未执行")
+    func resumePromptDoesNotClaimTheCallNeverRan() {
+        let prompt = AgentTurnWatchdogPolicy.resumePrompt(danglingToolNames: ["run_command"])
+        #expect(!prompt.contains("never ran"))
+        #expect(prompt.contains("unknown"))
+        // 并且要指出先查状态再重发。
+        #expect(prompt.lowercased().contains("check"))
+    }
+
     /// 工具和 Worker 在状态条上本来就有名字和秒表，思考这条线只给模型两档。
     @Test("思考文案只给模型两档，工具和 Worker 不变")
     func thinkingCopyIsModelOnly() {

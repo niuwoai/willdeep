@@ -428,6 +428,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// `spawn_agent` invocations observed during the current turn. Only used
     /// to audit whether a `.required` policy was actually honored.
     var currentTurnSpawnAgentCallCount: Int = 0
+    /// 上一次 watchdog tick 时，是否有工具卡在等用户决定。
+    /// 用来检测「审批刚解除」这个下降沿——用户思考的时间不该被算成
+    /// 工具没返回。审批解除的路径不止一条（审批卡、打字确认、批处理的
+    /// 快路径），逐个去打补丁不如在边沿上统一处理。
+    var wasBlockedOnUserDecision = false
     /// 本回合并行发起的路由否决确认（关键词判成特权档时才有）。
     /// 回合自持、过期即弃——它绝不能进 registry 的后台唤醒通道，
     /// 否则一个迟到的判决会在回合结束后再拉起一轮模型。
