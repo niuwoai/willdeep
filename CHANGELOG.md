@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.373.0-rc3 - 2026-09-14
+
+### Fixed
+
+- **Worker 卡片不再整场停在「第 0 轮」。** 只读预执行（`AppStateAgentReadOnlyPreflight`）调用 `AgentSubagentRunner.run` 时漏传了 `onProgress`，而这个参数的签名是 `((AgentSubagentProgressUpdate) -> Void)? = nil`——可选带默认值，漏传不报错，于是这个洞一直没被编译器拦下。
+  - 后果：runner 内部的心跳照常在发（`round` 从 1 起、每轮开头和每次工具调用前后都 publish），但回调是 nil，一路丢干净，`subagentLiveActivity` 始终为 nil，UI 侧 `?? 0` 兜底把轮次和工具数都显示成 0。偏偏 `subagentIsWorking` 在没有 activity 时只看 `status == .running`，卡片照样判定「正在运行」，于是就成了「说在跑、数字全 0、只有耗时在走」——耗时是 UI 本地每秒自转的时钟，不经过这条链路。
+  - 终端操作员身上最扎眼：它是这条路径上唯一被注入 `terminalController` 的工种，一边在远端真敲命令，一边卡片从头 0 到尾，直到整个 run 结束被 `settle(.succeeded)` 一次性收掉。
+  - 对照组四条路径（投机 scout、模型自己的 `spawn_agent`、编码流水线、自动派单）都传了回调，只有预执行这条漏了。
+
+- **「把 deployment 里的注解改一下」不再被判成生产运维。** `operationsMarkers` 里的 `"deploy"` 走的是裸子串匹配，`deployment` 一撞就中。
+  - 这不只是工种名难看：`ops_runner` 的 `enforcesDelegatedExecution` 对它无视委派策略恒为真，`AgentWorkerRouteGuard` 会据此拦住直接写文件和跑命令——一次误判会把改 manifest 这活整个卡住。模型二次裁决也救不了，只在置信度 < 86 且判成 generalist 时才问模型，这条分支给的是 94。
+  - 修法是给这张表加词边界（新增 `containsWord`），不是加 `!mutating` 守卫：运维请求本来就常带修改动词，「修复线上环境的服务」该留在 ops，加守卫会把它踢给 implementer，属于拿一个回归换一个修复。
+  - 边界只认 ASCII 字母数字。`Character.isLetter` 对中日韩字符同样为真，只查 `isLetter` 会把「deploy一下」也判成不匹配。中文关键词没有边界可查，保持原样的子串语义。
+  - 同类病灶的第三次：此前是智能审核前置门禁里 `.env` 撞 kubectl 的 `.envFrom`、`ssh -i` 被当成读私钥。
+
 ## 1.373.0-rc2 - 2026-09-14
 
 ### Added

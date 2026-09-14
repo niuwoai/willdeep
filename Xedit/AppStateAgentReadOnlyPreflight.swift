@@ -178,7 +178,24 @@ extension AppState {
                 terminalController: profile.id == AgentSubagentProfileCatalog.terminalOperatorID
                     ? agentTerminalController
                     : nil,
-                executionBudget: toolExecutionBudget(for: runtime)
+                executionBudget: toolExecutionBudget(for: runtime),
+                // Without this the card above the composer sits at round 0 with
+                // an empty tool count for the whole run: `onProgress` defaults
+                // to nil, so nothing ever writes `subagentLiveActivity` and the
+                // fleet row falls back to zeroes while the Worker is visibly
+                // working. Most obvious on the terminal operator, the one
+                // profile this path hands a terminal to.
+                onProgress: { [weak self] update in
+                    guard let self else { return }
+                    self.applySubagentLiveProgress(
+                        update,
+                        recordID: recordID,
+                        runtime: runtime,
+                        profileID: profile.id,
+                        workerName: L10n.AgentDelegation.profileName(for: profile.id),
+                        model: childConfiguration.model
+                    )
+                }
             )
             settle(.succeeded, summary: "preflight")
             finishHostWorkerRun(hostRunID, status: .succeeded, outcome: outcome, runtime: runtime)

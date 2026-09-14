@@ -220,6 +220,31 @@ struct AgentRequestRouterTests {
         #expect(decision.requiresDelegatedExecution)
     }
 
+    @Test("naming a Kubernetes deployment is not asking for a rollout")
+    func deploymentNounDoesNotRouteToOperations() {
+        // "deploy" used to match as a bare substring, so "deployment" dragged
+        // an ordinary manifest edit into ops_runner — which enforces delegated
+        // execution regardless of policy, blocking the edit outright.
+        let decision = AgentRequestRouter.classify("那你把 deployment 里的注解改一下")
+
+        #expect(decision.profileID != "ops_runner")
+        // The field that actually gates the edit: ops_runner enforces delegation
+        // regardless of policy, so a false hit blocked direct writes outright.
+        // An ordinary implementation route leaves that to the turn policy.
+        #expect(!decision.enforcesDelegatedExecution(for: .automatic))
+    }
+
+    @Test("operations vocabulary still routes to ops once the boundary is enforced")
+    func operationsSurviveWordBoundaryMatching() {
+        // The boundary must not cost the real operations phrasings: a trailing
+        // CJK character is a clean boundary, and an exact word still matches.
+        #expect(AgentRequestRouter.classify("deploy 到生产环境").profileID == "ops_runner")
+        #expect(AgentRequestRouter.classify("deploy一下这个服务").profileID == "ops_runner")
+        #expect(AgentRequestRouter.classify("跑一下 systemctl status").profileID == "ops_runner")
+        // Mutating verbs stay compatible with a genuine operations request.
+        #expect(AgentRequestRouter.classify("修复线上环境的服务").profileID == "ops_runner")
+    }
+
     @Test("only source files count as a named edit target")
     func namedFileScanIgnoresNonSourcePaths() {
         // A build log is full of `.o` / `.json` / `.lock` paths; treating one

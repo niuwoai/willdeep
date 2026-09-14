@@ -203,7 +203,12 @@ nonisolated enum AgentRequestRouter {
                 reason: "visible terminal inspection belongs to the terminal operator"
             )
         }
-        if contains(sample, operationsMarkers) {
+        // Word-boundary matching, unlike every other marker table: this branch
+        // enforces delegated execution regardless of policy, so a false hit
+        // does not merely mislabel the Worker — it blocks the edit. "deploy"
+        // as a bare substring fires on "deployment", turning "把 deployment
+        // 里的注解改一下" (editing a manifest) into a production rollout.
+        if containsWord(sample, operationsMarkers) {
             return worker(
                 "ops_runner",
                 94,
@@ -354,6 +359,40 @@ nonisolated enum AgentRequestRouter {
 
     private static func contains(_ haystack: String, _ needles: [String]) -> Bool {
         needles.contains { haystack.contains($0) }
+    }
+
+    /// Like `contains`, but an ASCII needle must not sit inside a longer ASCII
+    /// word: "deploy" matches "deploy to prod" and "deploy一下", never
+    /// "deployment". CJK needles have no boundary to test — every neighbouring
+    /// character is a letter — so they keep plain substring semantics.
+    ///
+    /// Only the boundary of ASCII letters and digits counts. Checking
+    /// `Character.isLetter` alone would reject "deploy一下", since CJK
+    /// characters are letters too.
+    private static func containsWord(_ haystack: String, _ needles: [String]) -> Bool {
+        needles.contains { needle in
+            guard !needle.isEmpty else { return false }
+            guard needle.allSatisfy({ $0.isASCII }) else { return haystack.contains(needle) }
+            return containsWord(haystack, needle)
+        }
+    }
+
+    private static func containsWord(_ haystack: String, _ needle: String) -> Bool {
+        func isWordCharacter(_ character: Character) -> Bool {
+            character.isASCII && (character.isLetter || character.isNumber)
+        }
+
+        var searchStart = haystack.startIndex
+        while let found = haystack.range(of: needle, range: searchStart..<haystack.endIndex) {
+            let openingIsClean = found.lowerBound == haystack.startIndex
+                || !isWordCharacter(haystack[haystack.index(before: found.lowerBound)])
+            let closingIsClean = found.upperBound == haystack.endIndex
+                || !isWordCharacter(haystack[found.upperBound])
+            if openingIsClean, closingIsClean { return true }
+            guard found.lowerBound < haystack.endIndex else { break }
+            searchStart = haystack.index(after: found.lowerBound)
+        }
+        return false
     }
 
     /// Distinct source files the request names. Deliberately literal: a path
