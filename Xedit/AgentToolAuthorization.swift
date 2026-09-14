@@ -939,6 +939,7 @@ enum AgentSandboxPolicy {
                             rootDirectory: rootDirectory,
                             additionalWorkspaceRoots: additionalWorkspaceRoots
                         )
+                        && !isKubectlDryRunObjectName(token, head: head, tokens: tokens)
                 }),
                !isPipedTextFilterUsingOnlyPattern(
                    head: head,
@@ -2201,6 +2202,80 @@ enum AgentSandboxPolicy {
         lower
             .split(separator: "/", omittingEmptySubsequences: false)
             .contains { $0 == ".env" || $0.hasPrefix(".env.") }
+    }
+
+    /// A Kubernetes object *name* referenced by a validating `--dry-run`
+    /// command is not a credential *read*.
+    ///
+    /// `kubectl patch deploy x --dry-run=server -p '{… "secretRef":
+    /// {"name":"tokenhub-secret"} …}'` asks the API server to validate and
+    /// echo the object back. The echo contains the secret's name, never its
+    /// data. But `tokenhub-secret` trips the credential markers — the hyphen
+    /// is an identifier boundary on purpose, so k8s object names keep
+    /// matching — and that sets typed confirmation, which in turn vetoes the
+    /// command's eligibility for the safety judge. Net effect: a read-only
+    /// validation had to be typed out by hand, and the judge never saw it.
+    /// Same shape as ``referencesDotEnvFile``.
+    ///
+    /// Scoped as narrowly as the evidence allows:
+    /// - only `patch` / `set`, whose payload is inline and therefore visible
+    ///   in the command itself. `apply -f` reads a file the head cannot see;
+    /// - never when the resource word is `secret`, which covers
+    ///   `get`/`describe secret` (they print the base64 `data`) and
+    ///   `create secret --from-literal=…` (dry-run echoes the literal value);
+    /// - never for the token itself being an option that carries a value,
+    ///   such as `--token=…` or `--password=…`. Those stay gated even inside
+    ///   an otherwise exempt command, which is why this is a per-token test
+    ///   rather than a whole-command bypass.
+    ///
+    /// The exemption does not approve anything. It only declines to demand
+    /// typed confirmation, so the command returns to `.needsJudgment` and
+    /// still has to pass the smart-approval judge.
+    nonisolated private static func isKubectlDryRunObjectName(
+        _ token: String,
+        head: String,
+        tokens: [String]
+    ) -> Bool {
+        guard head == "kubectl" || head.hasSuffix("/kubectl") else { return false }
+        let lowered = tokens.map { $0.lowercased() }
+        guard lowered.contains(where: { $0.hasPrefix("--dry-run") }) else { return false }
+        guard let verb = kubectlVerb(in: lowered), verb == "patch" || verb == "set" else {
+            return false
+        }
+        // 资源词是 secret 时一律不豁免——那才是真的在读或写凭据内容。
+        guard !lowered.contains(where: {
+            $0 == "secret" || $0 == "secrets"
+                || $0.hasPrefix("secret/") || $0.hasPrefix("secrets/")
+        }) else { return false }
+        // 这个 token 自己携带凭据值的话，豁免不适用于它。
+        let loweredToken = token.lowercased()
+        let valueCarryingOptions = ["--token", "--password", "--client-key", "--client-certificate"]
+        guard !valueCarryingOptions.contains(where: { loweredToken.hasPrefix($0) }) else {
+            return false
+        }
+        return true
+    }
+
+    /// kubectl 的动词位置，跳过全局选项及其分离的值（`-n tokenhub`）。
+    nonisolated private static func kubectlVerb(in lowered: [String]) -> String? {
+        let optionsWithSeparateValue: Set<String> = [
+            "-n", "--namespace", "--context", "--cluster", "--user",
+            "--kubeconfig", "--as", "--as-group", "--token", "--server",
+        ]
+        var index = 1
+        while index < lowered.count {
+            let token = lowered[index]
+            if optionsWithSeparateValue.contains(token) {
+                index += 2
+                continue
+            }
+            if token.hasPrefix("-") {
+                index += 1
+                continue
+            }
+            return token
+        }
+        return nil
     }
 
     /// A credential noun used as the sole pattern of a piped text filter is

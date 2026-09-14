@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.374.0-rc3 - 2026-09-14
+
+### Fixed
+
+- **`kubectl --dry-run` 的校验命令不再因为一个 secret 对象名被顶到人工打字确认。**
+  - 现场：`kubectl -n tokenhub patch deploy tokenhub --dry-run=server -p '{… "secretRef":{"name":"tokenhub-secret"} …}' -o json | jq -c`，卡片标注远端主机、要求人工确认。用户开着智能审核，却发现裁判根本没看到这条命令。
+  - 拦它的既不是「远程主机」，也不是「`kubectl patch` 算写操作」——是 `tokenhub-secret` 这个字符串。它命中凭据敏感词（连字符是标识符边界，这是刻意的，k8s 对象名要继续命中），置位 `requiresTypedConfirmation`，而打字确认**一票否决送裁判的资格**。于是一条纯校验命令必须人工点，且没有任何 AI 把关的机会。
+  - `--dry-run` 让 API server 只校验并回显对象：回显里有 secret 的**名字**，没有**值**。名字是引用，不是读取。
+  - 豁免刻意做窄，而且是**逐 token 而不是整条命令**：一条形态符合豁免的命令里若夹着 `--token=真值`，那个参数仍单独命中。另有三道边界——只认 `patch` / `set`（负载内联可见，`apply -f` 的内容在文件里看不见）；资源词是 `secret` 一律不豁免（`get` / `describe` 会打印 base64 的 `data`，`create secret --from-literal=…` 连 dry-run 都回显明文）；没有 `--dry-run` 就是真改，照拦。
+  - **豁免不等于放行**：它只是不再要求打字确认，命令回到 `.needsJudgment`，仍要过智能审核。
+  - 与 1.372.0-rc11 的 `.env` 撞 `.envFrom`、`ssh -i` 被当读密钥是同一族误伤，测试落在同一个 suite。对照组（五条必须继续拦的命令 + 一条自带 `--token=` 的）写在正例旁边。
+
 ## 1.374.0-rc2 - 2026-09-14
 
 ### Changed

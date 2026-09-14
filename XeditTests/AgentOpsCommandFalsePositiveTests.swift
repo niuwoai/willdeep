@@ -31,6 +31,55 @@ struct AgentOpsCommandFalsePositiveTests {
         #expect(AgentMaliciousCommandDenylist.match(command: command) == nil)
     }
 
+    @Test("--dry-run 校验里的 secret 对象名是引用，不是读取", arguments: [
+        // 2026-09-14 实测形态：整段 JSON 是一个 token，tokenhub-secret /
+        // tokenhub-aipipe-secret 命中凭据敏感词（连字符是标识符边界，刻意的），
+        // 于是一条纯校验命令被顶到打字确认，裁判连看都没看到。
+        "kubectl -n tokenhub patch deploy tokenhub --dry-run=server --type=strategic -p '{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"tokenhub\",\"envFrom\":[{\"secretRef\":{\"name\":\"tokenhub-secret\"}},{\"secretRef\":{\"name\":\"tokenhub-aipipe-secret\",\"optional\":true}}]}]}}}}' -o json | jq -c",
+        "kubectl -n tokenhub patch deploy tokenhub --dry-run=client --type=strategic -p '{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"tokenhub\",\"envFrom\":[{\"secretRef\":{\"name\":\"tokenhub-secret\"}}]}]}}}}'",
+        "kubectl -n qlite set env deploy/qlite --dry-run=server --from=secret/qlite-config --list"
+    ])
+    func kubectlDryRunObjectNameIsNotACredentialRead(command: String) {
+        let decision = decision(command)
+        #expect(!decision.credentialSensitive, "不该判成读凭据：\(command)")
+        #expect(
+            !decision.requiresTypedConfirmation,
+            "不该要打字确认——打字确认会一票否决送裁判的资格：\(command)"
+        )
+    }
+
+    /// 豁免的边界。这组必须**继续**被拦住，否则上面那条豁免就是个洞。
+    @Test("真正会吐出 secret 内容的命令一条都不许放过", arguments: [
+        // get/describe 会打印 data 字段（base64 的值）。
+        "kubectl -n tokenhub get secret tokenhub-secret -o yaml",
+        "kubectl -n tokenhub describe secret tokenhub-secret",
+        // create secret 连 dry-run 都会把 --from-literal 的值回显出来。
+        "kubectl -n tokenhub create secret generic tokenhub-secret --from-literal=api-key=realvalue --dry-run=server -o yaml",
+        // 资源词是 secret，即便动词是 patch 也不豁免。
+        "kubectl -n tokenhub patch secret tokenhub-secret --dry-run=server -p '{\"data\":{\"k\":\"dg==\"}}'",
+        // 没有 --dry-run 就不是校验，是真改。
+        "kubectl -n tokenhub patch deploy tokenhub --type=strategic -p '{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"tokenhub\",\"envFrom\":[{\"secretRef\":{\"name\":\"tokenhub-secret\"}}]}]}}}}'"
+    ])
+    func realSecretReadsStayGated(command: String) {
+        let decision = decision(command)
+        #expect(
+            decision.requiresTypedConfirmation || decision.credentialSensitive,
+            "这条必须继续拦：\(command)"
+        )
+    }
+
+    /// 豁免是逐 token 的，不是整条命令放行：一条命令即便形态上符合豁免，
+    /// 里面真带着凭据值的那个参数仍要单独命中。
+    @Test("豁免不覆盖命令里自带凭据值的参数")
+    func exemptionDoesNotCoverInlineCredentialOptions() {
+        let command = "kubectl -n tokenhub patch deploy tokenhub --dry-run=server --token=sk-realtokenvalue -p '{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"tokenhub\",\"envFrom\":[{\"secretRef\":{\"name\":\"tokenhub-secret\"}}]}]}}}}'"
+        let decision = decision(command)
+        #expect(
+            decision.requiresTypedConfirmation || decision.credentialSensitive,
+            "--token= 携带真凭据值，不该被 dry-run 豁免顺带放过"
+        )
+    }
+
     @Test("ssh -i 是拿私钥登录，不是读私钥外传", arguments: [
         "ssh -i ~/.ssh/id_rsa root@h1.niuwoai.com 'hostname'",
         "ssh -o BatchMode=yes -o IdentitiesOnly=yes -i ~/.ssh/id_rsa root@h1.niuwoai.com 'uptime'",
