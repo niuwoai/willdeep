@@ -1,6 +1,6 @@
 # Worker 路由：本地模型否决权设计
 
-> Last updated: 2026-09-14 | 状态：**已确认，实施中**
+> Last updated: 2026-09-14 | 状态：**部分落地（1.374.0-rc1）**
 > 关联版本：基于 1.373.0-rc3（develop @ 4db470e5）
 > 适用范围：Xedit（WillDeep macOS App）、willdeep-rs（镜像契约）
 > 关联文档：[REVIEW_2026-09-03_WORKER_ROUTING_LATENCY.md](REVIEW_2026-09-03_WORKER_ROUTING_LATENCY.md)、[NEXT_TASKS_2026-09-03_WORKER_LATENCY.md](NEXT_TASKS_2026-09-03_WORKER_LATENCY.md)、[WORKER_ROUTING_CONTRACT.json](WORKER_ROUTING_CONTRACT.json)
@@ -413,9 +413,34 @@ thinking 的核实结论见 §3.1：当前路径已关死（三字段齐发）�
 
 实施顺序按 §11：P0（契约修正）→ P1（否决路径主体）→ P2（契约 veto 段 + i18n）。P3 / P4 待定。
 
-### 16.1 落地后补记的实现要点
+### 16.1 落地后补记的实现要点（P1，1.374.0-rc1）
 
-（实现完成后回写：实际落地与设计的差异、踩到的坑。）
+**一、等待点从一个变成两个。设计漏了串行预执行。**
+
+§4 的架构图只画了「工具边界收否决」。实现时查派发时序（`AppStateAgentLoopDispatch.swift:295-330`）才发现，`runReadOnlyPreflightIfNeeded` 是**首字前的 await**，并且它会照着路由判决真的把 worker 派出去——否决若等到工具边界才回来，worker 已经在跑了，降级也追不回来。
+
+改为两个收取点：
+
+| 预执行 | 收否决的位置 | 首字代价 |
+| --- | --- | --- |
+| 关（默认） | 第一个工具边界 | 零，完全并行 |
+| 开 | `runReadOnlyPreflightIfNeeded` 之前 | 多等一次，但这条路径本来就是显式开启的同步路径 |
+
+`resolveRouteVetoIfPending` 做成幂等（进门即清 ticket），所以两处都调也只有第一处真的等。§4 的图对默认配置仍然准确。
+
+**二、`case let value as Bool` 不等于「只认布尔」。**
+
+`JSONSerialization` 把 JSON 数字桥接成 `NSNumber`，而 `NSNumber as? Bool` 对 `0` / `1` 都会成功。于是 `{"upheld":0}` 会被读成一次**凭空的否决**——一个数字就能撤掉特权保护，而代码和注释读起来都像是在防这件事。改用 `CFGetTypeID(value) == CFBooleanGetTypeID()`。
+
+这条是测试抓出来的，前提是把「模型答非所问的各种形态」当正经用例写，而不是只测 happy path。
+
+**三、§8 与 §10 关于 UI 标签的描述需要再验证。**
+
+文档写「composer 上方工种名从『运维』变成『实现』」。但该标签取自 `AgentSubagentFleetStatus.make(from: appState.agentToolCalls)`，即**正在跑的 `spawn_agent` 卡片**，而不是 `currentTurnRouteDecision`。预执行关着时本就没有这张卡片，也就无从跳变；预执行开着时否决在派发前就收了，卡片从一开始就是降级后的工种。
+
+也就是说**两种配置下都不会出现设计里描述的那次跳变**，§3 决策 3 讨论的那个取舍在当前实现下不成立。功能行为不受影响（guard 读的是 decision，不是卡片），但文档的 UI 描述偏乐观了，标注为待验证；真要让标签反映否决，需要另接一条不依赖卡片的路径，属于 P2 之后的事。
+
+**四、P1 未做、留给 P2 的部分**：契约的 `veto` 段（§5.3）、设置页文案与 i18n（§10）。P1 只落了运行时与审计。
 
 ## 附：相关文档
 

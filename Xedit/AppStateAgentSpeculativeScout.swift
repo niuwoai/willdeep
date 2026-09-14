@@ -394,6 +394,14 @@ extension AppState {
     /// Cancels or drops the scout, then writes the turn's timing line. Called
     /// from `runAgentLoop`'s defer, before any wake-up probe.
     func finalizeTurnTiming(for runtime: AgentRuntime, turnID: UUID, outcome: String) {
+        // A veto nobody collected is worthless — the turn it would have
+        // corrected is over. Cancel it rather than let it run out its budget
+        // against a runtime that has moved on. Same rule as the scout below:
+        // turn-owned, expired means discarded.
+        if let veto = runtime.pendingRouteVeto {
+            veto.task.cancel()
+            runtime.pendingRouteVeto = nil
+        }
         let scoutPhase = finalizeSpeculativeScoutAtTurnEnd(for: runtime)
         guard var probe = runtime.currentTurnTiming, probe.turnID == turnID else { return }
         runtime.currentTurnTiming = nil

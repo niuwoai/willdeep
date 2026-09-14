@@ -185,7 +185,17 @@ nonisolated enum AgentRequestRouter {
     ]
 
     /// Classify a request. Pure and cheap — no I/O, no model call.
-    static func classify(_ request: String) -> Decision {
+    ///
+    /// `skippingPrivilegedBranches` re-runs the same table with the two
+    /// privileged destinations removed. It exists for one caller: the routing
+    /// veto, which downgrades a privileged decision the local model rejected.
+    /// The downgrade target stays a keyword verdict — the model only decides
+    /// *whether* to skip those branches, never *what* to pick instead, so a
+    /// veto can shrink what the turn may do but can never redirect it.
+    static func classify(
+        _ request: String,
+        skippingPrivilegedBranches: Bool = false
+    ) -> Decision {
         // Composer context is model input, not operator intent. Skill/file
         // metadata can contain words such as "部署" or "生产环境" and used to
         // steal the route before the user's actual sentence was considered.
@@ -195,7 +205,7 @@ nonisolated enum AgentRequestRouter {
         let sample = String(operatorText.prefix(classifiedPrefixLength)).lowercased()
         let mutating = contains(sample, mutatingMarkers)
 
-        if contains(sample, terminalMarkers) {
+        if !skippingPrivilegedBranches, contains(sample, terminalMarkers) {
             return worker(
                 "terminal_operator",
                 94,
@@ -208,7 +218,7 @@ nonisolated enum AgentRequestRouter {
         // does not merely mislabel the Worker — it blocks the edit. "deploy"
         // as a bare substring fires on "deployment", turning "把 deployment
         // 里的注解改一下" (editing a manifest) into a production rollout.
-        if containsWord(sample, operationsMarkers) {
+        if !skippingPrivilegedBranches, containsWord(sample, operationsMarkers) {
             return worker(
                 "ops_runner",
                 94,
@@ -312,12 +322,13 @@ nonisolated enum AgentRequestRouter {
     static func routedDecision(
         for request: String,
         delegationPolicy: AgentDelegationPolicy,
-        sharedConfig: AgentSharedRuntimeConfig = .load()
+        sharedConfig: AgentSharedRuntimeConfig = .load(),
+        skippingPrivilegedBranches: Bool = false
     ) -> Decision? {
         guard sharedConfig.smallModelRouting != false else { return nil }
         guard delegationPolicy != .forbidden else { return nil }
         guard delegationPolicy != .agentPreferred else { return nil }
-        return classify(request)
+        return classify(request, skippingPrivilegedBranches: skippingPrivilegedBranches)
     }
 
     /// 操作员在 composer 里 `@` 点名了某个 worker。
@@ -359,6 +370,19 @@ nonisolated enum AgentRequestRouter {
 
     private static func contains(_ haystack: String, _ needles: [String]) -> Bool {
         needles.contains { haystack.contains($0) }
+    }
+
+    /// Which privileged marker this request tripped, if any.
+    ///
+    /// Attribution for `route-veto.jsonl`: the resulting profile alone cannot
+    /// tell you *which word* caused a false positive, and that is the only
+    /// question worth asking of this table. Uses the same matching the branch
+    /// itself uses, so the answer is the real cause rather than a re-guess.
+    static func matchedPrivilegedMarker(in request: String) -> String? {
+        let operatorText = AgentAttachedPromptDisplay.transform(request).userAuthoredText
+        let sample = String(operatorText.prefix(classifiedPrefixLength)).lowercased()
+        if let hit = terminalMarkers.first(where: { sample.contains($0) }) { return hit }
+        return operationsMarkers.first { containsWord(sample, $0) }
     }
 
     /// Like `contains`, but an ASCII needle must not sit inside a longer ASCII

@@ -1662,6 +1662,10 @@ extension AppState {
                     continue
                 }
 
+                // The guard is the only place a routed decision turns into a
+                // refusal, so this is the last moment a veto can still matter.
+                // Idempotent and a no-op unless a privileged route started one.
+                await resolveRouteVetoIfPending(for: runtime)
                 if let refusal = AgentWorkerRouteGuard.refusal(
                     toolName: call.toolName,
                     risk: risk,

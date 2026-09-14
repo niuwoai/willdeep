@@ -300,11 +300,25 @@ extension AppState {
                     for: runtime,
                     requestText: text
                 )
+                // Privileged keyword routes get a second opinion, started now
+                // and collected later. It runs alongside everything below and
+                // the first provider request; nothing waits on it here.
+                await self.startRouteVetoIfNeeded(for: runtime, requestText: text)
                 // Design gate: decide whether this request wanted a written
                 // design first. Records every decision to spec-gate.jsonl;
                 // only interrupts when the operator turned enforcement on.
                 // See docs/SPEC_FIRST_GATE_DESIGN.md.
                 await self.evaluateSpecGate(for: runtime, requestText: text)
+                // The serial preflight dispatches a worker from the routed
+                // decision, so a veto that lands after it would be too late
+                // to matter. Collect it here — this path is opt-in and
+                // already synchronous, so the wait costs nothing the
+                // operator has not already accepted. With the preflight off
+                // (the default) the veto is collected at the tool boundary
+                // instead and the first token is untouched.
+                if Self.readOnlyPreflightEnabled() {
+                    await self.resolveRouteVetoIfPending(for: runtime)
+                }
                 let codingPlan = await self.runReadOnlyPreflightIfNeeded(
                     for: runtime,
                     requestText: text,

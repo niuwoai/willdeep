@@ -428,6 +428,12 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// `spawn_agent` invocations observed during the current turn. Only used
     /// to audit whether a `.required` policy was actually honored.
     var currentTurnSpawnAgentCallCount: Int = 0
+    /// 本回合并行发起的路由否决确认（关键词判成特权档时才有）。
+    /// 回合自持、过期即弃——它绝不能进 registry 的后台唤醒通道，
+    /// 否则一个迟到的判决会在回合结束后再拉起一轮模型。
+    /// 取用即清空：`resolveRouteVetoIfPending` 是幂等的。
+    /// 见 docs/WORKER_ROUTING_VETO_DESIGN.md。
+    var pendingRouteVeto: AgentWorkerRoutingVeto.Ticket?
     /// Optional native tool schemas activated through `load_tool_pack`.
     /// Packs are intentionally runtime-only and monotonic: a newly loaded
     /// pack may invalidate the provider prompt cache once, but ordinary later
