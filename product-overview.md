@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-14 | Current version: v1.375.0-rc5
+> Last updated: 2026-09-14 | Current version: v1.375.0-rc6
 
 插件包的内容指纹与安装剪枝共用同一份排除名单（`.git` / `node_modules` / `.cache`，任意层级任意类型）：从源码目录安装时，前端依赖与嵌套版本库状态不再进入内容指纹，也不再被复制进与 willdeep-rs 共用的安装目录；`networkDomains` 写法不合共享 schema 时在安装阶段就明确拒绝，而不是装上之后永远匹配不中。
 
