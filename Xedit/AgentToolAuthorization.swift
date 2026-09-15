@@ -582,22 +582,46 @@ enum AgentSandboxPolicy {
             )
         }
         let policyCommand = expansionResolution.command
+        // 括号里的命令需要网络，不代表整条命令失控。此前这里只接受
+        // `.readOnly`，而运维查东西用的 kubectl / curl 必然落在
+        // `.readOnlyNetwork`——于是 `D=$(kubectl get deploy -o json)` 这种
+        // 纯只读查询被打成 escalated + 打字确认。真实审批日志里，这一类
+        // 占了 2026-09 人工确认的 14%，且没有一条是真危险。
+        //
+        // 放宽的只是「网络」这一维：要求用户确认和要求打字确认的子命令，
+        // 以及任何写操作，照旧把整条命令挡下来。
+        var substitutionNeedsNetwork = false
+        var substitutionCredentialSensitive = false
         for substitution in expansionResolution.substitutions {
             let substitutionDecision = commandDecision(
                 command: substitution,
                 rootDirectory: rootDirectory,
                 additionalWorkspaceRoots: additionalWorkspaceRoots
             )
-            guard substitutionDecision.mode == .readOnly,
-                  !substitutionDecision.requiresUserApproval,
-                  !substitutionDecision.requiresTypedConfirmation else {
+            // 凭据标记必须往上带。括号里的 `cat ~/.ssh/id_rsa` 以前是靠
+            // 「替换不可界定」这条通用理由拦下的，外层 decision 的
+            // credentialSensitive 一直是 false——凡是按这个标记做判断的
+            // 下游（部署窗口、环境信任的凭据红线）都看不见它。现在既然
+            // 放宽了这条路，标记就必须准确，否则等于把红线拆了。
+            if substitutionDecision.credentialSensitive {
+                substitutionCredentialSensitive = true
+            }
+            let isBoundedRead = (substitutionDecision.mode == .readOnly
+                || substitutionDecision.mode == .readOnlyNetwork)
+                && !substitutionDecision.requiresUserApproval
+                && !substitutionDecision.requiresTypedConfirmation
+            guard isBoundedRead else {
                 return AgentSandboxDecision(
                     mode: .escalated,
                     requiresUserApproval: true,
                     requiresTypedConfirmation: true,
                     reason: "Command substitution is not a bounded read-only workspace operation.",
-                    prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+                    prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed),
+                    credentialSensitive: substitutionCredentialSensitive
                 )
+            }
+            if substitutionDecision.mode == .readOnlyNetwork {
+                substitutionNeedsNetwork = true
             }
         }
         let hasRedirection = containsRedirection(policyCommand)
@@ -621,10 +645,11 @@ enum AgentSandboxPolicy {
         var needsWorkspaceNetwork = false
         /// 需要真实 HOME / ssh-agent（凭证文件），但**不**需要放开写入限制。
         var needsWorkspaceCredentials = false
-        var needsReadOnlyNetwork = false
+        // 括号里的只读查询要联网，整条命令就得在只读网络档上跑。
+        var needsReadOnlyNetwork = substitutionNeedsNetwork
         var needsEscalation = expansionResolution.requiresJudgment
         var needsConfirmation = false
-        var credentialSensitive = false
+        var credentialSensitive = substitutionCredentialSensitive
         /// 命令链里至少有一段跑的是本仓库脚本；只有在整条链都没有踩到危险
         /// 信号时才生效（危险信号会先走下面的 `needsEscalation` 分支）。
         var hasTrustedWorkspaceScript = false

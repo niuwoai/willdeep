@@ -467,6 +467,16 @@ enum AgentInjectionDefense {
     /// request bodies without receiving the user's actual secret.
     static func redactedCommandForSafetyJudge(_ command: String) -> String {
         var result = command
+        // `-u` / `-b` 只有在 curl / wget 手里才是凭据选项。别处它是别的意思，
+        // 而且是运维天天在用的意思：`journalctl -u sslcat` 的 `-u` 是 unit。
+        // 无差别套用会把服务名抹成 [REDACTED]，命令随即被当成「带凭据」，
+        // 而「脱敏后仍可送裁判」的豁免只认 curl/wget——于是一条查日志的
+        // ssh 命令既进不了裁判，也解释不清自己为什么可疑，直接弹给用户。
+        // 2026-09-14 那批 ssh 人工确认就是这么来的。
+        //
+        // 门控放在整条命令这一层（而不是逐段）：同一条命令里既有 curl 又有
+        // journalctl 时仍会多脱敏一次，但那个方向只损失可读性，不损失安全。
+        let commandUsesNetworkFetcher = SafeCommand.containsNetworkFetcherInvocation(command)
         let rules: [(pattern: String, replacement: String)] = [
             // API_KEY=..., token: ..., JSON `"api_key":"..."`, and header
             // values such as `Authorization: Bearer ...`.
@@ -477,8 +487,14 @@ enum AgentInjectionDefense {
             (#"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"#, "[REDACTED]"),
             // curl credential options whose values do not necessarily carry
             // a credential-shaped key name.
-            (#"(?i)(--oauth2-bearer|--proxy-user|--user|-u|--cookie|-b)(\s+|=)[\"']?[^\"'\s;]+"#, "$1$2[REDACTED]"),
-        ]
+            (#"(?i)(--oauth2-bearer|--proxy-user|--cookie)(\s+|=)[\"']?[^\"'\s;]+"#, "$1$2[REDACTED]"),
+        ] + (commandUsesNetworkFetcher
+            // `--user` 同样两副面孔：curl 的是「用户名:密码」，systemctl 的
+            // 是「用户级 systemd 实例」，后者是个布尔开关，把它后面的词抹掉
+            // 纯属误伤。`--oauth2-bearer` / `--proxy-user` / `--cookie` 没有
+            // 这种歧义，留在无条件那组。
+            ? [(#"(?i)(-u|-b|--user)(\s+|=)[\"']?[^\"'\s;]+"#, "$1$2[REDACTED]")]
+            : [])
         for rule in rules {
             guard let regex = try? NSRegularExpression(pattern: rule.pattern) else { continue }
             let range = NSRange(result.startIndex..<result.endIndex, in: result)
