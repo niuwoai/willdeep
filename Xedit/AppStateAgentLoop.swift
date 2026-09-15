@@ -1020,9 +1020,18 @@ extension AppState {
             if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
                 if latestToolCalls.isEmpty {
                     latestToolCalls = runtime.messages[index].toolCalls
-                } else {
-                    runtime.messages[index].toolCalls = latestToolCalls
                 }
+                // 工具名归一必须发生在这里，赶在历史落定之前。模型常把
+                // `update_plan` 写成 `plan`，而下游风险兜底会把任何查不到
+                // descriptor 的名字判成 .danger，弹一张宿主自己都解释不了、
+                // 批准了也只会抛 unknownTool 的确认卡。改在这一处，历史、
+                // 审批卡、派发三处看到的就是同一个正式名。
+                latestToolCalls = latestToolCalls.map { call in
+                    var normalized = call
+                    normalized.toolName = AgentToolNameAliases.canonical(call.toolName)
+                    return normalized
+                }
+                runtime.messages[index].toolCalls = latestToolCalls
                 // Some OpenAI-compatible gateways emit only whitespace in
                 // `content` before a tool call. Normalize the settled round so
                 // persistence, provider replay, and every transcript surface
@@ -1444,6 +1453,10 @@ extension AppState {
                 let recordID: AgentToolCall.ID
             }
             var stagedCalls: [StagedRoundToolCall] = []
+            // 本回合真实发给模型的工具名。判定未知工具只能以它为准：插件
+            // 带来的 MCP 工具不在 AgentToolRegistry.all 里，只查注册表会把
+            // 整类插件工具判成未知。
+            let advertisedToolNames = Set(requestTools.map(\.name))
             for call in latestToolCalls {
                 // Parse argumentsJSON into a dict for downstream risk/dispatch.
                 // The model occasionally emits malformed JSON (especially on
@@ -1484,6 +1497,45 @@ extension AppState {
                         )
                         continue
                     }
+                }
+
+                // 宿主根本不认识的工具名，到此为止。
+                //
+                // 放任它走下去，`AgentToolRegistry.risk(for:)` 的兜底会把它
+                // 判成 .danger，于是弹出一张确认卡：标题是原始 id，正文没有
+                // 任何可读的操作内容（宿主并不知道这个工具要干什么），用户
+                // 批准之后 `AgentTools.run` 也只会抛 unknownTool。一次注定
+                // 无效的打断——用户既看不懂，批与不批结果还一样。
+                //
+                // 直接判失败、把带候选名的错误喂回模型，它下一轮通常就改对
+                // 了；确认卡留给真正需要人拍板的操作。
+                if !AgentToolNameAliases.isDispatchable(
+                    call.toolName,
+                    advertisedToolNames: advertisedToolNames
+                ) {
+                    let message = AgentToolNameAliases.unknownToolMessage(
+                        for: call.toolName,
+                        advertisedToolNames: advertisedToolNames
+                    )
+                    var failed = AgentToolCall(
+                        messageID: assistantID,
+                        externalID: call.externalID,
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        risk: .read,
+                        status: .failed,
+                        approvalSource: nil
+                    )
+                    failed.errorMessage = "Unknown tool: \(call.toolName)"
+                    runtime.toolCalls.append(failed)
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: message,
+                        outcomeStatus: .failed,
+                        errorMessage: failed.errorMessage
+                    )
+                    continue
                 }
 
                 if let validationError = AgentToolRegistry.argumentValidationError(

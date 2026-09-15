@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.375.0-rc8 - 2026-09-15
+
+### Fixed
+
+- **模型把工具名写错一个词，用户就收到一张看不懂、批了也没用的确认卡。** 现场是
+  deepseek-v4-flash 把 `update_plan` 写成光秃秃的 `plan`，用户看到「Agent 准备
+  plan」，卡里没有任何操作内容，等了 1 分 48 秒，点「允许」之后只等来
+  `Unknown tool: plan`。
+  - 成因是一条兜底链：`AgentToolRegistry.risk(for:)` 对查不到 descriptor 的名字
+    一律返回 `.danger` → danger 必须由人串行确认 → 弹卡；而卡片文案落到
+    `defaultDescriptor`，标题取 `AgentToolDisplay.name(for:)`，中文名表里同样
+    没有这个 id，于是原样显示 `plan`。**宿主自己都不知道这个工具要干什么，
+    自然也无从把「plan 是什么」展示给用户。**
+  - 新增 `AgentToolNameAliases`：认得出的错名在工具调用落定前归一到正式名
+    （`plan` / `plan_update` / `update_todo_list` / `todo_write` → `update_plan`），
+    历史、审批卡、派发三处从此看到同一个名字。只收录语义确定的错名——需要猜
+    参数语义才能对上的（如 `bash` → `run_command`）不收，宁可让它走下面的失败
+    路径重发，也不静默改调一个参数对不上的工具。
+  - 宿主彻底不认识的工具名不再弹卡，直接判 `.failed` 并把带候选名的错误喂回
+    模型（"Unknown tool: x. Nothing was executed and no user approval is
+    involved. Did you mean: …"）。反正批准之后也只会抛 `unknownTool`，这张卡
+    从来没有过有效的一面。
+  - 判定「未知」以**本回合真实发给模型的工具表**为准，不是 `AgentToolRegistry.all`：
+    插件带来的 MCP 工具不在 `all` 里，只查注册表会把整类插件工具判成未知、一刀
+    切掉。注册表里有但本回合因工具包懒加载没公布的工具，以及不对模型公布却有
+    真实执行分支的 `glob`，同样仍算可派发。
+
 ## 1.375.0-rc7 - 2026-09-15
 
 ### Fixed
