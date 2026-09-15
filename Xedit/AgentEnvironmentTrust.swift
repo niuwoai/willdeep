@@ -18,11 +18,16 @@ nonisolated enum AgentEnvironmentTrustKind: String, Codable, Sendable, CaseItera
     /// 测试专用数据库实例。作用域：run_command 与 terminal_send_command 中
     /// 命令文本包含 `target` 子串的调用——不含目标标识的命令不享受声明。
     case testDatabase = "test_database"
+    /// 一段部署作业。作用域：run_command 与 terminal_send_command 中**属于
+    /// 部署命令族**的命令（见 `AgentDeploymentWindow`）。`target` 可选，
+    /// 填了就额外要求命令包含该标识（集群 / namespace / 主机）。
+    case deploymentWindow = "deployment_window"
 
     var displayLabel: String {
         switch self {
         case .disposableTerminal: return "一次性终端环境"
         case .testDatabase: return "测试专用数据库"
+        case .deploymentWindow: return "部署作业窗口"
         }
     }
 }
@@ -71,6 +76,8 @@ nonisolated enum AgentEnvironmentTrust {
             return toolName == "terminal_send_command" || toolName == "terminal_send_control"
         case .testDatabase:
             return toolName == "run_command" || toolName == "terminal_send_command"
+        case .deploymentWindow:
+            return AgentDeploymentWindow.scopedToolNames.contains(toolName)
         }
     }
 
@@ -81,6 +88,13 @@ nonisolated enum AgentEnvironmentTrust {
         declarations: [AgentEnvironmentTrustDeclaration]
     ) -> AgentEnvironmentTrustDeclaration? {
         guard !declarations.isEmpty else { return nil }
+        if let deployment = deploymentDeclarationCovering(
+            toolName: toolName,
+            command: command,
+            in: declarations
+        ) {
+            return deployment
+        }
         if let database = databaseDeclarationCovering(command: command, in: declarations),
            toolIsInScope(toolName, for: .testDatabase) {
             return database
@@ -95,6 +109,24 @@ nonisolated enum AgentEnvironmentTrust {
     /// 是否存在覆盖可见终端的 disposableTerminal 声明。
     static func coversTerminal(_ declarations: [AgentEnvironmentTrustDeclaration]) -> Bool {
         declarations.contains { $0.kind == .disposableTerminal }
+    }
+
+    /// 命令命中的 deploymentWindow 声明，无则 nil。与另外两类不同，这里
+    /// 的匹配条件不是「命令里出现某个标识」，而是「命令属于部署命令族」——
+    /// 一段部署作业里跑什么是可以枚举的，逐条问人才是那个不合理的默认。
+    static func deploymentDeclarationCovering(
+        toolName: String,
+        command: String,
+        in declarations: [AgentEnvironmentTrustDeclaration]
+    ) -> AgentEnvironmentTrustDeclaration? {
+        declarations.first { declaration in
+            declaration.kind == .deploymentWindow
+                && AgentDeploymentWindow.covers(
+                    toolName: toolName,
+                    command: command,
+                    target: declaration.target
+                )
+        }
     }
 
     /// 命令命中的 testDatabase 声明（不区分大小写的子串匹配），无则 nil。

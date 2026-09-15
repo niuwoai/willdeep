@@ -1869,6 +1869,7 @@ struct AgentToolCallCard: View {
         case .escalated: return "ESCALATED"
         case .trustedServer: return "TRUSTED"
         case .subagentEditor: return "SUBAGENT"
+        case .environmentTrust: return "DECLARED"
         }
     }
 
@@ -1888,6 +1889,7 @@ struct AgentToolCallCard: View {
         case .escalated: return "You approved this call to run outside the default sandbox boundary."
         case .trustedServer: return "You marked this MCP server as fully trusted — all its calls auto-run."
         case .subagentEditor: return "Applied by an editor subagent, limited to the single file you approved when the spawn was confirmed."
+        case .environmentTrust: return "Covered by an environment trust declaration you confirmed earlier in this session, such as a deployment window."
         }
     }
 

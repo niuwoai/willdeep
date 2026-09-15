@@ -742,6 +742,10 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     /// parent. The host enforces that exact path as the worker's write
     /// boundary, so its patches apply without asking per hunk.
     case subagentEditor
+    /// 用户声明的环境信任覆盖了这条调用（目前只有部署窗口走这条路：命中
+    /// 部署命令族即放行）。单列一个来源而不是复用 staticAllowlist，是为了
+    /// 让审计一眼看出「这条是因为那次声明才没问人的」。
+    case environmentTrust
 }
 
 struct AgentToolCall: Identifiable, Equatable {

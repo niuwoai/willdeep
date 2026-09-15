@@ -1734,6 +1734,7 @@ nonisolated enum L10n {
         static let turnReportApprovalControlLease = String(localized: "transcript.turn-report.approval.control-lease", defaultValue: "Control lease")
         static let turnReportApprovalStatic = String(localized: "transcript.turn-report.approval.static", defaultValue: "Static allow")
         static let turnReportApprovalJudge = String(localized: "transcript.turn-report.approval.judge", defaultValue: "Judge allow")
+        static let turnReportApprovalEnvironmentTrust = String(localized: "transcript.turn-report.approval.environment-trust", defaultValue: "Declared")
         static let turnReportApprovalGoal = String(localized: "transcript.turn-report.approval.goal", defaultValue: "Goal mode")
         static let turnReportApprovalFullAccess = String(localized: "transcript.turn-report.approval.silent", defaultValue: "Full access")
         static let turnReportApprovalWorkspace = String(localized: "transcript.turn-report.approval.workspace", defaultValue: "Workspace access")

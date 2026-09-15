@@ -45,11 +45,22 @@ extension AgentToolRunner {
 
         guard let kind = AgentEnvironmentTrustKind(rawValue: kindRaw) else {
             throw AgentToolError.invalidArgument(
-                "kind must be one of: disposable_terminal, test_database, revoke_all."
+                "kind must be one of: disposable_terminal, test_database, deployment_window, revoke_all."
             )
         }
         guard !statement.isEmpty else {
             throw AgentToolError.missingArgument("user_statement")
+        }
+        if kind == .deploymentWindow,
+           !target.isEmpty,
+           target.count < AgentDeploymentWindow.minimumTargetLength {
+            // target 对部署窗口是可选的收窄条件；一旦填了就不能是「k8」这种
+            // 到处都能撞上的短串，否则等于没收窄。
+            throw AgentToolError.invalidArgument(
+                "deployment_window accepts an optional `target` (cluster, namespace, or host); "
+                    + "when provided it must be at least "
+                    + "\(AgentDeploymentWindow.minimumTargetLength) characters."
+            )
         }
         if kind == .testDatabase,
            target.count < AgentEnvironmentTrust.minimumDatabaseTargetLength {
@@ -86,6 +97,14 @@ extension AgentToolRunner {
         case .testDatabase:
             scopeNote = "Destructive statements against commands containing `\(target)` "
                 + "now go to intelligent review instead of a confirmation card."
+        case .deploymentWindow:
+            let scope = target.isEmpty
+                ? "Deployment-family commands"
+                : "Deployment-family commands mentioning `\(target)`"
+            scopeNote = "\(scope) — kubectl / helm / docker / systemctl deployment subcommands — "
+                + "now run without a confirmation card. Anything outside that family "
+                + "(deleting namespaces or volumes, reading secrets, `rm -rf`, piped or "
+                + "redirected commands) is unaffected and still asks."
         }
         return AgentToolResult(
             summary: "已登记环境信任：\(kind.displayLabel)",

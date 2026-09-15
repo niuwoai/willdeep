@@ -843,6 +843,12 @@ extension AppState {
                ) {
                 return nil
             }
+            // 部署窗口在可见终端上同样直接放行。终端那点额外顾虑（不知道
+            // 这个 tab 现在指向哪台机器）对部署而言恰恰是常态：发布本来就
+            // 是冲着远端去的，而放行的依据是命令族本身，不是它落在哪。
+            if trusted, trustDeclaration?.kind == .deploymentWindow {
+                return .environmentTrust
+            }
             switch SafeCommand.classify(command: command) {
             case .alwaysSafe:
                 // Only context-independent reads are static in a visible
@@ -919,6 +925,14 @@ extension AppState {
             declarations: environmentTrustDeclarations
         )
         let trusted = trustDeclaration != nil && !sandboxDecision.credentialSensitive
+        // 部署窗口是这三类声明里唯一直接放行的：一段发布里跑什么，是一份
+        // 列得出来的清单（AgentDeploymentWindow），宿主自己判得了；而
+        // testDatabase 的「这库是测试库」只有读懂命令语义才判得了，所以那
+        // 一类仍然只降级到送裁判。把部署命令也送裁判等于白声明——用户要的
+        // 正是别再为每条 kubectl 停一次。凭据敏感仍然一票否决。
+        if trusted, trustDeclaration?.kind == .deploymentWindow {
+            return .environmentTrust
+        }
         switch SafeCommand.classify(command: command) {
         case .alwaysSafe:
             return .staticAllowlist
@@ -1401,7 +1415,10 @@ extension AppState {
         // 而不是像 workspaceAccess 那样统一抬到 workspace-write。放行理由
         // 宽松不等于沙箱要跟着放宽——真需要越界时，走下面的 seatbelt 拒绝
         // 重跑路径，那条路在完全访问下同样自动。
-        case .staticAllowlist, .llmJudge, .fullAccess, .taskGrant, .none:
+        // `.environmentTrust` 与 `.llmJudge` 同组，是刻意的等价：部署窗口
+        // 放行的那条 kubectl，今天由裁判放行时跑在哪个沙箱档，声明之后就
+        // 还跑在哪个档。省掉的是那次确认，不是那道边界。
+        case .staticAllowlist, .llmJudge, .fullAccess, .taskGrant, .environmentTrust, .none:
             return sandboxDecision.mode
         }
     }

@@ -544,9 +544,24 @@ nonisolated enum AgentApprovalNoticeCopy {
                 target.isEmpty ? "放宽范围：测试数据库" : "放宽范围：含 \(target) 的命令",
                 at: 0
             )
+        case .deploymentWindow:
+            metadata.insert(
+                target.isEmpty
+                    ? "放宽范围：部署命令族"
+                    : "放宽范围：含 \(target) 的部署命令",
+                at: 0
+            )
+            // 这一档与另外两档有本质区别，必须写在卡上：它是直接执行，不是
+            // 交给 AI 再看一眼。用户批准的是「这段时间别再问我」。
+            metadata.insert("kubectl / helm / docker / systemctl", at: 1)
         case nil:
             break
         }
+        // 部署窗口直接放行，另外两类只是降级送 AI 复核。这句话是用户判断
+        // 「我到底批了什么」的依据，不能两档共用一句含糊的话。
+        let decisionSubtitle = kind == .deploymentWindow
+            ? "确认后，本会话内的部署命令直接执行，不再逐条询问；族外命令照旧。"
+            : "确认后，该环境内的常规操作改由 AI 复核，不再逐条询问。"
         return AgentApprovalNoticeDescriptor(
             iconName: "checkmark.shield",
             title: "Agent 认为你声明了这个环境可以放宽审批",
@@ -555,7 +570,7 @@ nonisolated enum AgentApprovalNoticeCopy {
             metadata: metadata,
             explanationTitle: nil,
             decisionTitle: "你说过这句话吗？",
-            decisionSubtitle: "确认后，该环境内的常规操作改由 AI 复核，不再逐条询问。",
+            decisionSubtitle: decisionSubtitle,
             declineTitle: "我没说过",
             approveTitle: "确认，是我说的",
             usesOutlinedApproveAction: true

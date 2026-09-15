@@ -475,6 +475,8 @@ struct AgentTurnReportCard: View {
             return L10n.Transcript.turnReportApprovalStatic
         case .llmJudge:
             return L10n.Transcript.turnReportApprovalJudge
+        case .environmentTrust:
+            return L10n.Transcript.turnReportApprovalEnvironmentTrust
         case .goalMode, .dispatchTask:
             return L10n.Transcript.turnReportApprovalGoal
         case .workspaceAccess:
