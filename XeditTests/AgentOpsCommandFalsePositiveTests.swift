@@ -107,11 +107,13 @@ struct AgentOpsCommandFalsePositiveTests {
 
     // MARK: - 仍然必须拦
 
+    /// `head ~/.ssh/config` 曾在这张清单里。1.375.0-rc11 起读连接配置降级为
+    /// 「送裁判」（凭据标记保留，只免打字确认）；私钥形态一条都没放宽。
+    /// 依据与降级后的边界见 AgentSSHConfigReviewTests。
     @Test("真正读取私钥内容的形态不受豁免影响", arguments: [
         "cat ~/.ssh/id_rsa",
         "ssh root@h1.niuwoai.com 'cat ~/.ssh/id_rsa'",
         "scp root@h1.niuwoai.com:~/.ssh/id_rsa .",
-        "head ~/.ssh/config",
         "ssh -i ~/.ssh/id_rsa root@h1 'true'; cat ~/.ssh/id_ed25519"
     ])
     func realCredentialReadsStillGated(command: String) {

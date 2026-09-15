@@ -949,9 +949,8 @@ enum AgentSandboxPolicy {
                 }
             }
 
-            if !isSSHAgentDirectoryListing(tokens),
-               credentialScanTokens(head: head, tokens: tokens)
-                .contains(where: { token in
+            let sensitiveTokens = credentialScanTokens(head: head, tokens: tokens)
+                .filter { token in
                     referencesSensitivePath(token)
                         && !AgentWorkspaceTemplatePolicy.isPublicTemplate(
                             token,
@@ -965,16 +964,40 @@ enum AgentSandboxPolicy {
                             additionalWorkspaceRoots: additionalWorkspaceRoots
                         )
                         && !isKubectlDryRunObjectName(token, head: head, tokens: tokens)
-                }),
+                }
+            if !isSSHAgentDirectoryListing(tokens),
+               !sensitiveTokens.isEmpty,
                !isPipedTextFilterUsingOnlyPattern(
                    head: head,
                    tokens: tokens,
                    runsInPipeline: segment.runsInPipeline
                ) {
                 needsEscalation = true
-                needsConfirmation = true
                 credentialSensitive = true
-                reasons.append("Command references a sensitive path or credential-like value.")
+                // SSH 连接配置（config / known_hosts / *.pub）不含私钥字节，
+                // 但它是一张内网地图——跳板机地址、非标端口、登录用户名。所以
+                // 凭据标记保留（声明类豁免照样覆盖不到它），只摘掉打字确认这
+                // 一步：打字确认会一票否决送裁判的资格，而「要不要让 Agent 看
+                // 一眼 ssh 配置」恰恰是裁判判得了的事，它看得到完整命令，也
+                // 看得到上下文是不是在连服务器。裁判只收命令文本、收不到命令
+                // 输出，所以送审不等于把配置内容发出去。
+                //
+                // 依据：审批日志里 2026-07 以来 63 次涉及 .ssh 的人工确认，
+                // 53 次只读了这些文件，一次私钥都没碰，而「连服务器前先看一眼
+                // config」是每次排障的第一步动作。
+                //
+                // 带重定向的命令不适用：`ls -la ~/.ssh > ~/.ssh/config` 写的是
+                // 同一个文件，读它和改它不是一回事。
+                if !hasRedirection,
+                   isSSHConfigReadingHead(head, tokens: tokens),
+                   sensitiveTokens.allSatisfy(referencesSSHConnectionConfigOnly) {
+                    reasons.append(
+                        "Command reads SSH connection configuration, which carries no private key material; intelligent review decides."
+                    )
+                } else {
+                    needsConfirmation = true
+                    reasons.append("Command references a sensitive path or credential-like value.")
+                }
             }
 
             if localPathTokens.contains(where: { token in
@@ -2164,6 +2187,45 @@ enum AgentSandboxPolicy {
             hasPath = true
         }
         return hasPath
+    }
+
+    /// `~/.ssh` 下只含连接信息、不含私钥字节的那几个文件。
+    ///
+    /// 刻意只认明确的文件名：裸目录（`ls -R ~/.ssh`）、通配符、未知文件名
+    /// 和 `authorized_keys`（那是「谁能登录这台机器」的清单）都不在内，
+    /// 白名单之外没有默认放行。
+    nonisolated private static let sshConnectionConfigFileNames: Set<String> = [
+        "config", "known_hosts", "known_hosts.old"
+    ]
+
+    /// 降级只覆盖**读取**这个动作。`git commit -m fix ~/.ssh/config` 把配置
+    /// 提交进仓库、`scp` 把它传走，都不是「看一眼 Host 别名」，一条都不沾。
+    nonisolated private static let sshConfigReadingHeads: Set<String> = [
+        "awk", "cat", "cut", "egrep", "fgrep", "file", "grep", "head", "less",
+        "ls", "more", "nl", "rg", "sed", "sort", "stat", "tail", "uniq", "wc"
+    ]
+
+    nonisolated private static func isSSHConfigReadingHead(
+        _ head: String,
+        tokens: [String]
+    ) -> Bool {
+        guard sshConfigReadingHeads.contains(head) else { return false }
+        // `sed -i` 是原地改写，不是读。
+        if head == "sed" {
+            return !tokens.contains { $0 == "-i" || $0.hasPrefix("-i") || $0 == "--in-place" }
+        }
+        return true
+    }
+
+    nonisolated private static func referencesSSHConnectionConfigOnly(_ token: String) -> Bool {
+        let lower = token.lowercased()
+        guard !lower.contains("*"), !lower.contains("?") else { return false }
+        guard let range = lower.range(of: "/.ssh/") else { return false }
+        let fileName = String(lower[range.upperBound...])
+        guard !fileName.isEmpty, !fileName.contains("/") else { return false }
+        // 公钥就是拿来发给别人的。私钥不会以 .pub 结尾。
+        if fileName.hasSuffix(".pub") { return true }
+        return sshConnectionConfigFileNames.contains(fileName)
     }
 
     nonisolated private static func referencesSensitivePath(_ token: String) -> Bool {

@@ -487,10 +487,18 @@ nonisolated enum AgentApprovalNoticeCopy {
         let workspaceName = arguments["cwd"]?.stringValue()
             .map { URL(fileURLWithPath: $0).lastPathComponent }
             .flatMap { $0.isEmpty ? nil : $0 }
-        return [
+        var metadata = [
             workspaceName.map { "在 \($0) 工作区运行" } ?? "在当前工作区运行",
             commandImpact(arguments: arguments),
         ]
+        // 二十多行的 shell 摆在卡上等于没摆。结构摘要排在最前：要判断放不放
+        // 行，先看的是「它要动几处、哪几处会改东西」，不是逐字读完脚本。
+        // 拆不出结构就没有这一条，绝不编一个听起来很确定的概括。
+        if let command = arguments["command"]?.stringValue(),
+           let summary = AgentCommandCardSummary.summary(for: command) {
+            metadata.insert(summary, at: 0)
+        }
+        return metadata
     }
 
     private static func commandImpact(arguments: [String: AgentJSONValue]) -> String {

@@ -27,8 +27,13 @@ struct AgentSSHDiagnosticApprovalTests {
         #expect(!decision.credentialSensitive)
     }
 
+    /// `head ~/.ssh/config` 曾在这张清单里。1.375.0-rc11 起它降级为「送裁判」
+    /// （凭据标记保留，只免打字确认）——依据是审批日志：2026-07 以来 63 次
+    /// 涉及 .ssh 的人工确认中，53 次只读了 config / known_hosts，一次私钥都
+    /// 没碰。降级后的边界由 AgentSSHConfigReviewTests 覆盖。这是有意调整，
+    /// 不是遗漏。
     @Test("凭据内容、未知参数和危险命令链不继承目录豁免", arguments: [
-        "cat ~/.ssh/id_ed25519", "head ~/.ssh/config", "ls -la ~/.ssh/id_rsa",
+        "cat ~/.ssh/id_ed25519", "ls -la ~/.ssh/id_rsa",
         "ls -R ~/.ssh", "ls -la ~/.ssh/*", "ls -la ~/.ssh/agent/../id_rsa",
         "ls -la ~/.ssh ~/.aws", "ls -la ~/.ssh > ~/.ssh/config",
         "ls -la ~/.ssh/agent; cat ~/.ssh/id_ed25519",
