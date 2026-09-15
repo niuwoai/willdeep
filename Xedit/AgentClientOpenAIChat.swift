@@ -858,7 +858,10 @@ struct OpenAIChatAdapter {
                     "type": "function",
                     "function": [
                         "name": call.toolName,
-                        "arguments": call.argumentsJSON
+                        // Never replay arguments that are not a JSON object:
+                        // strict upstreams reject the whole history for it,
+                        // which deadlocks the session (see `wireArgumentsJSON`).
+                        "arguments": call.wireArgumentsJSON
                     ]
                 ]
             }

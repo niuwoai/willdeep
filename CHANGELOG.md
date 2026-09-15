@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.375.0-rc7 - 2026-09-15
+
+### Fixed
+
+- **模型发出一次畸形的工具调用参数后，会话彻底卡死，重试也救不回来。** 上游报
+  `Assistant tool call function.arguments must be valid JSON.`（HTTP 400），
+  用户只能手工删掉那一轮才能继续。
+  - 成因是一个自锁循环：`AppStateAgentLoop` 发现 `argumentsJSON` 解析不出对象
+    时，会把这次调用记成 `.failed` 并回一条 tool 消息要求模型「重发合法 JSON」
+    ——**但携带这条指令的下一次请求，本身又把那段畸形 JSON 原样发了出去**。
+    而严格上游（vLLM 系）拒的是**整条历史**而非那一个工具调用，于是每次重试
+    都在重发同一份非法历史。
+  - `AgentMessageToolCall` 新增 `wireArgumentsJSON`：回放给 OpenAI 形上游时
+    一律是 JSON 对象字面量，空的或解析不出对象的回落 `{}`。合法参数**按字节
+    原样转发，不重新序列化**——重排 key 会打乱按请求字节做哈希的上游提示词
+    缓存。畸形原文仍完整保留在那条失败的 tool 结果里，模型看得到自己写坏了
+    什么，不丢证据。
+  - 这与 `AgentClientAnthropic` / `AgentClientGemini` 早就在做的事一致（那两条
+    路因此从未触发这个死锁），本次把 Chat Completions 和 Responses 两条路补齐。
+
+### Meta
+
+- 本修复由另一个会话产出、以未提交状态挂在工作区，封存于分支
+  `wip/openai-malformed-toolcall-json`（提交 bac03008）后按源码部分合入。
+  该封存分支里的版本位点与 CHANGELOG 改动与 develop 撞车（它 bump 到 rc4，
+  而同一批位点已在 5a8e3858 修过），**未予采纳**，仅取 4 个源文件的改动。
+
 ## 1.375.0-rc6 - 2026-09-15
 
 ### Added

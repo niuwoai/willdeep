@@ -657,6 +657,31 @@ nonisolated struct AgentMessageToolCall: Codable, Equatable {
     /// is still running, for every non-spawn tool, and for runs recorded
     /// before worker accounting existed.
     var subagentUsage: AgentSubagentRunUsage?
+
+    /// `argumentsJSON` as it may be replayed to an OpenAI-shaped provider:
+    /// always a JSON **object** literal.
+    ///
+    /// The model does emit malformed arguments (truncated streams, wrong
+    /// schema). The agent loop already reports those as a failed tool call
+    /// and asks for a re-emit — but the request carrying that instruction
+    /// replays the same broken payload, and strict upstreams reject the
+    /// ENTIRE history for it (`Assistant tool call function.arguments must
+    /// be valid JSON.`), so the session deadlocks: every retry re-sends the
+    /// same invalid history. The raw payload is preserved for the model in
+    /// the failed tool result, so repairing it here loses no evidence.
+    ///
+    /// Matches what `AgentClientAnthropic` and `AgentClientGemini` already
+    /// do when the same payload fails to parse.
+    var wireArgumentsJSON: String {
+        let trimmed = argumentsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "{}" }
+        guard let data = trimmed.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data, options: []),
+              parsed is [String: Any] else {
+            return "{}"
+        }
+        return argumentsJSON
+    }
 }
 
 nonisolated struct AgentMessage: Identifiable, Codable, Equatable {

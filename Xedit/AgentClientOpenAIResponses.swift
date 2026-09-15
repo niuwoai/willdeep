@@ -1203,7 +1203,7 @@ struct OpenAIResponsesAdapter {
                         "type": "function_call",
                         "call_id": call.externalID,
                         "name": call.toolName,
-                        "arguments": call.argumentsJSON.isEmpty ? "{}" : call.argumentsJSON
+                        "arguments": call.wireArgumentsJSON
                     ])
                 }
 

@@ -335,6 +335,71 @@ struct AgentClientEncodingTests {
         #expect(out.first?.content.contains("image attachment") == true)
         #expect(out.first?.content.hasPrefix("[") == true)
     }
+
+    // MARK: - tool_call arguments replay
+
+    /// A tool call whose arguments are not a JSON object must never be
+    /// replayed verbatim. Strict upstreams reject the ENTIRE history for it
+    /// ("Assistant tool call function.arguments must be valid JSON."), and
+    /// since the agent loop answers malformed arguments with a tool result
+    /// asking for a re-emit, the very next request would carry the same
+    /// broken payload again — the session deadlocks on retry.
+    @Test
+    func replayedToolCallArgumentsAreAlwaysAJSONObject() throws {
+        for broken in ["{\"path\": ", "", "   ", "null", "[1,2]", "\"abc\"", "None", "{}{}"] {
+            let call = AgentMessageToolCall(
+                externalID: "call_a",
+                toolName: "read_file",
+                argumentsJSON: broken
+            )
+            let data = try AgentClient.encodeChatRequest(
+                model: "x",
+                messages: [
+                    AgentMessage(role: .user, content: "go"),
+                    AgentMessage(role: .assistant, content: "", toolCalls: [call]),
+                    AgentMessage(role: .tool, content: "result", toolCallID: "call_a")
+                ],
+                tools: []
+            )
+            let dict = try parseJSONObject(data)
+            let messages = dict["messages"] as? [[String: Any]] ?? []
+            let toolCalls = messages[1]["tool_calls"] as? [[String: Any]] ?? []
+            let function = toolCalls.first?["function"] as? [String: Any]
+            let arguments = try #require(function?["arguments"] as? String)
+            let parsed = try JSONSerialization.jsonObject(
+                with: #require(arguments.data(using: .utf8)),
+                options: []
+            )
+            #expect(parsed is [String: Any], "arguments must decode to an object: \(broken)")
+        }
+    }
+
+    /// Well-formed arguments are forwarded byte-for-byte: repairing is for
+    /// broken payloads only, and re-serializing would change key order and
+    /// break prompt caching on providers that hash the request bytes.
+    @Test
+    func wellFormedToolCallArgumentsAreForwardedUnchanged() throws {
+        let original = "{\"path\":\"a.txt\",\"limit\":10}"
+        let call = AgentMessageToolCall(
+            externalID: "call_a",
+            toolName: "read_file",
+            argumentsJSON: original
+        )
+        let data = try AgentClient.encodeChatRequest(
+            model: "x",
+            messages: [
+                AgentMessage(role: .user, content: "go"),
+                AgentMessage(role: .assistant, content: "", toolCalls: [call]),
+                AgentMessage(role: .tool, content: "result", toolCallID: "call_a")
+            ],
+            tools: []
+        )
+        let dict = try parseJSONObject(data)
+        let messages = dict["messages"] as? [[String: Any]] ?? []
+        let toolCalls = messages[1]["tool_calls"] as? [[String: Any]] ?? []
+        let function = toolCalls.first?["function"] as? [String: Any]
+        #expect(function?["arguments"] as? String == original)
+    }
 }
 
 @Suite
