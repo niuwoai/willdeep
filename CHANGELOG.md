@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.375.0-rc5 - 2026-09-15
+
+### Removed
+
+- **删掉本仓库里那套早已无人调用的发布脚本**：`scripts/release.sh`（24KB）、
+  `scripts/release_mac_app.rb`（37KB）及其契约测试（12KB）。实际发布一直由
+  new83d 仓库的 `scripts/release_mac_apps.rb` 执行（WillDeep 的 slug 是
+  `veilwriter`），本仓库这三个文件没有任何调用方——CI、pbxproj 构建阶段、
+  其他脚本、skill 全部查过，零引用。
+
+### Fixed
+
+- **修正四处指向已删脚本的文档**，它们一直在把人往死路上引：
+  - `docs/RELEASE.md` 整篇是围绕 `release_mac_app.rb` 写的。改写第二节指向
+    new83d 的真实入口，补上 appcast 默认不推与 rc/正式版架构差异两节；证书、
+    公证凭据准备和"常见坑"与具体脚本无关，原样保留。
+  - `docs/UPDATE_META.md` 的发布流程与 `--publish-metadata-only` 补发命令改为
+    真实入口，并补一条说明：默认带 `--skip-update-metadata`，不推送 Sparkle
+    自动更新，产物 / `latest` / GitHub Release 照常发。
+  - `product-overview.md` 的发布证书约束与打 tag 建议改为指向真实执行者。
+  - `ROADMAP.md` 里那段 `release.sh` 改进记录**刻意未动**——它描述的是当时确实
+    做过的事，改掉等于把真实历史写成假话。
+
 ## 1.375.0-rc4 - 2026-09-15
 
 ### Removed

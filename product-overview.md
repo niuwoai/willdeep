@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-14 | Current version: v1.375.0-rc4
+> Last updated: 2026-09-14 | Current version: v1.375.0-rc5
 
 插件包的内容指纹与安装剪枝共用同一份排除名单（`.git` / `node_modules` / `.cache`，任意层级任意类型）：从源码目录安装时，前端依赖与嵌套版本库状态不再进入内容指纹，也不再被复制进与 willdeep-rs 共用的安装目录；`networkDomains` 写法不合共享 schema 时在安装阶段就明确拒绝，而不是装上之后永远匹配不中。
 
@@ -922,7 +922,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **发布包签名前置自检（1.151.0-rc1）** —— Release 脚本在导出 `.app` 后先做严格 codesign 校验，并阻止 some.im 客户端登录密钥进入 `Info.plist`；DMG Gatekeeper 自检失败会直接停止发布。
 - **桌面宠物双击跳跃（1.151.0）** —— 双击桌面宠物图像会触发一次短跳动画，作为轻量互动反馈；气泡点击仍负责跳回当前会话，拖动手势仍负责移动宠物位置。
 - **设置左侧栏与桌面宠物一等入口（1.150.0-rc3）** —— 设置窗口改为左侧分类、右侧内容的两栏结构：桌面宠物作为独立分类常驻左侧，编辑器 / AI / 运行时 / 集成等多页分类继续在右侧顶部使用分段切换。桌面宠物右键菜单补齐中英文资源，点击「桌面宠物设置…」会稳定打开设置窗口并直达宠物页。
-- **发布证书约束（1.150.0-rc3）** —— `scripts/release.sh` 发布/公证链路要求钥匙串里存在唯一匹配的 `Developer ID Application` 证书，证书名称必须包含 `Beijing Alibaba` 且 Team ID 为 `ZH2S7D6PL6`；脚本会把解析出的证书用于 archive 与 DMG 签名，避免误用个人 Apple Development 或其他团队证书。
+- **发布证书约束（1.150.0-rc3）** —— 发布/公证链路（现由 new83d 仓库的 `scripts/release_mac_apps.rb` 执行，slug `veilwriter`）要求钥匙串里存在唯一匹配的 `Developer ID Application` 证书，证书名称必须包含 `Beijing Alibaba` 且 Team ID 为 `ZH2S7D6PL6`；脚本会把解析出的证书用于 archive 与 DMG 签名，避免误用个人 Apple Development 或其他团队证书。
 - **Release helper 构建耗时日志（1.150.0-rc2）** —— `WillDeepComputerUseHelper.app` 的 Xcode Run Script 现在按 bundle 准备、双架构 `swiftc`、`lipo`、签名和验证输出秒级耗时；签名失败会打印 bundle 结构和 codesign 诊断，便于判断 release archive 是源码编译慢、双架构慢，还是卡在钥匙串/签名环节。
 - **桌面宠物输入节拍（1.150.0）** —— Agent 输入框有内容时，宠物切换为“陪你敲字中”：抬身面对打包的像素笔记本，双手、键盘和屏幕光按节拍动作。保留 1.149.0 的默认开启、拖动走路、位置记忆、右键直达设置与任何壁纸下的文字对比度。
 - **Release 编译器析构规避（1.150.0-rc1）** —— `WorkflowWatchdogRace` 显式声明空析构函数，避开固定 Swift 6.3.1 工具链在 Release 优化 (`-O -enable-default-cmo`) 下对泛型合成析构函数进行 EarlyPerfInliner 时偶发崩溃的问题；每次升级工具链后应重新验证 Release archive。
@@ -1866,7 +1866,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
 - 版本同步位点：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、`ComputerUseHelper/Info.plist`、README version badge、`chrome-extension/willdeep-browser/manifest.json` 及其 README、本文件顶部 `Current version`、`docs/MOBILE_GATEWAY_REQUIREMENTS.md` 与 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 一并同步。
 - 每次版本变更必须同步在 `CHANGELOG.md` 顶部写一节、更新本文件头部的 `Current version` 字段。
-- git commit 后建议打 `v{版本号}` tag 并推送 origin（`scripts/release.sh` 公证完成后会交互确认是否打 tag/push）。
+- git commit 后建议打 `v{版本号}` tag 并推送 origin。发布流程见 [docs/RELEASE.md](docs/RELEASE.md)——实际执行者是 new83d 仓库的 `scripts/release_mac_apps.rb`，本仓库不再自带发布脚本。
 
 ## 国际化（i18n）
 

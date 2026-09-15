@@ -31,15 +31,20 @@ macOS 更新记录缺少 `bundle_version`、`file_size_bytes` 或有效 `ed_sign
 
 ## 发布流程
 
-`scripts/release_mac_app.rb` 在完成 Developer ID 签名、DMG 制作和 Apple 公证后，会：
+发布脚本（new83d 仓库的 `scripts/release_mac_apps.rb`，WillDeep 的 slug 是 `veilwriter`）在完成 Developer ID 签名、DMG 制作和 Apple 公证后，会：
 
 1. 调用 Sparkle 官方 `sign_update` 生成 `ed_signature` 和文件长度。
 2. 上传带版本号的 DMG，并校验远端 SHA-256。
 3. 使用 `SOMEIM_ADMIN_TOKEN` 创建或更新 muchtoken 的 `willdeep/macos/stable` 发布记录；`published_at` 使用数据库兼容的 UTC `YYYY-MM-DD HH:MM:SS` 格式。
 4. 客户端下次自动检查或用户主动检查时，经 appcast 获取并安装该版本。
 
+> **默认不执行第 3、4 步。** 发布默认带 `--skip-update-metadata`，不推送 Sparkle
+> 自动更新；产物、`latest` 链接和 GitHub Release 照常发。appcast 是推送通道，
+> 用户不点也会收到，而预发布只编 arm64——推给 Intel 存量用户会装成打不开的包，
+> 且旧版本已被覆盖。只有当次明确要发 appcast 时才去掉该参数。
+
 WillDeep 的 `release_notes_url` 固定为 `https://some.im/zh/products/willdeep/changelog`。该页面直接读取 stable appcast 当前发布记录中的 `release_notes`，因此更新窗口只展示本次发布说明，不再嵌入产品介绍页或完整仓库 CHANGELOG。发布脚本优先读取当前版本的 `### 用户可见变化`（英文可用 `### Highlights`）；未提供时仅从 Added、Changed、Fixed、Security、Removed、Deprecated 生成回退说明，Tests 与 Meta 永不进入更新弹窗。
 
-如果 DMG 已公证并上传，但最后的元数据写入失败，可执行 `release_mac_app.rb --publish-metadata-only <DMG> --release-version <VERSION> --bundle-version <BUILD>`。脚本会重新校验 DMG 签名、公证票据、OSS 版本对象和 Sparkle 签名后再补发元数据，不重复构建、公证或上传。
+如果 DMG 已公证并上传，但最后的元数据写入失败，可执行 `ruby scripts/release_mac_apps.rb --only veilwriter --publish-metadata-only <DMG> --release-version <VERSION> --bundle-version <BUILD>`（在 new83d 仓库里跑）。脚本会重新校验 DMG 签名、公证票据、OSS 版本对象和 Sparkle 签名后再补发元数据，不重复构建、公证或上传。
 
 Sparkle 私钥只保存在发布机器的登录钥匙串中，不进入源码、环境文件、构建日志或服务端数据库；客户端和仓库只保存公钥。

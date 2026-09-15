@@ -1,6 +1,11 @@
 # WillDeep 发布手册（Developer ID + 双重公证 + DMG + OSS）
 
-> 一句话：用 `ruby scripts/release_mac_app.rb` 完成测试、Release 编译、App/DMG 双重公证、Sparkle 签名、OSS 上传和 appcast 元数据发布；首次使用前需要准备 Developer ID 证书、Keychain 公证凭据和 `.env.local`。
+> 一句话：发布由 **new83d 仓库的 `scripts/release_mac_apps.rb`** 执行，本仓库不再自带发布脚本；首次使用前需要准备 Developer ID 证书、Keychain 公证凭据和 `.env.local`。
+
+> **入口变更（1.375.0-rc5）**：本仓库原有的 `scripts/release_mac_app.rb` 与
+> `scripts/release.sh` 已删除。它们在很久以前就没有任何调用方了，而本文档一直
+> 指向它们，属于误导。WillDeep 在 new83d 的发布配置里 slug 是 `veilwriter`。
+> 第一节（证书与公证凭据）和"常见坑"与具体脚本无关，仍然有效。
 
 ---
 
@@ -79,63 +84,42 @@ cp .env.example .env.local
 
 ## 二、日常发布
 
+发布在 **new83d 仓库**执行，不在本仓库：
+
 ```bash
-# 先做无副作用演练，只检查路径、版本和配置
-ruby scripts/release_mac_app.rb --dry-run
+cd ~/Sites/new83d
 
-# 完整流程：测试 → Release archive → App/DMG 公证 → Sparkle 签名 → OSS → appcast
-ruby scripts/release_mac_app.rb
+# 无副作用演练：只检查路径、版本、架构和配置
+ruby scripts/release_mac_apps.rb --only veilwriter --dry-run
 
-# 本地签名打包，不公证也不上传
-ruby scripts/release_mac_app.rb --skip-notarize --skip-upload
+# 常规预发布（rc）：默认不推 Sparkle 自动更新
+ruby scripts/release_mac_apps.rb --only veilwriter --run-tests --skip-update-metadata
 
-# 已在其他流程跑完测试时跳过测试
-ruby scripts/release_mac_app.rb --skip-tests
+# 本地验证：不公证、不上传
+ruby scripts/release_mac_apps.rb --only veilwriter --skip-notarize --skip-upload
 
-# DMG 已完成公证和 OSS 上传、但元数据阶段失败时，只校验并补发 appcast
-ruby scripts/release_mac_app.rb \
-  --publish-metadata-only build/mac-releases/veilwriter/WillDeep-1.180.0-rc1.dmg \
-  --release-version 1.180.0-rc1 \
-  --bundle-version 2
+# 完整参数
+ruby scripts/release_mac_apps.rb --help
 ```
 
-产物路径：`build/mac-releases/veilwriter/WillDeep-<版本号>.dmg`。默认上传两个对象：
+也可以直接用 `release-macos-app` skill，它封装了同一套流程。
 
-- `oss://sz-trans/mac-apps/WillDeep-<版本号>.dmg`
-- `oss://sz-trans/mac-apps/latest/WillDeep.dmg`
+### 关于 appcast（自动更新）
 
-JSON 和 Markdown 发布报告位于同一构建目录。完整发布在任一步失败时立即停止；如果仅元数据写入失败，可使用 `--publish-metadata-only` 恢复，无需重新编译、公证或上传。旧的 `scripts/release.sh` 仍保留给本地备份、tag/push 等历史工作流，但不负责 OSS 上传。
+**默认不推送 appcast**，除非当次明确要发。appcast 是推送通道，用户不点也会
+收到更新，而预发布只编 arm64——推给 Intel 存量用户会装成打不开的包，且旧版本
+已被覆盖。产物、`latest` 链接和 GitHub Release 照常发，被关掉的只是自动更新
+这一条通道。
 
-发布前的检查清单：
+### 关于架构
 
-- [ ] `CHANGELOG.md` 已经写了本次条目。
-- [ ] `MARKETING_VERSION` 已经按规则更新（bugfix 递增 rc，新功能升正式版位）。
-- [ ] 一份干净的 `git status`，没有未提交的脏改动。
-- [ ] 跑过 `xcodebuild ... build` 确认无警告。
-
----
-
-## 三、脚本做了什么（按步骤拆解）
-
-| 步 | 命令 | 干什么 |
-|---|---|---|
-| 1 | `.env.local` 白名单加载 | 只加载发布需要的凭据键；敏感值从日志中统一脱敏 |
-| 2 | `xcodebuild test` | 默认先跑 `XeditTests`，失败立即停止 |
-| 3 | `xcodebuild archive` | 以 Release 配置产出 `.xcarchive` |
-| 4 | `xcodebuild -exportArchive` | 用 `method=developer-id` 导出 Developer ID 签名的 `.app` |
-| 5 | `notarytool submit App ZIP` | 单独公证 App，成功后把票据装订到 App |
-| 6 | `create-dmg` 或 `hdiutil` | 把已装订 App 与 Applications 快捷方式打成 DMG |
-| 7 | `codesign DMG` | 使用同一 Developer ID 身份签名最终 DMG |
-| 8 | `notarytool submit DMG` | 单独公证最终分发物，成功后装订 DMG 票据 |
-| 9 | `codesign` / `stapler` / `spctl` | 校验签名、公证票据和 Gatekeeper 状态 |
-| 10 | Sparkle `sign_update` | 使用钥匙串私钥为最终 DMG 生成 Ed25519 更新签名与精确文件长度 |
-| 11 | `ossutil cp` | 上传版本对象与 `latest` 对象，并通过 `ossutil stat` 复核 |
-| 12 | some.im 管理 API | 创建或更新 `willdeep / macos / stable` 频道，写入版本、构建号、SHA-256、文件大小和签名 |
-| 13 | JSON / Markdown report | 保存全链路结果、下载地址、公证 submission ID 与各阶段耗时 |
+带 `-rc` 的版本走 arm64 快路（省约 45% 构建时间），正式版仍出 universal。
+`--arm64-only` / `--universal` 可强制覆盖。两种架构使用各自的 DerivedData
+目录，交替发布不会互相踩掉增量树。
 
 ---
 
-## 四、常见坑
+## 三、常见坑
 
 ### 公证失败：`Invalid` / `code object is not signed at all`
 - `ENABLE_HARDENED_RUNTIME` 必须是 YES（项目里已设）。
@@ -160,7 +144,7 @@ JSON 和 Markdown 发布报告位于同一构建目录。完整发布在任一�
 
 ---
 
-## 五、撤销与重发
+## 四、撤销与重发
 
 万一发出去的版本有大坑，notarization 本身没有"撤销"动作 —— 你能做的：
 
@@ -170,33 +154,3 @@ JSON 和 Markdown 发布报告位于同一构建目录。完整发布在任一�
 
 ---
 
-## 六、本地备份与快速回滚
-
-rc3 起 `release.sh` 在每次成功打包后自动把新出炉的 `.app` 与 `.dmg` 整体拷一份到：
-
-```
-build/release-history/<版本号>/
-```
-
-同时把"上一次跑过的版本号"写进 `build/release-history/latest.txt`。这套备份**不会**被下一次 `release.sh` 开头的 `rm -rf build/release` 清掉（它在 `build/release-history` 下，是同级目录）。`build/` 整目录已在 `.gitignore` 里，所以备份不会污染仓库。
-
-```bash
-# 看本地有哪些可回滚的旧版本（按时间倒序）
-scripts/release.sh --list-backups
-
-# 直接装上一个旧版本（开发机）
-open build/release-history/1.54.0/WillDeep-1.54.0.dmg
-```
-
-线上分发的真正 source of truth 仍然是 **GitHub Releases**。本地这份只是给开发机一份"还没 push 上去就先回滚"的兜底；正式回滚动作要把旧 dmg 重新放回下载页。
-
----
-
-## 七、监视 GitHub Actions
-
-`push` 到 `main` 会触发 `.github/workflows/test.yml`，在 macos-15 上跑一遍 XeditTests。本地 `release.sh` 在你确认 push 之后会同步盯一下这条 run：
-
-- 装了 `gh` CLI 时，脚本调 `gh run watch --exit-status` 同步等待。失败会打印 `gh run view --log-failed` 提示你看红条。
-- 没装 `gh` 时，脚本把仓库的 `actions/` URL 打到屏幕上让你自己开浏览器看。
-
-如果你看到 `⚠️ GitHub Actions 失败`：本地这次 release 已经成功（dmg 也备份过了），只是远程 CI 没过。先别上传 dmg 到 Releases，把 CI 问题修了再发新 rc。
