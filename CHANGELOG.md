@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.379.0-rc4 - 2026-09-17
+
+### Fixed
+
+- **插件命令契约守卫跟上出图逻辑搬家，门禁恢复全绿。** 1.378.0-rc1 把参考图路径钳制从
+  `AgentPluginAIBridge.swift` 搬进 `AgentPluginImageGeneration.swift`，`plugin_command_contract_test.rb`
+  仍只在旧文件里找钳制代码，于是报「参考图路径没有钳制」并让 `scripts/run_tests.sh` 在跑 XCTest 之前中止。
+  钳制逻辑本身没变，只改断言读取的文件。
+
 ## 1.379.0-rc3 - 2026-09-17
 
 ### Changed

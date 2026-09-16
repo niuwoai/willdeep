@@ -205,15 +205,19 @@ add_check.call(
 # and UPLOAD it to a public URL. None of this produces a compile error if it
 # regresses, and a missing face only makes the generated image subtly wrong.
 bridge_source = File.read(File.join(repo_root, "Xedit/AgentPluginAIBridge.swift"), encoding: "UTF-8")
+# 1.378.0-rc1 起出图（含参考图路径钳制）搬到 AgentPluginImageGeneration，页面与 MCP 反向请求共用。
+image_generation_source = File.read(
+  File.join(repo_root, "Xedit/AgentPluginImageGeneration.swift"), encoding: "UTF-8"
+)
 video_studio_app = File.read(
   File.join(repo_root, "PluginExamples/video-studio/ui/src/App.tsx"), encoding: "UTF-8"
 )
 
 add_check.call(
   "reference image paths are clamped to the plugin's own media root",
-  bridge_source.include?("referenceImageOutsidePluginData") &&
-    bridge_source.include?("resolvingSymlinksInPath") &&
-    bridge_source.include?("deletingLastPathComponent() == root"),
+  image_generation_source.include?("referenceImageOutsidePluginData") &&
+    image_generation_source.include?("resolvingSymlinksInPath") &&
+    image_generation_source.include?("deletingLastPathComponent() == root"),
   "uploadedReferenceImages must reject symlinks and anything outside the plugin's generated-media folder."
 )
 
