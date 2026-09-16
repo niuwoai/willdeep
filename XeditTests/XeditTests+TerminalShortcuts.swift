@@ -889,6 +889,9 @@ extension WillDeepTests {
         #expect(result.payload.contains("Command dispatch confirmed"))
         #expect(result.payload.contains("does not contain command output"))
         #expect(result.payload.contains("Automatic follow-up snapshot"))
+        // 回执已写明命令，跟随快照不再重复「最近命令」和固定规则说明。
+        #expect(!result.payload.contains("Recent AI/auto commands"))
+        #expect(!result.payload.contains("Terminal context rules"))
         #expect(result.payload.contains(marker))
         #expect(result.payload.contains(tab.id.uuidString))
         #expect(result.payload.contains("call terminal_snapshot again"))

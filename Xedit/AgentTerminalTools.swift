@@ -126,7 +126,11 @@ enum AgentTerminalTools {
         _ = await tab.resolveHostIdentity()
     }
 
-    static func snapshot(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
+    static func snapshot(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext,
+        includeRecentCommands: Bool = true
+    ) async throws -> AgentToolResult {
         guard let controller = context.terminalController else {
             throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
         }
@@ -194,9 +198,10 @@ enum AgentTerminalTools {
         } else {
             statusLine = "Agent Terminal: process has exited (showing its final visible screen)\nTab ID: \(snapshot.tabID.uuidString)\nRuntime: \(snapshot.runtimeName)"
         }
-        let recent = snapshot.recentCommands.isEmpty
-            ? "none"
-            : snapshot.recentCommands.joined(separator: "\n")
+        // 跟着命令派发自动附带的快照不带这一段：派发回执第一行已经是完整命令。
+        let recentSection = includeRecentCommands
+            ? "\nRecent AI/auto commands:\n\(recentCommandsSummary(snapshot.recentCommands))\n"
+            : ""
         let zmodemState = snapshot.isZModemTransferActive
             ? "active — the local file may exist but is still partial; do not claim transfer completion or inspect it as final data"
             : "inactive"
@@ -224,23 +229,12 @@ enum AgentTerminalTools {
         Input state: \(snapshot.inputState.rawValue)
         ZMODEM transfer: \(zmodemState)
 
-        Terminal context rules:
-        - shell_ready means the shell line editor owns input and can accept a command.
-        - foreground_task means a quiet canonical foreground program owns this PTY. Do not send a command into it; wait, interrupt it with Ctrl-C, or use another tab.
-        - interactive_program means an interactive child such as SSH, vim, tmux, or a REPL owns input. Inspect the cursor and host before sending keys.
-        - The cursor line below is the best current prompt/input indicator.
-        - Lines above the cursor marker are prior visible output/history; they may describe a previous local shell before SSH or before directory changes.
-        - If Runtime target is "local", the tab may still contain a nested manual SSH session; verify host/cwd from the cursor line or a command such as hostname/pwd before making machine-specific claims.
-
         Cursor:
         row \(snapshot.cursorRow + 1)/\(snapshot.rows), column \(snapshot.cursorColumn + 1)/\(snapshot.cols)
 
         Current cursor line:
         \(cursorLine)
-
-        Recent AI/auto commands:
-        \(recent)
-        \(earlierSection)
+        \(recentSection)\(earlierSection)
         --- latest visible screen (=> marks current cursor line) ---
         \(markedScreen)
         """
@@ -248,6 +242,28 @@ enum AgentTerminalTools {
             ? "terminal \(snapshot.inputState.rawValue): \(snapshot.runtimeName)"
             : "terminal exited: \(snapshot.runtimeName)"
         return AgentToolResult(summary: summary, payload: payload)
+    }
+
+    /// 快照里「最近命令」一段的上限。它每次快照都整段重发：2026-09-14 一次
+    /// k8s 发版回合里，这一段占了终端工具返回总量的 40%（13.4 万字符 / 26 次快照），
+    /// 长 kubectl 命令原样重复，把每轮请求越推越大。
+    nonisolated static let recentCommandsSnapshotLimit = 3
+    nonisolated static let recentCommandSnapshotCharacterLimit = 160
+
+    /// 只留最近几条、每条截断；宿主自己发的主机识别探针不是模型关心的命令，剔掉。
+    nonisolated static func recentCommandsSummary(_ commands: [String]) -> String {
+        let visible = commands.filter { $0 != AgentTerminalTab.hostIdentityProbeCommand }
+        guard !visible.isEmpty else { return "none" }
+        var lines = visible.prefix(recentCommandsSnapshotLimit).map { command -> String in
+            guard command.count > recentCommandSnapshotCharacterLimit else { return command }
+            return String(command.prefix(recentCommandSnapshotCharacterLimit))
+                + " …[\(command.count) chars]"
+        }
+        let omitted = visible.count - recentCommandsSnapshotLimit
+        if omitted > 0 {
+            lines.append("(\(omitted) older omitted)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: terminal_snapshot timeout plumbing
@@ -355,7 +371,8 @@ enum AgentTerminalTools {
                     "terminal_tab_id": .string(dispatch.terminalTabID.uuidString),
                     "max_characters": .number(6_000)
                 ],
-                context: context
+                context: context,
+                includeRecentCommands: false
             )
             return AgentToolResult(
                 summary: dispatch.result.summary,
