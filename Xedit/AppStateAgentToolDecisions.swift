@@ -771,6 +771,9 @@ extension AppState {
                let server = arguments["server"]?.stringValue(),
                !AgentMCPSettingsStore.isServerTrusted(name: server) {
                 // Fall through to the MCP trust check below.
+            } else if let route = AgentPluginMCPToolCatalog.policyRoute(exposedName: toolName),
+                      AgentMCPSettingsStore.trustLevel(id: route.serverID) == .untrusted {
+                // 同上：插件服务器后来被降为不受信时，旧的「总是允许」不再算数。
             } else {
                 return .alwaysAllowList
             }
@@ -797,6 +800,38 @@ extension AppState {
                 let pseudoCommand = AgentToolAuthorization.mcpJudgePseudoCommand(
                     server: server,
                     tool: tool,
+                    argumentsJSON: arguments["arguments_json"]?.stringValue() ?? "{}"
+                )
+                return try await checkedSafetyJudgeApproval(
+                    toolName: toolName,
+                    command: pseudoCommand,
+                    taskContext: latestUserMessage, taskRuntime: judgeRuntime
+                )
+            }
+        }
+
+        // 插件 MCP 工具的一等入口（`mcp__<服务>__<工具>`）与 `call_mcp_tool`
+        // 同一套两档策略。此前这里只认 `call_mcp_tool`，一等入口一路落到末尾
+        // 的 `return nil`：服务器设成完全信任不生效，`drama.get` 这样的读也
+        // 张张弹卡——主 Agent 跑一部短剧要几百次调用，人得一直守着点。
+        if AgentPluginMCPToolCatalog.isPluginToolName(toolName) {
+            // 目录里查不到（缓存过期、插件已停用）就交给人：调用本身随后会报错。
+            guard let route = AgentPluginMCPToolCatalog.policyRoute(exposedName: toolName) else {
+                return nil
+            }
+            switch AgentMCPSettingsStore.trustLevel(id: route.serverID) {
+            case .untrusted:
+                return nil
+            case .fullyTrusted:
+                return .trustedServer
+            case .standard:
+                guard judgeAutoApprove else { return nil }
+                if route.readOnlyHint || AgentToolAuthorization.mcpToolNameLooksReadOnly(route.toolName) {
+                    return .staticAllowlist
+                }
+                let pseudoCommand = AgentToolAuthorization.mcpJudgePseudoCommand(
+                    server: route.serverName,
+                    tool: route.toolName,
                     argumentsJSON: arguments["arguments_json"]?.stringValue() ?? "{}"
                 )
                 return try await checkedSafetyJudgeApproval(
@@ -1291,8 +1326,10 @@ extension AppState {
         "call_mcp_tool"
     ]
 
+    /// 插件 MCP 一等工具也算命令型：否则 Goal 模式的快速通道会在信任检查
+    /// 之前放行它们，被用户设成不受信的插件服务器照样自动执行。
     nonisolated static func isCommandShapedTool(_ toolName: String) -> Bool {
-        commandShapedToolNames.contains(toolName)
+        commandShapedToolNames.contains(toolName) || AgentPluginMCPToolCatalog.isPluginToolName(toolName)
     }
 
     /// Delegated coding-agent tools that ship their own approval + sandbox
@@ -1825,6 +1862,11 @@ extension AppState {
                 return false
             }
             return AgentMCPSettingsStore.trustLevel(name: server) == .fullyTrusted
+        case let pluginTool where AgentPluginMCPToolCatalog.isPluginToolName(pluginTool):
+            guard let route = AgentPluginMCPToolCatalog.policyRoute(exposedName: pluginTool) else {
+                return false
+            }
+            return AgentMCPSettingsStore.trustLevel(id: route.serverID) == .fullyTrusted
         default:
             return false
         }

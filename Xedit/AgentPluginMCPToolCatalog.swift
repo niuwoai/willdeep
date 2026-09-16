@@ -27,6 +27,21 @@ nonisolated struct AgentPluginMCPToolEntry: Codable, Equatable {
     /// 暴露给模型的名字。
     let exposedName: String
     let description: String
+    /// 服务器在 `tools/list` 里用 MCP 标准注解 `annotations.readOnlyHint` 声明
+    /// 自己只读。可选：旧缓存里没有这个键，解出来是 nil，按「没声明」处理。
+    ///
+    /// 只拿它换「标准信任下免批」，与只读名字启发式同一档：一个插件能把写工具
+    /// 起名叫 `get_x`，也就能谎报这个注解；这道口子由插件安装批准和服务器
+    /// 信任级别（可改成不受信）兜着，不在这里另设。
+    var readOnlyHint: Bool? = nil
+}
+
+/// 审批期需要的一个插件工具的全部事实。
+nonisolated struct AgentPluginMCPToolPolicyRoute: Equatable {
+    let serverID: String
+    let serverName: String
+    let toolName: String
+    let readOnlyHint: Bool
 }
 
 nonisolated enum AgentPluginMCPToolCatalog {
@@ -42,7 +57,14 @@ nonisolated enum AgentPluginMCPToolCatalog {
         var tools: [AgentPluginMCPToolEntry]
     }
 
-    private static var defaults: UserDefaults { .standard }
+    /// 测试入口：把目录缓存挪到临时 suite，不碰开发机上的真实缓存。
+    nonisolated(unsafe) private static var testDefaultsOverride: UserDefaults?
+
+    static func _setTestDefaultsOverride(_ defaults: UserDefaults?) {
+        testDefaultsOverride = defaults
+    }
+
+    private static var defaults: UserDefaults { testDefaultsOverride ?? .standard }
 
     nonisolated static func load() -> [String: ServerTools] {
         guard let data = defaults.data(forKey: defaultsKey),
@@ -145,6 +167,29 @@ nonisolated enum AgentPluginMCPToolCatalog {
         return nil
     }
 
+    /// 审批用的解析：比 `route` 多带服务器 id 和只读声明。
+    ///
+    /// 信任级别按服务器 **id** 查，不按名字：两个插件完全可以各带一个叫
+    /// `server` 的 MCP 服务，按名字查会让一个的信任设置串到另一个身上。
+    nonisolated static func policyRoute(exposedName: String) -> AgentPluginMCPToolPolicyRoute? {
+        guard exposedName.hasPrefix(exposedNamePrefix) else { return nil }
+        for (serverID, server) in load() {
+            if let tool = server.tools.first(where: { $0.exposedName == exposedName }) {
+                return AgentPluginMCPToolPolicyRoute(
+                    serverID: serverID,
+                    serverName: server.serverName,
+                    toolName: tool.rawName,
+                    readOnlyHint: tool.readOnlyHint == true
+                )
+            }
+        }
+        return nil
+    }
+
+    nonisolated static func isPluginToolName(_ toolName: String) -> Bool {
+        toolName.hasPrefix(exposedNamePrefix)
+    }
+
     /// 暴露名：`mcp__<服务器>__<工具>`，两段都做字符收敛。
     ///
     /// 分隔符用双下划线而不是单个：MCP 工具名里单下划线极常见，用单个会让
@@ -192,7 +237,9 @@ nonisolated enum AgentPluginMCPToolCatalog {
             entries.append(AgentPluginMCPToolEntry(
                 rawName: name,
                 exposedName: exposed,
-                description: (tool["description"] as? String) ?? ""
+                description: (tool["description"] as? String) ?? "",
+                // 只认布尔 true：`"true"` 字符串、缺省都不算声明。
+                readOnlyHint: ((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool) == true ? true : nil
             ))
         }
         return entries
