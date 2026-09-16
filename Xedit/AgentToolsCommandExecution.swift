@@ -131,6 +131,7 @@ extension AgentToolRunner {
                         lifetime: jobLifetime,
                         goalPhaseID: jobLifetime == .phase ? context.goalPhaseID : nil,
                         survivesTurnStop: requestedLifetime == .persistent,
+                        label: effectiveArguments["label"]?.stringValue(),
                         automaticSandboxRetryApprovalSource: context
                             .automaticBackgroundSandboxRetryApprovalSource
                     )

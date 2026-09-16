@@ -75,41 +75,59 @@ extension AgentToolRunner {
               !handle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AgentToolError.missingArgument("job_id")
         }
-        let tailLines = arguments["tail_lines"]?.intValue()
+        let tailLines = min(
+            max(arguments["tail_lines"]?.intValue() ?? jobOutputDefaultTailLines, 1),
+            jobOutputMaximumTailLines
+        )
         let snapshot: (
             job: AgentBackgroundJob,
             output: String,
-            events: [AgentExecutorEvent]
+            events: [AgentExecutorEvent],
+            logPath: String?,
+            omittedBytes: UInt64
         )? = await MainActor.run {
             guard let job = registry.job(matchingHandle: handle, runtimeID: runtimeID) else { return nil }
             return (
                 job,
                 registry.output(id: job.id, tailLines: tailLines),
-                registry.executorEvents(id: job.id)
+                registry.executorEvents(id: job.id),
+                registry.outputLogURL(id: job.id)?.path,
+                registry.outputLogDroppedBytes(id: job.id)
             )
         }
         guard let snapshot else {
             throw AgentJobError.jobNotFound(handle)
         }
-        let header = describe(job: snapshot.job)
-        let structuredEvents = tailLines.map {
-            Array(snapshot.events.suffix(max(1, $0)))
-        } ?? snapshot.events
-        let structuredBody = structuredEvents.map(structuredEventDescription).joined(separator: "\n")
+        let job = snapshot.job
+        // Same field spelling as the v1 completion notice; `running` while alive.
+        var header = [
+            job.displayHandle,
+            "status: \(job.isAlive ? "running" : AppState.backgroundNoticeStatus(for: job).rawValue)",
+            "exit_code: \(job.isAlive || job.status == .launchFailed ? "unknown" : job.exitCode.map(String.init) ?? "unknown")",
+            "duration: \(AgentBackgroundNotice.formatDuration(UInt64(max(0, job.duration).rounded(.down))))",
+            "output_path: \(snapshot.logPath ?? "none")",
+            "stderr_path: none",
+            "omitted_bytes: \(snapshot.omittedBytes)",
+        ]
+        if let receipt = receiptState(of: job) { header.append("receipt: \(receipt)") }
+        let structuredBody = snapshot.events.suffix(tailLines)
+            .map(structuredEventDescription).joined(separator: "\n")
         let body: String
-        let outputLabel: String
-        if snapshot.job.executor != nil, !structuredBody.isEmpty {
-            body = structuredBody
-            outputLabel = "events"
+        if job.executor != nil, !structuredBody.isEmpty {
+            body = "--- events ---\n\(structuredBody)"
         } else {
-            body = snapshot.output.isEmpty ? "(no output captured yet)" : snapshot.output
-            outputLabel = "output"
+            let output = snapshot.output.isEmpty ? "(no output captured yet)" : snapshot.output
+            body = "--- output (last \(tailLines) lines) ---\n\(output)"
         }
         return AgentToolResult(
-            summary: "\(snapshot.job.displayHandle): \(snapshot.job.status.rawValue)",
-            payload: "\(header)\n--- \(outputLabel) ---\n\(body)"
+            summary: "\(job.displayHandle): \(job.status.rawValue)",
+            payload: header.joined(separator: "\n") + "\n" + body
         )
     }
+
+    /// `get_job_output` returns this many lines when `tail_lines` is omitted.
+    static let jobOutputDefaultTailLines = 200
+    static let jobOutputMaximumTailLines = 2_000
 
     nonisolated private static func structuredEventDescription(
         _ event: AgentExecutorEvent
@@ -315,10 +333,15 @@ extension AgentToolRunner {
         let trimmedCommand = job.command.count > 100
             ? String(job.command.prefix(100)) + "…"
             : job.command
-        let receipt = job.monitoringFailure.map { " · \(L10n.JobReceipt.unknown): \($0)" }
-            ?? (job.isAlive && job.cancellationRequestedAt != nil ? " · \(L10n.JobReceipt.stopping)"
-                : job.isAlive && job.isReconnecting ? " · \(L10n.JobReceipt.reconnecting)" : "")
+        let receipt = receiptState(of: job).map { " · \($0)" } ?? ""
         return "\(job.displayHandle) [\(job.status.rawValue)] \(exit) · \(durationText) · pid=\(job.pid) · \(trimmedCommand)\(receipt)"
+    }
+
+    /// Remote exit-receipt state worth surfacing next to a job, if any.
+    private static func receiptState(of job: AgentBackgroundJob) -> String? {
+        job.monitoringFailure.map { "\(L10n.JobReceipt.unknown): \($0)" }
+            ?? (job.isAlive && job.cancellationRequestedAt != nil ? L10n.JobReceipt.stopping
+                : job.isAlive && job.isReconnecting ? L10n.JobReceipt.reconnecting : nil)
     }
 
     private static func hasRegisteredJob(arguments: [String: AgentJSONValue], context: AgentToolContext) async -> Bool {

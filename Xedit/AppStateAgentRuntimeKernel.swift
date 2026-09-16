@@ -251,14 +251,6 @@ extension AppState {
     @discardableResult
     func publishBackgroundJobKernelEvent(_ job: AgentBackgroundJob, runtime: AgentRuntime,
         requiresDurableHandoff: Bool = false) -> Bool {
-        let recentOutput: String? = {
-            guard job.needsAttention, job.outputByteCount > 0 else { return nil }
-            let tail = agentJobRegistry.output(id: job.id, tailLines: 40)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !tail.isEmpty else { return nil }
-            let scrubbed = AgentSandboxPolicy.scrub(tail)
-            return scrubbed.count > 4_000 ? "…" + String(scrubbed.suffix(4_000)) : scrubbed
-        }()
         let failed = job.needsAttention
         let event = AgentKernelEvent(
                 runtimeID: runtime.id,
@@ -270,7 +262,7 @@ extension AppState {
                 contentProvenance: .tool,
                 audience: .both,
                 title: job.command,
-                payload: Self.backgroundJobCompletionNotice(for: job, recentOutput: recentOutput),
+                payload: renderBackgroundJobCompletionNotice(for: job),
                 metadata: ["resource_id": job.id.uuidString, "handle": job.displayHandle],
                 dedupeKey: "background-job:\(job.id.uuidString)",
                 dedupeScope: .journal,

@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.379.0-rc1 - 2026-09-17
+
+### Added
+
+- **后台任务合同 v1：与 WillDeep CLI 共用同一套后台任务约定（`docs/BACKGROUND_TASK_CONTRACT.md`，CLI 侧 0.75.0-rc1 已落地）。**
+  对标的是 Claude Code 那种体验：命令丢后台立刻拿句柄，输出随时读尾巴，结束后在下一个边界被告知，
+  核实完接着干原来的活。本期是 Mac 这一半：
+  - **后台输出只留开头改为只留末尾，并完整落盘。** 此前 collector 在内存里保留**前** 64KB，发版、
+    全量测试这种长任务的结论恰好在被丢掉的那一段；现在内存保留最后 64KB，完整输出追加写到
+    `Application Support/WillDeep/background-jobs/<job 句柄>/output.log`（0600，单作业上限 256MB，
+    撞上限另存真实末尾），启动时清理 7 天前或超出最近 200 个的日志，还在写的不动。
+  - **完成通知统一成 v1 格式**：`id / kind / label / status / exit_code / duration / output_path /
+    stderr_path / omitted_bytes` 逐行，再跟脱敏过的尾巴——失败 40 行，**成功也带 10 行**（此前成功
+    只给字节数，模型常为了确认一句 PASS 再调一次 `get_job_output`）。executor 作业多一行 `session:`。
+    渲染器与 CLI 逐字一致，三份金样在 `docs/contracts/background-task-notification.v1.txt`。
+    `run_command` 的 `label` 现在会进通知，不再只显示原始命令。
+  - **`get_job_output` 默认返回最后 200 行**（此前省略 `tail_lines` 返回整个缓冲），头部带状态、
+    退出码、时长和日志路径；要全量就去 `output_path` 里 grep。
+  - **系统提示词嵌入两端逐字相同的一段后台用法**（v38，破一次前缀缓存，三档快照哈希已重录）：
+    不许 sleep 或轮询等结果、通知到了先核实再回原任务、没收到通知前不许宣称成功、不要的作业用
+    `kill_job` 收掉。Mac 独有的规则保留：可识别命令自动转后台、phase/persistent 生命周期、
+    验证期间改了输入要判结果作废并重跑。
+
+### Known issues
+
+- 完整日志只接了本地 shell 作业；executor 作业（JSON 事件流）与远端 daemon 作业暂未落盘，
+  通知里 `output_path` 为 `none`。
+
 ## 1.378.0-rc1 - 2026-09-17
 
 ### Added

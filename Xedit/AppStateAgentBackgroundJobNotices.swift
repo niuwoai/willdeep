@@ -3,67 +3,88 @@
 //  WillDeep
 //
 //  Split out of AppStateAgentLoop.swift to keep files under the repository
-//  size limit. The nonisolated builder for the notice injected back into the
-//  conversation when a backgrounded run_command job finishes. The media-task
-//  counterpart lives with its siblings in AppStateAgentMediaTaskNotices.swift.
+//  size limit. Builds the notice injected back into the conversation when a
+//  backgrounded run_command job finishes, in the shared v1 format
+//  (docs/BACKGROUND_TASK_CONTRACT.md). The media-task counterpart lives with
+//  its siblings in AppStateAgentMediaTaskNotices.swift.
 //
 
 import Foundation
 
+private enum BackgroundJobNoticeLimits {
+    /// Enough for the renderer's longest tail (failure: 40 lines); the
+    /// renderer itself cuts completed shell jobs down to 10.
+    static let tailLines = AgentBackgroundNotice.failureTailLines
+}
+
 extension AppState {
-    /// Build the `<background-task-notification>` body the agent loop
-    /// pushes into the model when a backgrounded `run_command` job
-    /// finishes. Kept short and unambiguous: the model should react to
-    /// it (summarize, follow up, kick off next steps) or quietly note
-    /// it depending on the originating user intent.
+    /// Render the `<background-task-notification>` v1 body for a finished
+    /// background job.
     ///
-    /// `recentOutput` is an already-tailed, already-secret-redacted slice
-    /// the caller inlines for jobs that need attention (failed / timed out
-    /// / launch failed). Surfacing *why* a job failed in the notice itself
-    /// saves the model a `get_job_output` round-trip before it can react —
-    /// without it, a backgrounded `docker build` that fails just reads as
-    /// "exit=1, 5 KB captured" and the model has to fetch the log to learn
-    /// anything. Pass `nil` (the default) for success / killed jobs, which
-    /// keep the lighter byte-count hint.
+    /// `recentOutput` is an already-tailed, already-scrubbed slice; the
+    /// renderer applies the contract's own tail length and per-line
+    /// redaction on top. `outputPath` is the full log on disk (nil when it
+    /// was never written) and `omittedBytes` the bytes the log's size cap
+    /// dropped.
     nonisolated static func backgroundJobCompletionNotice(
         for job: AgentBackgroundJob,
-        recentOutput: String? = nil
+        recentOutput: String? = nil,
+        outputPath: String? = nil,
+        omittedBytes: UInt64 = 0
     ) -> String {
-        let durationText: String = {
-            let total = Int(job.duration.rounded())
-            if total < 60 { return "\(total)s" }
-            let m = total / 60, s = total % 60
-            if m < 60 { return "\(m)m\(s)s" }
-            let h = m / 60, mm = m % 60
-            return "\(h)h\(mm)m"
-        }()
-        let exitText = job.exitCode.map { "exit=\($0)" } ?? "exit=?"
-        let trimmedCommand = job.command.count > 200
-            ? String(job.command.prefix(200)) + "…"
-            : job.command
-        let outputHint = job.outputByteCount > 0
-            ? "\(job.outputByteCount) bytes of output captured — call `get_job_output(job_id: \"\(job.displayHandle)\")` to read."
-            : "no output captured."
+        let session = job.executor.flatMap { executor in
+            job.executorSessionID.map { "\(executor.rawValue) \($0)" }
+        }
+        let status = backgroundNoticeStatus(for: job)
+        return AgentBackgroundNotice.render(AgentBackgroundNotice.Notice(
+            id: job.displayHandle,
+            kind: job.executor == nil ? .shell : .executor,
+            label: job.label ?? job.command,
+            status: status,
+            // A launch failure never produced a process; its stored -1 is a
+            // placeholder, not an exit status.
+            exitCode: status == .launchFailed ? nil : job.exitCode,
+            durationSeconds: job.finishedAt.map { finishedAt in
+                UInt64(max(0, finishedAt.timeIntervalSince(job.startedAt)).rounded(.down))
+            },
+            outputPath: outputPath,
+            stderrPath: nil,
+            omittedBytes: omittedBytes,
+            output: recentOutput ?? "",
+            executorSession: session
+        ))
+    }
 
-        var lines = [
-            "<background-task-notification>",
-            "Background job \(job.displayHandle) finished while you were not in this turn.",
-            "Command: \(trimmedCommand)",
-            "Status: \(job.status.rawValue) (\(exitText)), duration \(durationText).",
-            outputHint
-        ]
-        if let executor = job.executor, let sessionID = job.executorSessionID {
-            lines.append(
-                "Reusable session: executor=\(executor.rawValue), session_id=\(sessionID)."
-            )
+    /// Contract status for a registry job. A lost monitoring channel is
+    /// reported as a failure: the host could not confirm the outcome.
+    nonisolated static func backgroundNoticeStatus(for job: AgentBackgroundJob) -> AgentBackgroundNotice.Status {
+        if job.monitoringFailure != nil { return .failed }
+        switch job.status {
+        case .completed: return .completed
+        case .failed: return .failed
+        case .killed: return .killed
+        case .timedOut: return .timedOut
+        case .launchFailed: return .launchFailed
+        // A "finished" job that is still marked running left no exit status.
+        case .running: return .vanished
         }
-        if let recentOutput, !recentOutput.isEmpty {
-            lines.append("Recent output (tail, secrets redacted):")
-            lines.append("```")
-            lines.append(recentOutput)
-            lines.append("```")
-        }
-        lines.append("</background-task-notification>")
-        return lines.joined(separator: "\n")
+    }
+
+    /// The single place both delivery paths (next-turn system message and
+    /// runtime-kernel event) build a finished job's notice from: every
+    /// finished job carries its scrubbed tail, log path and dropped bytes.
+    func renderBackgroundJobCompletionNotice(for job: AgentBackgroundJob) -> String {
+        Self.backgroundJobCompletionNotice(
+            for: job,
+            recentOutput: backgroundJobNoticeTail(job),
+            outputPath: agentJobRegistry.outputLogURL(id: job.id)?.path,
+            omittedBytes: agentJobRegistry.outputLogDroppedBytes(id: job.id)
+        )
+    }
+
+    private func backgroundJobNoticeTail(_ job: AgentBackgroundJob) -> String? {
+        let tail = agentJobRegistry.output(id: job.id, tailLines: BackgroundJobNoticeLimits.tailLines)
+        guard !tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return AgentSandboxPolicy.scrub(tail)
     }
 }

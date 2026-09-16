@@ -68,7 +68,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v37 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v38 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -81,7 +81,7 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v37")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v38")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 
@@ -104,6 +104,26 @@ struct AgentContextBuilderPromptTests {
         #expect(compact.contains("result as stale"))
         #expect(standard.contains("CHANGELOG"))
         #expect(standard.contains("Never edit source code, build configuration"))
+    }
+
+    @Test("both profiles embed the shared background-task paragraph verbatim")
+    func testStablePromptEmbedsSharedBackgroundTaskContract() throws {
+        let doc = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("docs/BACKGROUND_TASK_CONTRACT.md"),
+            encoding: .utf8
+        )
+        let appendix = try #require(doc.components(separatedBy: "## 附录 A").last)
+        let fenced = appendix.components(separatedBy: "```")
+        #expect(fenced.count >= 3)
+        let paragraph = fenced[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(paragraph.hasPrefix("Background work:"))
+        for profile in [AgentSystemPromptProfile.standard, .compact] {
+            let prompt = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true, promptProfile: profile)
+            #expect(prompt.contains(paragraph), "\(profile.rawValue) must embed appendix A verbatim")
+        }
     }
 
     @Test("delegation contract separates six responsibilities from model tiers")

@@ -1,10 +1,5 @@
 import Foundation
 
-private enum BackgroundCompletionLimits {
-    static let tailLines = 40
-    static let outputCharacters = 4_000
-}
-
 extension AppState {
     func appendPendingBackgroundJobCompletions(for runtime: AgentRuntime, excluding resourceKeys: Set<String>) {
         let pending = agentJobRegistry.consumePendingCompletions(forRuntime: runtime.id)
@@ -14,8 +9,7 @@ extension AppState {
                   !agentRuntimeKernel.hasPendingEvent(runtimeID: runtime.id,
                     source: .backgroundJob, resourceID: job.id) else { continue }
             runtime.messages.append(AgentMessage(role: .system,
-                content: Self.backgroundJobCompletionNotice(for: job,
-                    recentOutput: backgroundCompletionOutput(job))))
+                content: renderBackgroundJobCompletionNotice(for: job)))
         }
     }
 
@@ -29,15 +23,5 @@ extension AppState {
             NSLog("Daemon completion retained pending receipt reconciliation")
             return true
         }
-    }
-
-    private func backgroundCompletionOutput(_ job: AgentBackgroundJob) -> String? {
-        guard job.needsAttention, job.outputByteCount > 0 else { return nil }
-        let tail = agentJobRegistry.output(id: job.id, tailLines: BackgroundCompletionLimits.tailLines)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tail.isEmpty else { return nil }
-        let scrubbed = AgentSandboxPolicy.scrub(tail)
-        let maximum = BackgroundCompletionLimits.outputCharacters
-        return scrubbed.count > maximum ? "…" + String(scrubbed.suffix(maximum)) : scrubbed
     }
 }

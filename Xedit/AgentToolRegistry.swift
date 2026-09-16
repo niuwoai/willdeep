@@ -293,11 +293,11 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "get_job_output",
-            description: "Read the captured stdout/stderr buffer for a background job. Pass the short handle (e.g. `job_ab12cd`) or full UUID. Read-only.",
+            description: "Read a background job's status and the last lines of its captured output (default 200). Pass the short handle (e.g. `job_ab12cd`) or full UUID. The complete log is at the returned `output_path`; search it with read_file or grep instead of requesting everything. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "job_id", type: .string, description: "Job handle from `list_jobs` or the `run_command` response (e.g. `job_ab12cd`).", required: true),
-                AgentToolParameter(name: "tail_lines", type: .integer, description: "Only return the last N lines of output. Omit to return the full buffer.", required: false)
+                AgentToolParameter(name: "tail_lines", type: .integer, description: "Number of trailing output lines to return, 1-2000. Defaults to 200.", required: false)
             ]
         ),
         AgentToolDescriptor(

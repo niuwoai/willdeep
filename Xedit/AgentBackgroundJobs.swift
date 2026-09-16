@@ -92,6 +92,9 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     var terminationRequestStatus: Status? = nil
     var monitoringFailure: String? = nil
     var isReconnecting = false
+    /// Optional user-facing `label` passed to `run_command`, already
+    /// redacted. Completion notices prefer it over the raw command.
+    var label: String? = nil
 
     nonisolated var isAlive: Bool { status == .running }
     nonisolated var needsAttention: Bool {
@@ -130,6 +133,7 @@ private struct AgentBackgroundSandboxRetrySpecification {
     let lifetime: AgentBackgroundJobLifetime
     let goalPhaseID: String?
     let survivesTurnStop: Bool
+    let label: String?
 }
 
 /// Per-app registry of background jobs. One instance lives on
@@ -191,10 +195,25 @@ final class AgentJobRegistry: ObservableObject {
         recordRemoteMonitoringFailure(id: receipt.id, detail: L10n.JobReceipt.recoveryUnavailable)
     }
 
-    init(daemonStartDirectory: URL? = nil) {
+    /// Root of the per-job full output logs (`<handle>/output.log`).
+    let outputLogRootDirectory: URL
+
+    init(daemonStartDirectory: URL? = nil, outputLogRootDirectory: URL? = nil) {
         daemonStartJournal = .init(directory: daemonStartDirectory
             ?? AgentSessionStore.directory.appendingPathComponent("daemon-start-receipts", isDirectory: true))
+        let logRoot = outputLogRootDirectory ?? AgentJobOutputLogSink.defaultRootDirectory
+        self.outputLogRootDirectory = logRoot
+        // A fresh registry owns no alive jobs; directories still being written
+        // by another window's registry are skipped inside `prune`.
+        Self.logRetentionQueue.async {
+            AgentJobOutputLogSink.prune(rootDirectory: logRoot)
+        }
     }
+
+    private static let logRetentionQueue = DispatchQueue(
+        label: "com.willdeep.agent-background-jobs.log-retention",
+        qos: .utility
+    )
 
     /// Process termination and timeout escalation must not share the
     /// global utility queue. Under a cold Xcode test build that queue can
@@ -289,6 +308,7 @@ final class AgentJobRegistry: ObservableObject {
         lifetime: AgentBackgroundJobLifetime = .turn,
         goalPhaseID: String? = nil,
         survivesTurnStop: Bool = false,
+        label: String? = nil,
         automaticSandboxRetryApprovalSource: AgentToolApprovalSource? = nil
     ) throws -> AgentBackgroundJob {
         try checkTurnAdmission(runtimeID: runtimeID, turnID: turnID)
@@ -298,6 +318,11 @@ final class AgentJobRegistry: ObservableObject {
         }
         let visibleCommand = (displayCommand ?? AgentSecretStore.redact(trimmed, secretValues: secretRedactionValues))
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let visibleLabel: String? = label.flatMap { raw -> String? in
+            let redacted = AgentSecretStore.redact(raw, secretValues: secretRedactionValues)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return redacted.isEmpty ? nil : redacted
+        }
 
         let id = UUID()
         let shortID = String(id.uuidString.prefix(6)).lowercased()
@@ -324,7 +349,8 @@ final class AgentJobRegistry: ObservableObject {
                 approvalSource: automaticSandboxRetryApprovalSource,
                 lifetime: lifetime,
                 goalPhaseID: goalPhaseID,
-                survivesTurnStop: survivesTurnStop
+                survivesTurnStop: survivesTurnStop,
+                label: visibleLabel
             )
         }
 
@@ -354,7 +380,11 @@ final class AgentJobRegistry: ObservableObject {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        let collector = AgentJobOutputCollector(limit: Self.maxOutputBytes, secretRedactionValues: secretRedactionValues)
+        let collector = AgentJobOutputCollector(
+            limit: Self.maxOutputBytes,
+            secretRedactionValues: secretRedactionValues,
+            logSink: AgentJobOutputLogSink(rootDirectory: outputLogRootDirectory, jobHandle: "job_\(shortID)")
+        )
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if !data.isEmpty { collector.append(data, stream: .stdout) }
@@ -388,10 +418,12 @@ final class AgentJobRegistry: ObservableObject {
                 outputByteCount: 0,
                 lifetime: lifetime,
                 goalPhaseID: goalPhaseID,
-                survivesTurnStop: survivesTurnStop
+                survivesTurnStop: survivesTurnStop,
+                label: visibleLabel
             )
             insertOrUpdate(job)
             collector.appendString(error.localizedDescription, stream: .stderr)
+            collector.finishLog()
             processes[id] = AgentJobProcess(process: process, collector: collector)
             pendingCompletionEvents[runtimeID, default: []].append(id)
             return job
@@ -416,7 +448,8 @@ final class AgentJobRegistry: ObservableObject {
             outputByteCount: 0,
             lifetime: lifetime,
             goalPhaseID: goalPhaseID,
-            survivesTurnStop: survivesTurnStop
+            survivesTurnStop: survivesTurnStop,
+            label: visibleLabel
         )
         let processBox = AgentJobProcess(process: process, collector: collector)
         processes[id] = processBox
@@ -1080,6 +1113,18 @@ final class AgentJobRegistry: ObservableObject {
         return lines.suffix(tailLines).joined(separator: "\n")
     }
 
+    /// Full combined output log for a local shell job, when it was written.
+    func outputLogURL(id: UUID) -> URL? {
+        guard let url = processes[id]?.collector.logURL,
+              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
+    }
+
+    /// Bytes the full log could not keep because of its size cap.
+    func outputLogDroppedBytes(id: UUID) -> UInt64 {
+        processes[id]?.collector.droppedLogBytes ?? 0
+    }
+
     func executorEvents(id: UUID) -> [AgentExecutorEvent] {
         processes[id]?.executorEventCollector?.snapshot
             ?? managedExecutorEvents[id]
@@ -1317,6 +1362,9 @@ final class AgentJobRegistry: ObservableObject {
         wasKilled: Bool
     ) {
         guard let index = jobs.firstIndex(where: { $0.id == id }) else { return }
+        // Runs after every return below, including the sandbox-retry branch
+        // that appends its hand-off note to this job's output first.
+        defer { processes[id]?.collector.finishLog() }
         var updated = jobs[index]
         let collectedEvents = processes[id]?.executorEventCollector?.snapshot ?? []
         applyExecutorEvents(collectedEvents, to: &updated)
@@ -1385,6 +1433,7 @@ final class AgentJobRegistry: ObservableObject {
                lifetime: specification.lifetime,
                goalPhaseID: specification.goalPhaseID,
                survivesTurnStop: specification.survivesTurnStop,
+               label: specification.label,
                automaticSandboxRetryApprovalSource: nil
            ) {
             processes[id]?.collector.appendString(
@@ -1645,12 +1694,17 @@ private nonisolated final class AgentExecutorEventCollector: @unchecked Sendable
     }
 }
 
-/// Thread-safe rolling output buffer with a byte cap — same shape as
-/// the foreground `CommandOutputCollector` but reusable across job
-/// lifetimes and exposed for tail-reads.
+/// Thread-safe rolling output buffer that keeps the LAST `limit` bytes of
+/// each stream — a release or full test run puts its verdict at the end, so
+/// the head is the part that can be dropped. The optional log sink receives
+/// every combined-stream byte (after injected-secret replacement) so the
+/// complete output stays readable at `output_path`.
 private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
+    static let earlierOutputOmittedMarker = "...[earlier output omitted]\n"
+
     private let limit: Int
     private let secretRedactionValues: [String]
+    private let logSink: AgentJobOutputLogSink?
     private let lock = NSLock()
     private var combinedData = Data()
     private var stdoutData = Data()
@@ -1659,9 +1713,25 @@ private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
     private var stdoutTruncated = false
     private var stderrTruncated = false
 
-    init(limit: Int, secretRedactionValues: [String] = []) {
+    init(limit: Int, secretRedactionValues: [String] = [], logSink: AgentJobOutputLogSink? = nil) {
         self.limit = limit
         self.secretRedactionValues = secretRedactionValues
+        self.logSink = logSink
+    }
+
+    var logURL: URL? { logSink?.logURL }
+
+    var droppedLogBytes: UInt64 {
+        lock.lock(); defer { lock.unlock() }
+        return logSink?.droppedBytes ?? 0
+    }
+
+    /// Job terminated: persist the in-memory combined tail and the dropped
+    /// byte count next to the log.
+    func finishLog() {
+        guard let logSink else { return }
+        lock.lock(); defer { lock.unlock() }
+        logSink.finish(tail: combinedData)
     }
 
     func append(_ chunk: Data, stream: AgentJobOutputStream) {
@@ -1678,7 +1748,8 @@ private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
 
     private func appendRaw(_ chunk: Data, stream: AgentJobOutputStream) {
         lock.lock(); defer { lock.unlock() }
-        Self.appendBounded(
+        logSink?.write(chunk)
+        Self.appendKeepingTail(
             chunk,
             to: &combinedData,
             truncated: &combinedTruncated,
@@ -1688,14 +1759,14 @@ private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
         case .combined:
             break
         case .stdout:
-            Self.appendBounded(
+            Self.appendKeepingTail(
                 chunk,
                 to: &stdoutData,
                 truncated: &stdoutTruncated,
                 limit: limit
             )
         case .stderr:
-            Self.appendBounded(
+            Self.appendKeepingTail(
                 chunk,
                 to: &stderrData,
                 truncated: &stderrTruncated,
@@ -1704,19 +1775,39 @@ private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
         }
     }
 
-    private static func appendBounded(
+    /// Append, then drop from the front until at most `limit` bytes remain.
+    private static func appendKeepingTail(
         _ chunk: Data,
         to destination: inout Data,
         truncated: inout Bool,
         limit: Int
     ) {
-        let remaining = max(0, limit - destination.count)
-        if remaining > 0 {
-            destination.append(chunk.prefix(remaining))
+        guard limit > 0 else {
+            truncated = truncated || !chunk.isEmpty
+            return
         }
-        if chunk.count > remaining {
+        if chunk.count >= limit {
+            truncated = truncated || !destination.isEmpty || chunk.count > limit
+            destination = Data(chunk.suffix(limit))
+            return
+        }
+        destination.append(chunk)
+        if destination.count > limit {
+            destination = Data(destination.suffix(limit))
             truncated = true
         }
+    }
+
+    /// Dropping from the front can split a multi-byte UTF-8 sequence; skip
+    /// the orphaned continuation bytes so the rest still decodes.
+    private static func decodeTail(_ data: Data, truncated: Bool) -> String {
+        var slice = data[...]
+        if truncated {
+            while let first = slice.first, first & 0b1100_0000 == 0b1000_0000 {
+                slice = slice.dropFirst()
+            }
+        }
+        return String(data: slice, encoding: .utf8) ?? String(decoding: slice, as: UTF8.self)
     }
 
     func appendString(
@@ -1748,8 +1839,8 @@ private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
             didTruncate = stderrTruncated
         }
         lock.unlock()
-        var text = String(data: snapshot, encoding: .utf8) ?? ""
-        if didTruncate { text += "\n...[truncated]" }
+        var text = Self.decodeTail(snapshot, truncated: didTruncate)
+        if didTruncate { text = Self.earlierOutputOmittedMarker + text }
         return AgentSecretStore.redact(text, secretValues: secretRedactionValues)
     }
 }

@@ -307,30 +307,46 @@ struct AgentBackgroundJobsTests {
     /// handle, command, status, exit code, output hint.
     @Test
     func completionNoticeIncludesAllFields() {
-        let job = makeStubJob(
+        var job = makeStubJob(
             command: "npm test",
             status: .completed,
             exitCode: 0,
-            finishedAfter: 12,
+            finishedAfter: 12.9,
             outputByteCount: 432
         )
 
-        let notice = AppState.backgroundJobCompletionNotice(for: job)
-        #expect(notice.contains("<background-task-notification>"))
-        #expect(notice.contains("</background-task-notification>"))
-        #expect(notice.contains(job.displayHandle))
-        #expect(notice.contains("npm test"))
-        #expect(notice.contains("completed"))
-        #expect(notice.contains("exit=0"))
-        #expect(notice.contains("get_job_output"))
+        let notice = AppState.backgroundJobCompletionNotice(
+            for: job,
+            recentOutput: "ok\n",
+            outputPath: "/tmp/jobs/\(job.displayHandle)/output.log",
+            omittedBytes: 7
+        )
+        #expect(notice == """
+        <background-task-notification>
+        id: \(job.displayHandle)
+        kind: shell
+        label: npm test
+        status: completed
+        exit_code: 0
+        duration: 12s
+        output_path: /tmp/jobs/\(job.displayHandle)/output.log
+        stderr_path: none
+        omitted_bytes: 7
+        output_tail (last 10 lines, secrets redacted):
+        ```text
+        ok
+        ```
+        </background-task-notification>
+        """)
+
+        job.label = "运行前端测试"
+        #expect(AppState.backgroundJobCompletionNotice(for: job).contains("label: 运行前端测试\n"))
     }
 
-    /// When a job exits with no captured output (e.g. `true`), the
-    /// notice should NOT advertise a `get_job_output` call — that
-    /// would be a waste of a model turn. Verify the empty-output
-    /// branch of the notice helper instead points the model elsewhere.
+    /// A job with no captured output renders the contract's empty tail
+    /// marker, and a host without a log file reports `output_path: none`.
     @Test
-    func completionNoticeOmitsOutputHintWhenEmpty() {
+    func completionNoticeRendersEmptyTailWhenNoOutput() {
         let job = makeStubJob(
             command: "true",
             status: .completed,
@@ -340,22 +356,21 @@ struct AgentBackgroundJobsTests {
         )
 
         let notice = AppState.backgroundJobCompletionNotice(for: job)
-        #expect(notice.contains("no output captured"))
-        #expect(notice.contains("get_job_output") == false)
+        #expect(notice.contains("output_path: none\n"))
+        #expect(notice.contains("output_tail: (empty)\n"))
+        #expect(notice.contains("output_tail (") == false)
     }
 
     /// Failed jobs (e.g. a backgrounded `docker build`) inline a tail of
-    /// recent output in the completion notice so the model can diagnose
-    /// *why* it failed in the same turn, instead of burning a round on
-    /// get_job_output. Verify the rendered notice carries the exit code,
-    /// the fenced tail, and still keeps the full-log hint.
+    /// recent output so the model can diagnose *why* it failed in the same
+    /// turn, instead of burning a round on get_job_output.
     @Test
     func completionNoticeInlinesRecentOutputForFailure() {
         let job = makeStubJob(
             command: "docker build .",
             status: .failed,
             exitCode: 1,
-            finishedAfter: 30,
+            finishedAfter: 3_725,
             outputByteCount: 2048
         )
 
@@ -363,30 +378,35 @@ struct AgentBackgroundJobsTests {
             for: job,
             recentOutput: "Step 7/9 : RUN make\nmake: *** [build] Error 2"
         )
-        #expect(notice.contains("failed"))
-        #expect(notice.contains("exit=1"))
-        #expect(notice.contains("Recent output (tail, secrets redacted):"))
-        #expect(notice.contains("make: *** [build] Error 2"))
-        // Full-log hint stays so the model can fetch more if the tail
-        // isn't enough.
-        #expect(notice.contains("get_job_output"))
+        #expect(notice.contains("status: failed\nexit_code: 1\nduration: 1h2m5s\n"))
+        #expect(notice.contains("output_tail (last 40 lines, secrets redacted):\n```text\nStep 7/9"))
+        #expect(notice.contains("make: *** [build] Error 2\n```"))
     }
 
-    /// Without inlined output (the default, used for success / killed
-    /// jobs) the notice must NOT grow a "Recent output" block — that path
-    /// stays as lean as before.
+    /// Host-side states map onto the contract's snake_case statuses: a lost
+    /// monitoring channel is a failure, a launch failure has no exit code,
+    /// and executor jobs expose their reusable session on one extra line.
     @Test
-    func completionNoticeOmitsRecentOutputBlockWhenNil() {
-        let job = makeStubJob(
-            command: "npm test",
-            status: .completed,
-            exitCode: 0,
-            finishedAfter: 5,
-            outputByteCount: 128
-        )
+    func completionNoticeMapsHostStatesOntoContract() {
+        var timedOut = makeStubJob(status: .timedOut, exitCode: 15, finishedAfter: 2)
+        #expect(AppState.backgroundJobCompletionNotice(for: timedOut).contains("status: timed_out\n"))
+        timedOut.monitoringFailure = "stream lost"
+        #expect(AppState.backgroundJobCompletionNotice(for: timedOut).contains("status: failed\n"))
 
-        let notice = AppState.backgroundJobCompletionNotice(for: job)
-        #expect(notice.contains("Recent output") == false)
+        let launchFailed = makeStubJob(status: .launchFailed, exitCode: -1, finishedAfter: 0)
+        let launchNotice = AppState.backgroundJobCompletionNotice(for: launchFailed)
+        #expect(launchNotice.contains("status: launch_failed\nexit_code: unknown\nduration: 0s\n"))
+
+        let running = makeStubJob(status: .running)
+        #expect(AppState.backgroundJobCompletionNotice(for: running).contains("status: vanished\n"))
+        #expect(AppState.backgroundJobCompletionNotice(for: running).contains("duration: unknown\n"))
+
+        var executor = makeStubJob(status: .completed, exitCode: 0, finishedAfter: 3)
+        executor.executor = .codexCLI
+        executor.executorSessionID = "session-123"
+        let executorNotice = AppState.backgroundJobCompletionNotice(for: executor)
+        #expect(executorNotice.contains("kind: executor\n"))
+        #expect(executorNotice.contains("omitted_bytes: 0\nsession: codexCLI session-123\n"))
     }
 
     /// The tail the agent loop inlines is run through
@@ -876,6 +896,88 @@ struct AgentBackgroundJobsTests {
         let full = registry.output(id: job.id, tailLines: nil)
         #expect(full.contains("line1"))
         #expect(full.contains("line4"))
+    }
+
+    /// Contract v1: memory keeps the LAST 64KB (the verdict lives at the end)
+    /// while the full combined stream lands in `<handle>/output.log`, with
+    /// the tail sidecar written on termination.
+    @Test
+    func largeOutputKeepsTailInMemoryAndFullLogOnDisk() async throws {
+        let logRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-job-logs-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: logRoot) }
+        let registry = AgentJobRegistry(outputLogRootDirectory: logRoot)
+        let job = try registry.start(
+            command: "i=0; while [ $i -lt 3000 ]; do echo \"line $i padding-padding-padding-padding\"; i=$((i+1)); done; echo RESULT=42",
+            workingDirectory: nil,
+            runtimeID: UUID(),
+            timeoutSeconds: nil
+        )
+        #expect(await waitUntilFinished(registry: registry, id: job.id))
+
+        let output = registry.output(id: job.id, tailLines: nil)
+        #expect(output.hasPrefix("...[earlier output omitted]\n"))
+        #expect(output.hasSuffix("RESULT=42\n"))
+        #expect(output.contains("line 0 ") == false)
+
+        let logURL = try #require(registry.outputLogURL(id: job.id))
+        #expect(logURL.path == logRoot.appendingPathComponent("\(job.displayHandle)/output.log").path)
+        let log = try String(contentsOf: logURL, encoding: .utf8)
+        #expect(log.hasPrefix("line 0 "))
+        #expect(log.components(separatedBy: "\n").count == 3_002)
+        #expect(registry.outputLogDroppedBytes(id: job.id) == 0)
+        let attributes = try FileManager.default.attributesOfItem(atPath: logURL.path)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+        let tail = try String(contentsOf: logURL.appendingPathExtension("tail"), encoding: .utf8)
+        #expect(tail.hasSuffix("RESULT=42\n"))
+        #expect(FileManager.default.fileExists(atPath: logURL.appendingPathExtension("dropped").path) == false)
+
+        let notice = AppState.backgroundJobCompletionNotice(
+            for: try #require(registry.job(id: job.id)),
+            recentOutput: registry.output(id: job.id, tailLines: 40),
+            outputPath: logURL.path
+        )
+        #expect(notice.contains("RESULT=42\n```"))
+        #expect(notice.contains("output_path: \(logURL.path)\n"))
+
+        let context = AgentToolContext(rootDirectory: nil, runtimeID: job.runtimeID,
+                                       jobRegistry: registry, sandboxMode: .escalated)
+        let defaultRead = try await AgentToolRunner.getJobOutput(
+            arguments: ["job_id": .string(job.displayHandle)], context: context)
+        #expect(defaultRead.payload.hasPrefix("""
+        \(job.displayHandle)
+        status: completed
+        exit_code: 0
+        """))
+        #expect(defaultRead.payload.contains("output_path: \(logURL.path)\nstderr_path: none\nomitted_bytes: 0\n--- output (last 200 lines) ---\n"))
+        #expect(defaultRead.payload.hasSuffix("RESULT=42"))
+        let shortRead = try await AgentToolRunner.getJobOutput(
+            arguments: ["job_id": .string(job.displayHandle), "tail_lines": .number(5)], context: context)
+        #expect(shortRead.payload.components(separatedBy: "---\n").last?.components(separatedBy: "\n").count == 5)
+    }
+
+    /// Retention: finished job directories older than 7 days, or beyond the
+    /// newest 200, are removed; explicitly alive ones never are.
+    @Test
+    func outputLogRetentionPrunesOldAndOverflowDirectories() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-job-prune-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let now = Date()
+        func makeDirectory(_ name: String, age: TimeInterval) throws {
+            let url = root.appendingPathComponent(name, isDirectory: true)
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: url.path)
+        }
+        try makeDirectory("job_old001", age: 8 * 24 * 3600)
+        try makeDirectory("job_alive1", age: 9 * 24 * 3600)
+        for index in 0..<201 {
+            try makeDirectory(String(format: "job_n%05d", index), age: TimeInterval(index))
+        }
+        let removed = AgentJobOutputLogSink.prune(rootDirectory: root, now: now, excluding: ["job_alive1"])
+            .map(\.lastPathComponent)
+        #expect(Set(removed) == ["job_old001", "job_n00200"])
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("job_alive1").path))
     }
 
     /// Empty / not-yet-started buffer returns an empty string,
