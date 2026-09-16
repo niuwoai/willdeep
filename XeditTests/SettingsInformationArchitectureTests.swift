@@ -89,10 +89,20 @@ struct SettingsInformationArchitectureTests {
             .pet,
             .agentAppearance,
             .general,
+            .dataAndDiagnostics,
         ])
         #expect(SettingsGroup.agentAppearance.tabs == [.agentAppearance])
         #expect(EditorSettingsTab.agentAppearance.group == .agentAppearance)
-        #expect(SettingsGroup.allCases.suffix(2) == [.agentAppearance, .general])
+        #expect(SettingsGroup.allCases.suffix(3) == [.agentAppearance, .general, .dataAndDiagnostics])
+        // 1.376.0-rc2：「更新」这一组此前既叫「更新」又装着隐私与诊断导出，
+        // 组名和内容对不上。拆开之后它只剩更新检查一项（`tabs.count == 1`
+        // 会让二级 picker 自动消失），隐私与诊断导出移入「数据与诊断」——
+        // 两者管的是同一个对象：这台机器上关于你的数据往哪儿去。
+        #expect(SettingsGroup.general.tabs == [.updates])
+        #expect(SettingsGroup.dataAndDiagnostics.tabs == [.privacy, .diagnostics])
+        #expect(EditorSettingsTab.updates.group == .general)
+        #expect(EditorSettingsTab.privacy.group == .dataAndDiagnostics)
+        #expect(EditorSettingsTab.diagnostics.group == .dataAndDiagnostics)
         #expect(SettingsGroup.localModels.tabs == [.localModels])
         #expect(EditorSettingsTab.localModels.group == .localModels)
         #expect(SettingsGroup.ai.tabs == [.agent, .notifications, .memory, .rules])
@@ -115,6 +125,8 @@ struct SettingsInformationArchitectureTests {
         let groupedTabs = SettingsGroup.allCases.flatMap(\.tabs)
         #expect(Set(groupedTabs).count == groupedTabs.count)
         #expect(groupedTabs.contains(.updates))
+        #expect(groupedTabs.contains(.privacy))
+        #expect(groupedTabs.contains(.diagnostics))
         #expect(groupedTabs.contains(.agentAppearance))
         #expect(groupedTabs.contains(.subagents))
     }

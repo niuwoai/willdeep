@@ -104,7 +104,11 @@ extension EditorSettingsTab {
     /// (e.g. `selectedTab = .mobileGateway`) still resolve to the right group.
     var group: SettingsGroup {
         switch self {
-        case .updates, .privacy, .diagnostics: return .general
+        case .updates: return .general
+        // 隐私与诊断导出管的是同一件事——这台机器上关于你的数据往哪儿去：
+        // 前者决定什么被收集/发送，后者决定什么被打包带走。它们此前挂在
+        // 「更新」这个组名底下，与更新检查毫无关系。
+        case .privacy, .diagnostics: return .dataAndDiagnostics
         case .agentAppearance: return .agentAppearance
         case .localModels: return .localModels
         case .agent, .notifications, .memory, .rules: return .ai
@@ -167,6 +171,7 @@ enum SettingsGroup: Hashable, Identifiable {
     case pet
     case agentAppearance
     case general
+    case dataAndDiagnostics
 
     static let allCases: [Self] = [
         .accountAndDevices,
@@ -180,6 +185,7 @@ enum SettingsGroup: Hashable, Identifiable {
         .pet,
         .agentAppearance,
         .general,
+        .dataAndDiagnostics,
     ]
 
     var id: Self { self }
@@ -188,7 +194,8 @@ enum SettingsGroup: Hashable, Identifiable {
     /// pane a freshly-selected group falls back to.
     var tabs: [EditorSettingsTab] {
         switch self {
-        case .general: return [.updates, .privacy, .diagnostics]
+        case .general: return [.updates]
+        case .dataAndDiagnostics: return [.privacy, .diagnostics]
         case .agentAppearance: return [.agentAppearance]
         case .pet: return [.pet]
         case .localModels: return [.localModels]
@@ -207,6 +214,7 @@ enum SettingsGroup: Hashable, Identifiable {
     var title: String {
         switch self {
         case .general: return L10n.Settings.tabUpdates
+        case .dataAndDiagnostics: return L10n.Settings.groupDataAndDiagnostics
         case .agentAppearance: return L10n.Settings.groupAgentAppearance
         case .pet: return L10n.DesktopPet.settingsTabTitle
         case .localModels: return L10n.Settings.LocalModel.pageTitle
@@ -223,6 +231,7 @@ enum SettingsGroup: Hashable, Identifiable {
     var icon: String {
         switch self {
         case .general: return "arrow.triangle.2.circlepath"
+        case .dataAndDiagnostics: return "lock.doc"
         case .agentAppearance: return "textformat.size"
         case .pet: return "pawprint.fill"
         case .localModels: return "cpu"

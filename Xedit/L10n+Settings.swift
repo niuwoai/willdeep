@@ -42,6 +42,9 @@ extension L10n {
         static let groupAI = String(localized: "settings.group.ai", defaultValue: "AI Agents")
         static let groupAgentTools = String(localized: "settings.group.agent-tools", defaultValue: "Agent Tools")
         static let groupAccountAndDevices = String(localized: "settings.group.account-and-devices", defaultValue: "Account & Devices")
+        /// 隐私与诊断导出共用的组名。取「数据」而不是把「诊断」挂在「隐私」
+        /// 后面：这两项管的是同一个对象——这台机器上关于你的数据往哪儿去。
+        static let groupDataAndDiagnostics = String(localized: "settings.group.data-and-diagnostics", defaultValue: "Data & Diagnostics")
         static let groupRuntimes = String(localized: "settings.group.runtimes", defaultValue: "Runtimes")
         static let groupIntegrations = String(localized: "settings.group.integrations", defaultValue: "Integrations")
         static let groupTerminal = String(localized: "settings.group.terminal", defaultValue: "Terminal")
