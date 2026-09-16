@@ -837,6 +837,13 @@ enum AgentSubagentRunner {
         /// guessed: a child loop is prompt-heavy, and output tokens cost
         /// several times what input does.
         var usageSplit = UsageSplit()
+        /// 本次 run 中途换过档时，记下换档那一刻的累计 prompt token。
+        ///
+        /// 这是为了回答一个现在答不出来的问题：**32b 究竟在多少 token 上
+        /// 撑不住**。此前唯一能看到的是升级**之后**的最终数字（日志里那条
+        /// 24.9 万），它和失败点无关。攒够真实样本才谈得上把阈值定在哪。
+        var midRunEscalationPromptTokens: Int? = nil
+        var midRunEscalatedFromModel: String? = nil
         let roundCount: Int
         let toolInvocationCount: Int
         /// Nil when the run had no verifier at all — distinct from `false`,
@@ -1124,6 +1131,12 @@ enum AgentSubagentRunner {
         /// 但那通常是 advanced/expert 档，拿它做摘要偏贵。有 AppState 的
         /// 调用方应该把压缩档传下来（WorkflowEngine 那条路径没有 AppState）。
         compressionConfiguration: AgentConfiguration? = nil,
+        /// 下一档 worker 模型。压缩救不回来时当场换上它继续跑，而不是整轮
+        /// 重来——此前撞窗只有两条路：先压缩，压不动就抛错，然后由调用方
+        /// 从头用大模型再跑一遍，前面几十轮全丢。由调用方（AppState）用
+        /// `nextWorkerTierConfiguration` 算好传进来：档位绑定住在 AppState，
+        /// runner 只需要知道「有没有下一档、是什么」。
+        nextTierConfiguration: AgentConfiguration? = nil,
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
@@ -1165,7 +1178,8 @@ enum AgentSubagentRunner {
         // subagents used to omit this (unlike the main loop), so a `/code-review`
         // on a some.im model hung as an empty card. Forward it here.
         let configuration = AgentSubagentModelCompatibility.configuration(configuration)
-        let client = AgentClient(configuration: configuration, session: session, someIMContext: someIMContext,
+        // 中途换档会重建它，见下面的 midRunEscalation。
+        var client = AgentClient(configuration: configuration, session: session, someIMContext: someIMContext,
             requestLedger: executionBudget?.requestLedger)
         var transcript: [AgentMessage] = [
             AgentMessage(
@@ -1271,13 +1285,18 @@ enum AgentSubagentRunner {
         // computed against a model this dispatch is not using. No provider
         // resolver here — budgeting only reads the window, and this type has
         // no provider library to resolve against.
-        let inputLimit = AgentWorkerContextBudget.inputLimit(
-            profile: profile, configuration: configuration,
-            models: AgentWorkerTierModels.merging(
-                stored: AgentProfileStore().workerTierModels(),
-                shared: AgentWorkerTierSharedConfig.cached()
-            )
+        let tierModels = AgentWorkerTierModels.merging(
+            stored: AgentProfileStore().workerTierModels(),
+            shared: AgentWorkerTierSharedConfig.cached()
         )
+        // 换档会把上限一起换掉，所以这两个都不能是 let。
+        var activeConfiguration = configuration
+        var inputLimit = AgentWorkerContextBudget.inputLimit(
+            profile: profile, configuration: activeConfiguration, models: tierModels
+        )
+        /// 本次 run 是否已经换过档。只换一次：下一档还撑不住就是任务本身
+        /// 超出了这条链能处理的规模，再换下去只是把账单摊得更长。
+        var midRunEscalation: (from: String, to: String, promptTokensAtSwitch: Int)?
         // Flipped after the first request streams to completion; until then
         // each request is under the first-contact clock.
         var hasCompletedFirstRequest = false
@@ -1335,7 +1354,51 @@ enum AgentSubagentRunner {
                         lastCompressionSummary = outcome.summary
                     }
                 }
-                // 压过之后仍然超限就如实失败：再跑一轮只会撞同一面墙。
+                // 压过之后仍然超限——在抛错之前还有一手：换下一档模型继续。
+                //
+                // 此前这里直接失败，调用方再用大模型从头跑一遍（日志里那条
+                // 614 秒、24.9 万 prompt token 的 run 就是这么来的：先用
+                // someim-32b 赌一把，撞窗后整轮重来）。换档继续保留了已经
+                // 跑完的那些轮，只把后续请求换到更大的窗口上。
+                if (try? AgentWorkerContextBudget.validate(
+                    messages: transcript, tools: toolList, limit: inputLimit
+                )) == nil,
+                   midRunEscalation == nil,
+                   let nextTierConfiguration {
+                    let widened = AgentWorkerContextBudget.inputLimit(
+                        profile: profile, configuration: nextTierConfiguration, models: tierModels
+                    )
+                    // 下一档的窗口不比现在大就别换：换了也过不了同一道校验，
+                    // 徒增一次模型切换。
+                    if widened > inputLimit {
+                        midRunEscalation = (
+                            from: activeConfiguration.model,
+                            to: nextTierConfiguration.model,
+                            promptTokensAtSwitch: usageSplit.prompt
+                        )
+                        agentSubagentLog.info(
+                            """
+                            subagent mid-run tier escalation profile=\(profile.id, privacy: .public) \
+                            round=\(round, privacy: .public) \
+                            from=\(activeConfiguration.model, privacy: .public) \
+                            to=\(nextTierConfiguration.model, privacy: .public) \
+                            promptTokensAtSwitch=\(usageSplit.prompt, privacy: .public) \
+                            limit=\(inputLimit, privacy: .public)→\(widened, privacy: .public)
+                            """
+                        )
+                        activeConfiguration = nextTierConfiguration
+                        inputLimit = widened
+                        client = AgentClient(
+                            configuration: activeConfiguration,
+                            session: session,
+                            someIMContext: someIMContext,
+                            requestLedger: executionBudget?.requestLedger
+                        )
+                        publishProgress(round: round, activity: .thinking)
+                    }
+                }
+                // 换过档仍然超限，或压根没有下一档：如实失败，再跑一轮只会
+                // 撞同一面墙。
                 try AgentWorkerContextBudget.validate(
                     messages: transcript, tools: toolList, limit: inputLimit
                 )
@@ -1541,6 +1604,8 @@ enum AgentSubagentRunner {
                             report: payload,
                             usageTokens: totalTokens,
                             usageSplit: usageSplit,
+                            midRunEscalationPromptTokens: midRunEscalation?.promptTokensAtSwitch,
+                            midRunEscalatedFromModel: midRunEscalation?.from,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
                             verifierPassed: verifierPassed,
@@ -1622,6 +1687,8 @@ enum AgentSubagentRunner {
                             """,
                             usageTokens: totalTokens,
                             usageSplit: usageSplit,
+                            midRunEscalationPromptTokens: midRunEscalation?.promptTokensAtSwitch,
+                            midRunEscalatedFromModel: midRunEscalation?.from,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
                             verifierPassed: false,
@@ -1641,6 +1708,8 @@ enum AgentSubagentRunner {
                             report: fallback,
                             usageTokens: totalTokens,
                             usageSplit: usageSplit,
+                            midRunEscalationPromptTokens: midRunEscalation?.promptTokensAtSwitch,
+                            midRunEscalatedFromModel: midRunEscalation?.from,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
                             verifierPassed: verifierPassed,
@@ -1666,6 +1735,8 @@ enum AgentSubagentRunner {
                     report: annotate(finalReport, audit),
                     usageTokens: totalTokens,
                     usageSplit: usageSplit,
+                    midRunEscalationPromptTokens: midRunEscalation?.promptTokensAtSwitch,
+                    midRunEscalatedFromModel: midRunEscalation?.from,
                     roundCount: round,
                     toolInvocationCount: toolInvocations,
                     verifierPassed: verifierPassed,
@@ -1824,6 +1895,8 @@ enum AgentSubagentRunner {
             report: annotate(cappedReport, cappedAudit),
             usageTokens: totalTokens,
             usageSplit: usageSplit,
+            midRunEscalationPromptTokens: midRunEscalation?.promptTokensAtSwitch,
+            midRunEscalatedFromModel: midRunEscalation?.from,
             roundCount: roundLimit,
             toolInvocationCount: toolInvocations,
             verifierPassed: verifierPassed,

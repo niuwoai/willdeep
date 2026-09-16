@@ -65,6 +65,13 @@ nonisolated enum AgentWorkerTimingLog {
         /// Parallel scout only: whether the report reached the parent at a
         /// tool boundary before the turn ended.
         let deliveredAtToolBoundary: Bool?
+        /// 中途换档时的累计 prompt token，以及换档前用的是哪个模型。
+        ///
+        /// 加这两个字段是为了回答「小模型究竟在多少 token 上撑不住」——
+        /// 此前日志里只看得到升级**之后**的最终数字，跟失败点无关，于是
+        /// 阈值无从定起。攒够样本再谈调参。
+        let midRunEscalationPromptTokens: Int?
+        let midRunEscalatedFromModel: String?
         let note: String?
 
         init(
@@ -89,6 +96,8 @@ nonisolated enum AgentWorkerTimingLog {
             inlinedFiles: Int? = nil,
             inlinedCharacters: Int? = nil,
             deliveredAtToolBoundary: Bool? = nil,
+            midRunEscalationPromptTokens: Int? = nil,
+            midRunEscalatedFromModel: String? = nil,
             note: String? = nil
         ) {
             self.recordedAt = recordedAt
@@ -114,6 +123,8 @@ nonisolated enum AgentWorkerTimingLog {
             self.inlinedFiles = inlinedFiles
             self.inlinedCharacters = inlinedCharacters
             self.deliveredAtToolBoundary = deliveredAtToolBoundary
+            self.midRunEscalationPromptTokens = midRunEscalationPromptTokens
+            self.midRunEscalatedFromModel = midRunEscalatedFromModel
             self.note = note
         }
     }

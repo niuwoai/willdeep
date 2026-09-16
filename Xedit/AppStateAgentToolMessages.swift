@@ -727,6 +727,8 @@ extension AppState {
                 acceptedOutput: outcome?.verifierPassed,
                 inlinedFiles: inlinedFiles,
                 inlinedCharacters: inlinedCharacters,
+                midRunEscalationPromptTokens: outcome?.midRunEscalationPromptTokens,
+                midRunEscalatedFromModel: outcome?.midRunEscalatedFromModel,
                 note: escalatedFrom.map { "escalated from \($0)" }
             ))
             AppState.persistSubagentTranscript(
@@ -793,6 +795,9 @@ extension AppState {
             }
         }()
 
+        // runChild 的参数名会遮蔽外层的父会话配置，而档位链要的是「相对父
+        // 配置」的下一档。先取个别名，避免在闭包里拿错那一个。
+        let parentConfigurationForTiers = configuration
         func runChild(
             configuration: AgentConfiguration,
             profile: AgentSubagentProfile
@@ -885,6 +890,12 @@ extension AppState {
                 additionalWorkspaceRoots: workspaceRoots,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation,
+                // 压缩救不回来时换上它继续，而不是抛错让整轮从头重跑。
+                // 传的是「相对本次实际使用的配置」的下一档：重跑时
+                // configuration 已经是升过档的，那时就没有下一档可给了。
+                nextTierConfiguration: nextWorkerTierConfiguration(
+                    for: profile, current: configuration, parent: parentConfigurationForTiers
+                )?.configuration,
                 profile: profile,
                 writeAccess: writeAccess,
                 verifierCommand: verifierCommand,
