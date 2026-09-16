@@ -159,6 +159,12 @@ extension AppState {
         set { activeRuntime?.pendingIncludeWorkspaceOverview = newValue }
     }
 
+    /// 用户附给下一轮的面板现状（`@` / `+` 选择器写入，发送时消费）。
+    var agentPendingPanelStateMentions: Set<AgentPanelStateMention.PanelKind> {
+        get { activeRuntime?.pendingPanelStateMentions ?? [] }
+        set { activeRuntime?.pendingPanelStateMentions = newValue }
+    }
+
     /// 操作员点名的 worker（`@` 选择器写入，chip 显示，发送时消费）。
     var agentPendingWorkerProfileID: String? {
         get { activeRuntime?.pendingWorkerProfileID }

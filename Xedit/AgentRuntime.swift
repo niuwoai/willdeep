@@ -107,6 +107,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var documentTaskMode: AgentDocumentTaskMode = .automatic
     @Published var redactSensitiveAttachmentContent: Bool = true
     @Published var pendingIncludeWorkspaceOverview: Bool = false
+    /// 用户附给下一轮的面板现状（终端连在哪、浏览器停在哪）。与
+    /// `pendingIncludeWorkspaceOverview` 同待遇：只活一轮，发送后清空。
+    /// 刻意不做粘性——面板状态本身在变，一条 `ssh`、一次导航就过期了，
+    /// 把过期事实反复塞进后续每一轮比不说更糟。
+    @Published var pendingPanelStateMentions: Set<AgentPanelStateMention.PanelKind> = []
     @Published var queuedMessages: [AgentQueuedMessage] = []
 
     // MARK: - Turn lifecycle

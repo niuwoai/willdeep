@@ -130,12 +130,16 @@ extension AppState {
             pendingFiles: pendingFiles
         )
         let includeWorkspaceOverview = runtime.pendingIncludeWorkspaceOverview
+        // 面板快照在**发送时刻**取，不是用户点选的时刻——中间他可能切了 tab
+        // 或导航到了别的页面，摆给模型的必须是此刻的事实。
+        let panelStateBlock = panelStateMentionBlock(for: runtime)
         let executionAgent = runtime.executionAgent
         guard !userText.isEmpty
                 || !images.isEmpty
                 || !textAttachments.isEmpty
                 || !skills.isEmpty
                 || !pendingFiles.isEmpty
+                || panelStateBlock != nil
                 || includeWorkspaceOverview else { return }
 
         // The preview is a transient, local-only surface. As soon as the user
@@ -153,6 +157,7 @@ extension AppState {
             imagePaths: AgentDesignToCode.sourcePaths(from: images),
             skillCandidates: skillRouting.candidateSkills
         )
+            + (panelStateBlock ?? "")
 
         if skills.contains(where: { $0.identifier == AgentDesignToCode.webSkillIdentifier }) {
             runtime.activeExperts.formUnion(AgentDesignToCode.webExperts)
@@ -164,6 +169,7 @@ extension AppState {
         runtime.pendingSkills = []
         runtime.pendingFiles = []
         runtime.pendingIncludeWorkspaceOverview = false
+        runtime.pendingPanelStateMentions = []
 
         // Background Workers can wait for a decision after the parent reply
         // finishes. A new message supersedes those gates too, not just gates
@@ -2764,4 +2770,71 @@ extension AppState {
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+extension AppState {
+    /// 用户附给这一轮的面板现状，取的是**发送时刻**的快照。
+    ///
+    /// 与 `AgentTerminalHostContext` 的自动注入去重：那份每轮都在、位置更靠
+    /// 后（更接近模型注意力），重复时保留它。手动附加的价值在自动注入**不会
+    /// 说**的那些情况——确信是本地的 tab、浏览器 URL、以及用户认为「这一轮
+    /// 该看一眼」的时刻。
+    ///
+    /// 只读宿主已观测到的状态，绝不在这里探测：探针会往用户的 live PTY 里
+    /// 打字（见 AgentTerminalHostContext 的注释）。
+    func panelStateMentionBlock(for runtime: AgentRuntime) -> String? {
+        let requested = runtime.pendingPanelStateMentions
+        guard !requested.isEmpty else { return nil }
+
+        var snapshots: [AgentPanelStateMention.Snapshot] = []
+
+        if requested.contains(.terminal),
+           let active = agentTerminalController.activeTab {
+            snapshots.append(
+                .init(
+                    kind: .terminal,
+                    title: active.title,
+                    detail: active.hostLine,
+                    isActive: true
+                )
+            )
+        }
+
+        if requested.contains(.browser) {
+            let raw = AgentEmbeddedBrowserController.shared.currentURL
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !raw.isEmpty {
+                snapshots.append(
+                    .init(
+                        kind: .browser,
+                        detail: AgentSecretStore.redactPlaceholders(in: raw)
+                    )
+                )
+            }
+        }
+
+        // 自动注入这一轮会不会讲终端？条件与 AgentTerminalHostContext 一致：
+        // 有已知远程或状态不确定的 tab 才说。会讲就让它讲，不重复。
+        var suppressed: Set<AgentPanelStateMention.PanelKind> = []
+        let tabSummaries = agentTerminalController.tabs.map { tab in
+            AgentTerminalHostContext.TabSummary(
+                title: tab.title,
+                hostLine: tab.hostLine,
+                isActive: tab.id == agentTerminalController.activeTab?.id,
+                isKnownRemote: {
+                    if case .remote = tab.hostState { return true }
+                    return false
+                }(),
+                isUncertain: tab.hostState.trustedIdentity == nil
+            )
+        }
+        if AgentTerminalHostContext.isWorthReporting(tabSummaries) {
+            suppressed.insert(.terminal)
+        }
+
+        return AgentPanelStateMention.promptBlock(
+            snapshots: snapshots,
+            suppressing: suppressed
+        )
+    }
 }

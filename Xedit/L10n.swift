@@ -563,6 +563,22 @@ nonisolated enum L10n {
         static let windowTitle = String(localized: "attachment-citation.window-title", defaultValue: "Document Citation")
     }
 
+    /// 用户手动附加的面板现状（设计文档 docs/PANEL_STATE_MENTION_DESIGN.md）。
+    /// 只有显示名走本地化；匹配键与进 prompt 的文本都固定英文。
+    enum ComposerMenuGroups {
+        static let attach = String(localized: "composer.at-group.attach", defaultValue: "Attach to this turn")
+        static let approach = String(localized: "composer.at-group.approach", defaultValue: "How to handle this turn")
+        static let session = String(localized: "composer.at-group.session", defaultValue: "Session settings")
+        static let goalModeSubtitle = String(localized: "composer.at.goal-mode.subtitle", defaultValue: "Pin a long-running objective for this session")
+    }
+
+    enum PanelMention {
+        static let terminal = String(localized: "composer.panel-mention.terminal", defaultValue: "Side-panel terminal")
+        static let browser = String(localized: "composer.panel-mention.browser", defaultValue: "Side-panel browser")
+        static let terminalPurpose = String(localized: "composer.panel-mention.terminal.purpose", defaultValue: "Tell the agent which host this terminal is on")
+        static let browserPurpose = String(localized: "composer.panel-mention.browser.purpose", defaultValue: "Tell the agent which page this browser is showing")
+    }
+
     enum ComposerWorkspace {
         static let chooseFolder = String(localized: "composer.workspace.choose-folder", defaultValue: "Choose folder…")
         static let chooseWorkspaceHelp = String(localized: "composer.workspace.choose-workspace.help", defaultValue: "Choose a workspace for this chat")

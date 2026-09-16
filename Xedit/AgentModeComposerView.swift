@@ -708,6 +708,11 @@ private struct ComposerCard: View {
     /// by the text view's coordinator (`onSlashQueryChange`) because typing
     /// no longer re-evaluates this view through `appState` (rc482).
     @State private var slashMenuQuery: String = ""
+    /// 菜单是谁打开的。两者候选源相同，但善后不同：`@` 触发时缓冲区里有一个
+    /// `@token` 需要在选中后抹掉，而 `+` 触发时**没有** token——照抹会删掉
+    /// 用户正在写的字。
+    enum AtMenuSource { case mention, plusButton }
+    @State private var atMenuSource: AtMenuSource = .mention
     @State private var atMenuVisible: Bool = false
     @State private var atMenuSelection: Int = 0
     @State private var atMenuQuery: String = ""
@@ -798,7 +803,55 @@ private struct ComposerCard: View {
             .worker(id: $0.id, name: $0.localizedDisplayName, purpose: $0.localizedPurpose)
         }
 
-        return AtPickerEntry.workersFirst(entries, workers: workerEntries)
+        var ordered = AtPickerEntry.workersFirst(
+            panelStateEntries(matching: q) + entries,
+            workers: workerEntries
+        )
+        // 会话设置只给 `+`：`@` 的语义是「这一轮」，而设置作用于整个会话，
+        // 混进 `@` 会让人以为它也是一次性的。
+        if atMenuSource == .plusButton {
+            ordered += sessionSettingEntries(matching: q)
+        }
+        return ordered.sorted { $0.group < $1.group }
+    }
+
+    /// 会话设置候选。首版只有目标模式（已是目标模式时不重复出现）。
+    private func sessionSettingEntries(matching q: String) -> [AtPickerEntry] {
+        guard appState.agentInteractionMode != .goal else { return [] }
+        let title = L10n.InteractionMode.goal.lowercased()
+        guard q.isEmpty || title.contains(q) || "goal".contains(q) else { return [] }
+        return [.sessionSetting(.goalMode)]
+    }
+
+    /// 面板现状候选：把「终端此刻连在哪台机器 / 浏览器此刻停在哪个页面」
+    /// 作为事实附给这一轮。排在 workspace/file 之前、worker 之后——它比
+    /// 文件列表短得多，沉在长列表底下等于没有。
+    ///
+    /// 取值只读宿主**已观测到**的状态，绝不在这里探测：探针会往用户的 live
+    /// PTY 里打字（见 AgentTerminalHostContext 与 AppStateAgentLoop 的注释）。
+    private func panelStateEntries(matching q: String) -> [AtPickerEntry] {
+        var entries: [AtPickerEntry] = []
+
+        // 终端：只报活动 tab。非活动 tab 的主机一律 unknown（探针只在活动
+        // tab 且 shell 空闲时打一次），列出来就是一串「未知」。
+        if AgentPanelStateMention.PanelKind.terminal.matches(query: q),
+           let active = appState.agentTerminalController.activeTab {
+            entries.append(
+                .panelState(kind: .terminal, detail: active.hostLine)
+            )
+        }
+
+        if AgentPanelStateMention.PanelKind.browser.matches(query: q) {
+            let raw = AgentEmbeddedBrowserController.shared.currentURL
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !raw.isEmpty {
+                entries.append(
+                    .panelState(kind: .browser, detail: AgentSecretStore.redactPlaceholders(in: raw))
+                )
+            }
+        }
+
+        return entries
     }
 
     /// `$` picker entries are only skills / reusable capability packs.
@@ -1068,7 +1121,7 @@ private struct ComposerCard: View {
             }
 
             HStack(spacing: 6) {
-                AttachButton(action: attachFilesFromPanel)
+                AttachButton(action: openAttachMenu)
                 ComposerAdaptiveControlStrip()
                 // 「多专家会诊」入口已移除,能力升级为独立的「专家圆桌」窗口
                 // (侧边栏入口)。会诊引擎/sheet/类型保留,圆桌复用其编排原语。
@@ -1382,6 +1435,18 @@ private struct ComposerCard: View {
         atMenuVisible = false
         atMenuSelection = 0
         atMenuQuery = ""
+        // 回到默认来源：下一次若由 `@` 打开，token 善后必须重新生效。
+        atMenuSource = .mention
+    }
+
+    /// `+` 打开的是与 `@` 同一张菜单、同一份候选源。分裂成两份清单是这个
+    /// 仓库吃过的亏（ComposerOverflowPill 传 `controls: []`，弹层里本该出现
+    /// 的两行实际不出现）。
+    private func openAttachMenu() {
+        atMenuSource = .plusButton
+        atMenuQuery = ""
+        atMenuSelection = 0
+        atMenuVisible = true
     }
 
     private func closeSkillMenu() {
@@ -1400,7 +1465,9 @@ private struct ComposerCard: View {
         // surface as chips above the composer; the actual context
         // (file contents, workspace overview) is
         // spliced into the prompt by composeAttachedPrompt at send time.
-        _ = coordinatorRef.coordinator?.replaceCurrentAtToken(with: "")
+        if atMenuSource == .mention {
+            _ = coordinatorRef.coordinator?.replaceCurrentAtToken(with: "")
+        }
         switch entry {
         case .workspace:
             if !appState.agentPendingIncludeWorkspaceOverview {
@@ -1412,6 +1479,17 @@ private struct ComposerCard: View {
             // 单槽位：再点一个就换人。委派在语义上只能点一个人，想让几个人
             // 分头干活那是调度台的事。
             appState.agentPendingWorkerProfileID = id
+        case .panelState(let kind, _):
+            // 只记「附哪个面板」，不记此刻的值——真正的快照在发送时刻取，
+            // 否则用户选完又切了 tab，摆给模型的就是一条过期事实。
+            appState.agentPendingPanelStateMentions.insert(kind)
+        case .sessionSetting(let setting):
+            switch setting {
+            case .goalMode:
+                // 与下排 AgentModePickerPill 读写同一个状态，不另存一份——
+                // 两个入口显示不同结果是最难查的那类 bug。
+                appState.setAgentInteractionMode(.goal)
+            }
         }
         closeAtMenu()
         return true

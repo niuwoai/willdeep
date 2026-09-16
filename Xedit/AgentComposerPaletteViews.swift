@@ -462,12 +462,51 @@ enum AtPickerEntry: Identifiable, Equatable {
     /// 点名一个工种去干这一回合的活。候选取 `publicBuiltIn`——那份清单的
     /// 定义就是「给人看的工种」，专家/裁判之类的内部分档已经在那里收拢过了。
     case worker(id: String, name: String, purpose: String)
+    /// 把侧边栏面板此刻的状态作为**事实**附给这一轮（终端连在哪台机器、
+    /// 浏览器停在哪个页面）。只是告知，用不用由模型判断——它不改工具集、
+    /// 不改路由、不碰审批。设计文档：docs/PANEL_STATE_MENTION_DESIGN.md
+    case panelState(kind: AgentPanelStateMention.PanelKind, detail: String)
+    /// 会话级设置的快捷入口。只在 `+` 菜单出现，`@` 里不出现——`@` 的语义是
+    /// 「这一轮」，而设置作用于整个会话，混在一起会让人以为它也是一次性的。
+    case sessionSetting(SessionSetting)
+
+    enum SessionSetting: String, Equatable {
+        case goalMode
+    }
+
+    /// 菜单分组。条目性质并不相同：附件与面板事实作用于**这一轮**，会话设置
+    /// 作用于**整个会话**，平铺在一张列表里会误导。
+    enum Group: Int, Comparable {
+        case attachThisTurn
+        case approachThisTurn
+        case sessionSettings
+
+        static func < (lhs: Group, rhs: Group) -> Bool { lhs.rawValue < rhs.rawValue }
+
+        var title: String {
+            switch self {
+            case .attachThisTurn: return L10n.ComposerMenuGroups.attach
+            case .approachThisTurn: return L10n.ComposerMenuGroups.approach
+            case .sessionSettings: return L10n.ComposerMenuGroups.session
+            }
+        }
+    }
+
+    var group: Group {
+        switch self {
+        case .workspace, .file, .panelState: return .attachThisTurn
+        case .worker: return .approachThisTurn
+        case .sessionSetting: return .sessionSettings
+        }
+    }
 
     var id: String {
         switch self {
         case .workspace: return "@workspace"
         case .file(let url, _): return "file:\(url.standardizedFileURL.path)"
         case .worker(let id, _, _): return "worker:\(id)"
+        case .panelState(let kind, _): return "panel:\(kind.id)"
+        case .sessionSetting(let setting): return "setting:\(setting.rawValue)"
         }
     }
 
@@ -476,6 +515,15 @@ enum AtPickerEntry: Identifiable, Equatable {
         case .workspace: return "folder"
         case .file: return "doc.text"
         case .worker: return "person.badge.shield.checkmark"
+        case .panelState(let kind, _):
+            switch kind {
+            case .terminal: return "terminal"
+            case .browser: return "globe"
+            }
+        case .sessionSetting(let setting):
+            switch setting {
+            case .goalMode: return "target"
+            }
         }
     }
 
@@ -484,6 +532,13 @@ enum AtPickerEntry: Identifiable, Equatable {
         case .workspace: return "workspace"
         case .file(_, let rel): return rel
         case .worker(let id, let name, _): return "\(name) · @\(id)"
+        // 英文 id 一并显示：`@` 之后要打字筛选，没有它用户不知道能打什么
+        // 才不用切输入法。
+        case .panelState(let kind, _): return "\(kind.localizedDisplayName) · @\(kind.id)"
+        case .sessionSetting(let setting):
+            switch setting {
+            case .goalMode: return L10n.InteractionMode.goal
+            }
         }
     }
 
@@ -492,6 +547,12 @@ enum AtPickerEntry: Identifiable, Equatable {
         case .workspace: return "Attach the current workspace root + file list"
         case .file(let url, _): return url.deletingLastPathComponent().lastPathComponent
         case .worker(_, _, let purpose): return purpose
+        // 副标题直接摆事实本身（主机 / URL），用户选之前就看得见要附什么。
+        case .panelState(_, let detail): return detail
+        case .sessionSetting(let setting):
+            switch setting {
+            case .goalMode: return L10n.ComposerMenuGroups.goalModeSubtitle
+            }
         }
     }
 
@@ -628,6 +689,17 @@ struct AtPickerMenu: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                                // 组标题只在该组第一行之前插一次。刻意不改
+                                // `entries` 的平铺结构——selection 与键盘导航
+                                // 都按索引走，引入嵌套会把那套逻辑一起复杂化。
+                                if index == 0 || entries[index - 1].group != entry.group {
+                                    Text(entry.group.title)
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.top, index == 0 ? 2 : 8)
+                                        .padding(.bottom, 2)
+                                }
                                 AtPickerRow(entry: entry, isSelected: index == selection)
                                     .contentShape(Rectangle())
                                     .onTapGesture { onPick(index) }
