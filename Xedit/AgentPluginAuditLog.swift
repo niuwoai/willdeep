@@ -62,6 +62,9 @@ nonisolated enum AgentPluginAuditLog {
         let outcome: String
         /// 失败时的错误描述，已截断。宿主自己抛的那几种错，不含用户内容。
         let errorDescription: String?
+        /// 页面附的图片 / 视频个数，只记数量不记路径。可选：旧日志行没有这两个键。
+        var attachedImages: Int? = nil
+        var attachedVideos: Int? = nil
     }
 
     struct CommandRun: Codable, Equatable, Sendable {

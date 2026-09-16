@@ -86,6 +86,34 @@ provider 那一侧强制。
 四种标量类型，表达不了对象数组。需要返回一批对象的阶段（短剧工坊的批量集、整集分镜）仍走
 围栏路径。要覆盖它们，得先扩展宿主的工具 schema 模型，那会动到主 Agent 的工具描述生成层。
 
+### 附图片与视频（1.377.0-rc1，桥 2.6.0）
+
+```js
+const caps = window.willdeep.capabilities || [];
+const result = await window.willdeep.ai.complete({
+  system: '按合规红线审核这组画面',
+  messages: [{
+    role: 'user',
+    content: '审核第 3 镜的首尾帧与成片',
+    imagePaths: caps.includes('ai.images') ? [startFramePath, endFramePath] : [],
+    videoPaths: caps.includes('ai.videos') ? [clipPath] : [],
+  }],
+  provider: 'some-im', model: 'qwen3.8-max',
+});
+```
+
+- 字段只认 **user** 消息；挂在 system / assistant 上整条拒（`mediaOnNonUserMessage`）。
+- 路径必须在**本插件的生成目录**里（宿主 `generated-images/`），判据与 `ai.generateImage`
+  的 `referenceImagePaths` 相同：规范化后父目录恰好是媒体根，拒绝符号链接、相对路径、目录
+  （`mediaOutsidePluginData`）。插件要审自己目录外的文件，先把它放（硬链接）进来。
+- 图片在宿主侧限边 1568 像素、转 JPEG；解不出来报 `unreadableMedia`。
+- 视频由宿主按时间均匀抽 8 帧（每段中点），当作有序图片发出，并在正文末尾追加一行说明哪几张
+  是哪个视频的第几秒。不依赖 provider 支持 `video_url`。
+- 上限：一次请求 12 张图、2 个视频（`tooManyImages` / `tooManyVideos`）。
+- 选的模型不收图时当场拒（`modelRejectsMedia`），判定沿用主聊天的识图模型表。
+- 能力分两项探测：Web 宿主（willdeep-rs）只声明 `ai.images`，带 `videoPaths` 会被拒
+  （`videosUnsupported`）。
+
 ### 上限
 
 `AgentPluginAIRequest`：最多 24 条消息、总计 32 000 字符、输出 4 096 token，

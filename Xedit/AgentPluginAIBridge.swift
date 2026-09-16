@@ -20,6 +20,12 @@ import Foundation
 nonisolated struct AgentPluginAIMessage: Equatable, Sendable {
     let role: AgentRole
     let content: String
+    /// 附在这条消息上的本地图片 / 视频路径（只认 user 消息）。宿主钳制到
+    /// 插件生成目录、解码后作为图片附件送进模型，见 `AgentPluginAIMedia`。
+    var imagePaths: [String] = []
+    var videoPaths: [String] = []
+
+    var hasMedia: Bool { !imagePaths.isEmpty || !videoPaths.isEmpty }
 }
 
 nonisolated struct AgentPluginAIRequest: Equatable, Sendable {
@@ -219,6 +225,14 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
     /// 参照图必须落在本插件自己的生成目录里。页面递的是路径，所以这道钳制
     /// 是唯一的边界：少了它，一个插件页就能让宿主去读任意文件并上传出去。
     case referenceImageOutsidePluginData(String)
+    case tooManyImages(Int)
+    case tooManyVideos(Int)
+    /// 附件路径的钳制，判据同参照图。
+    case mediaOutsidePluginData(String)
+    case unreadableMedia(String)
+    case mediaOnNonUserMessage
+    /// 附了图片或视频，选的模型却不收图。宿主当场拒，而不是发出去等上游 400。
+    case modelRejectsMedia(String)
 
     var errorDescription: String? {
         switch self {
@@ -245,6 +259,18 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
             return "At most \(AgentPluginImageRequest.maximumReferenceImages) reference images are allowed, got \(count)."
         case .referenceImageOutsidePluginData(let path):
             return "Reference image is outside this plugin's generated-media folder: \(path)"
+        case .tooManyImages(let count):
+            return "At most \(AgentPluginAIMedia.maximumImages) images can be attached to one request, got \(count)."
+        case .tooManyVideos(let count):
+            return "At most \(AgentPluginAIMedia.maximumVideos) videos can be attached to one request, got \(count)."
+        case .mediaOutsidePluginData(let path):
+            return "Attached media is outside this plugin's generated-media folder: \(path)"
+        case .unreadableMedia(let name):
+            return "Attached media could not be read: \(name)"
+        case .mediaOnNonUserMessage:
+            return "Images and videos can only be attached to user messages."
+        case .modelRejectsMedia(let model):
+            return "The selected model does not accept image input: \(model)"
         }
     }
 }
@@ -299,12 +325,28 @@ nonisolated enum AgentPluginAIRequestValidator {
             case "assistant": role = .assistant
             default: role = .user
             }
-            messages.append(AgentPluginAIMessage(role: role, content: trimmed))
+            var message = AgentPluginAIMessage(role: role, content: trimmed)
+            // 只有 user 消息能带附件：system 与 assistant 在各家协议里都不
+            // 一定收图。递上来就是页面写错了，当场拒，不静默丢——丢掉的话
+            // 模型会在没看到图的情况下若无其事地给出结论。
+            let images = mediaPaths(entry["imagePaths"])
+            let videos = mediaPaths(entry["videoPaths"])
+            if role == .user {
+                message.imagePaths = images
+                message.videoPaths = videos
+            } else if !images.isEmpty || !videos.isEmpty {
+                return .failure(.mediaOnNonUserMessage)
+            }
+            messages.append(message)
         }
         guard !messages.isEmpty else { return .failure(.emptyRequest) }
         guard messages.count <= AgentPluginAIRequest.maximumMessages else {
             return .failure(.tooManyMessages)
         }
+        let imageCount = messages.reduce(0) { $0 + $1.imagePaths.count }
+        guard imageCount <= AgentPluginAIMedia.maximumImages else { return .failure(.tooManyImages(imageCount)) }
+        let videoCount = messages.reduce(0) { $0 + $1.videoPaths.count }
+        guard videoCount <= AgentPluginAIMedia.maximumVideos else { return .failure(.tooManyVideos(videoCount)) }
         let characters = messages.reduce(0) { $0 + $1.content.count }
         guard characters <= AgentPluginAIRequest.maximumCharacters else { return .failure(.tooLong) }
 
@@ -361,6 +403,18 @@ nonisolated enum AgentPluginAIRequestValidator {
         guard tools.count <= AgentPluginAIRequest.maximumTools else { return .failure(.tooManyTools) }
         request.tools = tools
         return .success(request)
+    }
+
+    /// 去空、去重、截断超长路径。数量上限在调用方按整个请求算。
+    private static func mediaPaths(_ value: Any?) -> [String] {
+        var paths: [String] = []
+        for entry in value as? [Any] ?? [] {
+            guard let path = (entry as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !path.isEmpty, path.count <= AgentPluginAIMedia.maximumPathCharacters,
+                  !paths.contains(path) else { continue }
+            paths.append(path)
+        }
+        return paths
     }
 }
 
@@ -533,12 +587,48 @@ extension AppState {
             }
         }
         let configuration = try pluginAIConfiguration(for: request)
+        let carriesMedia = request.messages.contains(where: \.hasMedia)
+        // 模型不收图就当场拒。发出去的话上游回的是一句难懂的 400（「unknown
+        // variant image_url」），页面没法据此告诉用户该去换审核模型。
+        if carriesMedia, !configuration.supportsImageInput {
+            throw AgentPluginAIError.modelRejectsMedia(configuration.model)
+        }
         // 技能正文另算预算，不占页面自己那 32000 字的额度，也不参与条数上限。
         var outbound = request.messages
         if let preamble = try await Self.pluginSkillPreamble(identifiers: request.skillIdentifiers) {
             outbound.insert(preamble, at: 0)
         }
-        let messages = outbound.map { AgentMessage(role: $0.role, content: $0.content) }
+        let mediaRoot = carriesMedia ? try AgentPluginGeneratedMediaResolver.directory(pluginID: pluginID) : nil
+        var attachedImageCount = 0
+        var attachedVideoCount = 0
+        var messages: [AgentMessage] = []
+        for entry in outbound {
+            guard entry.hasMedia, let mediaRoot else {
+                messages.append(AgentMessage(role: entry.role, content: entry.content))
+                continue
+            }
+            var images: [AgentImageAttachment] = []
+            for path in entry.imagePaths {
+                let url = try AgentPluginAIMedia.clampedFileURL(path: path, mediaRoot: mediaRoot)
+                images.append(try AgentPluginAIMedia.imageAttachment(at: url))
+            }
+            // 视频抽成的帧跟在直接附的图片后面，并在正文末尾写明哪几张是
+            // 哪个视频的第几秒。只给一串图，模型分不清哪些是同一段视频、
+            // 也不知道顺序就是时间顺序。
+            var notes: [String] = []
+            for (index, path) in entry.videoPaths.enumerated() {
+                let url = try AgentPluginAIMedia.clampedFileURL(path: path, mediaRoot: mediaRoot)
+                let frames = try await AgentPluginAIMedia.videoFrames(at: url)
+                let first = images.count + 1
+                images.append(contentsOf: frames.map(\.attachment))
+                let times = frames.map { String(format: "%.1fs", $0.seconds) }.joined(separator: ", ")
+                notes.append("Images \(first)-\(images.count) are frames of video \(index + 1) in time order (at \(times)).")
+            }
+            attachedImageCount += entry.imagePaths.count
+            attachedVideoCount += entry.videoPaths.count
+            let content = notes.isEmpty ? entry.content : entry.content + "\n\n[" + notes.joined(separator: " ") + "]"
+            messages.append(AgentMessage(role: entry.role, content: content, images: images))
+        }
         // 每次调用都留痕：在此之前插件问一次模型，耗时、token、花费一律
         // 无迹可寻，客户报「这个插件慢」时导出的诊断包是空的。
         let startedAt = Date()
@@ -557,7 +647,9 @@ extension AppState {
                 toolCalls: toolCalls,
                 responseCharacters: responseCharacters,
                 outcome: outcome,
-                errorDescription: error.map { String($0.localizedDescription.prefix(240)) }
+                errorDescription: error.map { String($0.localizedDescription.prefix(240)) },
+                attachedImages: attachedImageCount,
+                attachedVideos: attachedVideoCount
             ))
         }
 

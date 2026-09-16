@@ -1,10 +1,12 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-14 | Current version: v1.376.0-rc3
+> Last updated: 2026-09-14 | Current version: v1.377.0-rc1
 
 插件包的内容指纹与安装剪枝共用同一份排除名单（`.git` / `node_modules` / `.cache`，任意层级任意类型）：从源码目录安装时，前端依赖与嵌套版本库状态不再进入内容指纹，也不再被复制进与 willdeep-rs 共用的安装目录；`networkDomains` 写法不合共享 schema 时在安装阶段就明确拒绝，而不是装上之后永远匹配不中。
 
 插件命令支持最高 32 MiB 的 JSON 参数传输，可容纳待办 10 MiB 附件的 Base64 与 JSON 转义开销。
+
+插件页面问模型时可以附本插件生成目录里的图片和视频（桥 2.6.0，`ai.images` / `ai.videos`）：宿主钳制路径、把图片限边转 JPEG、把视频均匀抽成 8 帧后交给用户选定的识图模型，短剧工坊据此对定妆图、首尾帧和成片做多模态内容审核。每次最多 12 张图、2 个视频；模型不收图时当场拒绝。
 
 智能审核会区分 SSH Agent 目录元数据诊断与凭据内容读取：前者可进入自动审核，主 Agent 与子 worker 使用同一规则。
 
