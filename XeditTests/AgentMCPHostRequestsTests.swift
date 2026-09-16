@@ -1,0 +1,183 @@
+//
+//  AgentMCPHostRequestsTests.swift
+//  XeditTests
+//
+//  插件 MCP 进程反向请求宿主出图（`willdeep/images/generate`）。
+//
+//  守四件事：只有插件来源的 stdio 服务能用；请求参数与页面桥走同一个校验器；
+//  宿主替服务端干活的那段时间不算进服务端的超时；插件在 initialize 时能知道
+//  宿主支不支持。出图本身用替身，不打外网、不花钱。
+//
+
+import Foundation
+import Testing
+@testable import WillDeep
+
+@Suite(.serialized)
+struct AgentMCPHostRequestsTests {
+    private func pluginServer(command: String = "/usr/bin/ruby", args: [String] = [], timeout: TimeInterval = 10) -> AgentMCPServerConfig {
+        AgentMCPServerConfig(
+            id: "plugin:willdeep-video-studio:video-studio",
+            name: "video-studio", source: .plugin, transport: .stdio,
+            command: command, args: args, startupTimeout: timeout
+        )
+    }
+
+    private func fakeImage(_ pluginID: AgentPluginID, _ request: AgentPluginImageRequest) -> AgentPluginImageResult {
+        AgentPluginImageResult(
+            mediaURL: "willdeep-plugin://bundle/__media__/fake.png",
+            filePath: "/tmp/\(pluginID)/fake.png",
+            model: request.model,
+            providerID: "some-im"
+        )
+    }
+
+    @Test("只有插件来源的 stdio 服务能拿到插件 ID")
+    func pluginIDIsParsedOnlyForPluginStdioServers() {
+        #expect(AgentMCPHostRequests.pluginID(for: pluginServer()) == "willdeep-video-studio")
+        let user = AgentMCPServerConfig(id: "plugin:evil:x", name: "x", source: .user, transport: .stdio, command: "/bin/echo")
+        #expect(AgentMCPHostRequests.pluginID(for: user) == nil, "手工配置的服务就算 id 长得像插件也不认")
+        var http = pluginServer()
+        http.transport = .streamableHTTP
+        #expect(AgentMCPHostRequests.pluginID(for: http) == nil)
+    }
+
+    @Test("initialize 只对插件服务宣告反向请求能力")
+    func initializeAdvertisesCapabilityOnlyForPlugins() {
+        let pluginExtensions = (AgentMCPBridge.initializeParams(for: pluginServer())["capabilities"] as? [String: Any])?["extensions"] as? [String: Any]
+        let advertised = pluginExtensions?[AgentMCPHostRequests.capabilityKey] as? [String: Any]
+        #expect(advertised?["methods"] as? [String] == [AgentMCPHostRequests.imageGenerateMethod])
+        #expect(pluginExtensions?["io.modelcontextprotocol/ui"] != nil, "原有的 UI 扩展不能丢")
+
+        let user = AgentMCPServerConfig(name: "x", source: .user, transport: .stdio, command: "/bin/echo")
+        let userExtensions = (AgentMCPBridge.initializeParams(for: user)["capabilities"] as? [String: Any])?["extensions"] as? [String: Any]
+        #expect(userExtensions?[AgentMCPHostRequests.capabilityKey] == nil)
+    }
+
+    @Test("区分服务端请求、通知与响应")
+    func recognizesServerRequests() {
+        #expect(AgentMCPHostRequests.isServerRequest(["jsonrpc": "2.0", "id": "h1", "method": "willdeep/images/generate"]))
+        #expect(!AgentMCPHostRequests.isServerRequest(["jsonrpc": "2.0", "method": "notifications/resources/updated"]))
+        #expect(!AgentMCPHostRequests.isServerRequest(["jsonrpc": "2.0", "id": 3, "result": [:]]))
+    }
+
+    @Test("非插件服务、未知方法、坏参数都回 JSON-RPC 错误，不静默")
+    func rejectsWhatItShould() async {
+        AgentMCPHostRequests.setImageGeneratorForTesting { pluginID, request in self.fakeImage(pluginID, request) }
+        defer { AgentMCPHostRequests.setImageGeneratorForTesting(nil) }
+
+        let user = AgentMCPServerConfig(name: "x", source: .user, transport: .stdio, command: "/bin/echo")
+        let fromUser = await AgentMCPHostRequests.respond(
+            to: ["id": "h1", "method": AgentMCPHostRequests.imageGenerateMethod, "params": ["prompt": "a cat"]], server: user
+        )
+        #expect((fromUser["error"] as? [String: Any])?["code"] as? Int == AgentMCPHostRequests.ErrorCode.methodNotFound)
+
+        let unknown = await AgentMCPHostRequests.respond(to: ["id": "h2", "method": "willdeep/nope"], server: pluginServer())
+        #expect((unknown["error"] as? [String: Any])?["code"] as? Int == AgentMCPHostRequests.ErrorCode.methodNotFound)
+        #expect(unknown["id"] as? String == "h2", "错误响应要带回原 id，否则服务端会一直等")
+
+        let emptyPrompt = await AgentMCPHostRequests.respond(
+            to: ["id": "h3", "method": AgentMCPHostRequests.imageGenerateMethod, "params": ["prompt": "  "]], server: pluginServer()
+        )
+        #expect((emptyPrompt["error"] as? [String: Any])?["code"] as? Int == AgentMCPHostRequests.ErrorCode.invalidParams)
+
+        let badModel = await AgentMCPHostRequests.respond(
+            to: ["id": "h4", "method": AgentMCPHostRequests.imageGenerateMethod, "params": ["prompt": "a cat", "model": "dall-e-9"]], server: pluginServer()
+        )
+        #expect((badModel["error"] as? [String: Any])?["code"] as? Int == AgentMCPHostRequests.ErrorCode.invalidParams)
+    }
+
+    @Test("出图失败把原因带回服务端")
+    func generatorFailureIsReported() async {
+        AgentMCPHostRequests.setImageGeneratorForTesting { _, _ in throw AgentPluginAIError.imagePermissionDenied }
+        defer { AgentMCPHostRequests.setImageGeneratorForTesting(nil) }
+        let response = await AgentMCPHostRequests.respond(
+            to: ["id": "h5", "method": AgentMCPHostRequests.imageGenerateMethod, "params": ["prompt": "a cat"]], server: pluginServer()
+        )
+        let error = response["error"] as? [String: Any]
+        #expect(error?["code"] as? Int == AgentMCPHostRequests.ErrorCode.failed)
+        #expect((error?["message"] as? String)?.contains("ai.image") == true)
+    }
+
+    @Test("端到端：工具调用期间反向出图，宿主干活的时间不算服务端超时")
+    func stdioServerCanRequestImagesMidToolCall() async throws {
+        let calls = CallRecorder()
+        AgentMCPHostRequests.setImageGeneratorForTesting { pluginID, request in
+            calls.record(pluginID: pluginID, request: request)
+            // 比服务端超时（1 秒）长：等待循环若不在处理完后重新计时，这里必然超时。
+            try await Task.sleep(nanoseconds: 2_500_000_000)
+            return self.fakeImage(pluginID, request)
+        }
+        defer { AgentMCPHostRequests.setImageGeneratorForTesting(nil) }
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mcp-host-requests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = directory.appendingPathComponent("server.rb")
+        try Self.fakeServerScript.write(to: script, atomically: true, encoding: .utf8)
+
+        let server = pluginServer(args: [script.path], timeout: 1)
+        defer { AgentMCPBridge.invalidatePluginConnections(pluginID: "willdeep-video-studio") }
+
+        let raw = try await AgentMCPBridge.requestForTesting(
+            server: server, method: "tools/call",
+            params: ["name": "draw", "arguments": ["prompt": "a red lantern", "model": "nano-banana-2", "size": "1024x1536"]]
+        )
+        let result = try #require(try JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any])
+
+        let host = try #require(result["host"] as? [String: Any])
+        #expect(host["id"] as? String == "host-1")
+        let image = try #require(host["result"] as? [String: Any], "应当拿到出图结果而不是错误：\(host)")
+        #expect(image["filePath"] as? String == "/tmp/willdeep-video-studio/fake.png")
+        #expect(image["model"] as? String == "nano-banana-2")
+
+        let advertised = result["advertised"] as? [String]
+        #expect(advertised == [AgentMCPHostRequests.imageGenerateMethod], "插件在 initialize 里就能看到宿主支持出图")
+        #expect(calls.all().map(\.pluginID) == ["willdeep-video-studio"])
+        #expect(calls.all().first?.prompt == "a red lantern")
+    }
+
+    private final class CallRecorder: @unchecked Sendable {
+        struct Call { let pluginID: String; let prompt: String }
+        private let lock = NSLock()
+        private var calls: [Call] = []
+        func record(pluginID: String, request: AgentPluginImageRequest) {
+            lock.lock(); calls.append(Call(pluginID: pluginID, prompt: request.prompt)); lock.unlock()
+        }
+        func all() -> [Call] { lock.lock(); defer { lock.unlock() }; return calls }
+    }
+
+    /// 最小的插件 MCP 服务：initialize 时记下宿主宣告的能力；tools/call 时先向
+    /// 宿主发一条出图请求，读到响应后再把它连同宣告的能力一起作为工具结果交回。
+    /// 刻意用 macOS 自带 ruby 2.6 能跑的写法。
+    private static let fakeServerScript = #"""
+    require "json"
+    $stdout.sync = true
+    advertised = nil
+    while (line = $stdin.gets)
+      message = JSON.parse(line) rescue next
+      next unless message["id"]
+      case message["method"]
+      when "initialize"
+        extensions = (message.dig("params", "capabilities", "extensions") || {})
+        advertised = (extensions["io.willdeep/host-requests"] || {})["methods"]
+        puts JSON.generate("jsonrpc" => "2.0", "id" => message["id"], "result" => { "capabilities" => {} })
+      when "tools/call"
+        arguments = message.dig("params", "arguments") || {}
+        puts JSON.generate("jsonrpc" => "2.0", "id" => "host-1", "method" => "willdeep/images/generate", "params" => arguments)
+        host = nil
+        while (reply = $stdin.gets)
+          parsed = JSON.parse(reply) rescue next
+          if parsed["id"] == "host-1"
+            host = parsed
+            break
+          end
+        end
+        puts JSON.generate("jsonrpc" => "2.0", "id" => message["id"], "result" => { "host" => host, "advertised" => advertised })
+      else
+        puts JSON.generate("jsonrpc" => "2.0", "id" => message["id"], "result" => {})
+      end
+    end
+    """#
+}

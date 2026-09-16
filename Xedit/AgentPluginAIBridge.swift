@@ -712,71 +712,13 @@ extension AppState {
         )
     }
 
-    /// 把页面递上来的参照图路径钳到本插件自己的生成目录里，再上传换 URL。
-    ///
-    /// 这道钳制是唯一的边界：页面递的是路径，少了它，一个插件页就能指使宿主
-    /// 去读任意文件并**上传到公网**。判据和取图那条一致——规范化之后父目录
-    /// 必须恰好等于本插件的媒体根，并且拒绝符号链接（否则根目录里放一个链接
-    /// 就能指出去）。
-    private func uploadedReferenceImages(
-        pluginID: AgentPluginID,
-        paths: [String],
-        mediaRoot: URL
-    ) async throws -> [String] {
-        guard !paths.isEmpty else { return [] }
-        let root = mediaRoot.standardizedFileURL.resolvingSymlinksInPath()
-        var fileURLs: [URL] = []
-        for path in paths {
-            let candidate = URL(fileURLWithPath: path).standardizedFileURL
-            guard candidate.isFileURL, candidate.path.hasPrefix("/") else {
-                throw AgentPluginAIError.referenceImageOutsidePluginData(path)
-            }
-            let values = try? candidate.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
-            guard values?.isSymbolicLink != true, values?.isRegularFile == true else {
-                throw AgentPluginAIError.referenceImageOutsidePluginData(path)
-            }
-            let resolved = candidate.resolvingSymlinksInPath()
-            guard resolved.deletingLastPathComponent() == root else {
-                throw AgentPluginAIError.referenceImageOutsidePluginData(path)
-            }
-            fileURLs.append(resolved)
-        }
-        return try await SomeIMClient.uploadReferenceImages(fileURLs)
-    }
-
+    /// 页面桥 `ai.generateImage` 的入口。实现在 `AgentPluginImageGeneration`，
+    /// 插件 MCP 进程反向请求出图（`willdeep/images/generate`）走的是同一份。
     func runPluginImageGeneration(
         pluginID: AgentPluginID,
         request: AgentPluginImageRequest
     ) async throws -> AgentPluginImageResult {
-        guard AgentPluginRegistry.shared.hasPermission(.aiImage, pluginID: pluginID) else {
-            throw AgentPluginAIError.imagePermissionDenied
-        }
-        let outputDirectory = try AgentPluginGeneratedMediaResolver.directory(pluginID: pluginID)
-        try FileManager.default.createDirectory(
-            at: outputDirectory,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
-        let referenceURLs = try await uploadedReferenceImages(
-            pluginID: pluginID,
-            paths: request.referenceImagePaths,
-            mediaRoot: outputDirectory
-        )
-        let image = try await SomeIMClient.generateImage(
-            prompt: request.prompt,
-            size: request.size,
-            model: request.model,
-            outputDirectory: outputDirectory,
-            referenceImageURLs: referenceURLs
-        )
-        let filename = image.fileURL.lastPathComponent
-        let encoded = filename.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlPathAllowed) ?? filename
-        return AgentPluginImageResult(
-            mediaURL: "willdeep-plugin://bundle/__media__/\(encoded)",
-            filePath: image.fileURL.path,
-            model: image.model,
-            providerID: "some-im"
-        )
+        try await AgentPluginImageGeneration.run(pluginID: pluginID, request: request)
     }
 
     private func pluginAIConfiguration(for request: AgentPluginAIRequest) throws -> AgentConfiguration {

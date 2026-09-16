@@ -177,6 +177,16 @@ enum AgentMCPBridge {
         )
     }
 
+    /// 测试入口：对一个手工构造的服务配置跑一次请求，走与正式调用相同的连接池
+    /// 与等待循环。正式代码路径都先经过服务目录解析，测试造不出已安装的插件。
+    static func requestForTesting(
+        server: AgentMCPServerConfig,
+        method: String,
+        params: [String: Any]
+    ) async throws -> String {
+        try await runRequest(server: server, method: method, params: params, rendering: .pageFacing)
+    }
+
     static func parseToolCount(from listToolsPayload: String) -> Int? {
         guard let data = listToolsPayload.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data, options: []),
@@ -354,7 +364,8 @@ enum AgentMCPBridge {
                 inbox: inbox,
                 timeout: server.startupTimeout,
                 stderr: stderrCollector,
-                process: process
+                process: process,
+                onServerRequest: serverRequestHandler(stdin: stdinPipe)
             )
             if let result = response["result"] {
                 return try AgentMCPBridge.render(result, as: rendering)
@@ -414,14 +425,15 @@ enum AgentMCPBridge {
                 "jsonrpc": "2.0",
                 "id": initializeID,
                 "method": "initialize",
-                "params": AgentMCPBridge.initializeParams()
+                "params": AgentMCPBridge.initializeParams(for: server)
             ], to: stdinPipe)
             let initializeResponse = try AgentMCPBridge.waitForResponse(
                 id: initializeID,
                 inbox: inbox,
                 timeout: server.startupTimeout,
                 stderr: stderrCollector,
-                process: process
+                process: process,
+                onServerRequest: serverRequestHandler(stdin: stdinPipe)
             )
             if let result = initializeResponse["result"] as? [String: Any],
                let capabilities = result["capabilities"] as? [String: Any],
@@ -439,6 +451,17 @@ enum AgentMCPBridge {
         private func nextID() -> Int {
             defer { nextRequestID += 1 }
             return nextRequestID
+        }
+
+        /// 服务端反向请求的处理器：交给 `AgentMCPHostRequests`，响应写回这个
+        /// 进程的 stdin。写失败（服务端刚好退出）只能放弃——等待循环随后会因为
+        /// 进程退出而超时报错，不会悄悄当成成功。
+        private func serverRequestHandler(stdin: Pipe) -> ([String: Any]) -> Void {
+            let server = self.server
+            return { message in
+                let response = AgentMCPHostRequests.respondSync(to: message, server: server)
+                try? AgentMCPBridge.send(response, to: stdin)
+            }
         }
 
         private func resetProcess() {
@@ -602,16 +625,20 @@ enum AgentMCPBridge {
         throw AgentToolError.invalidArgument("MCP SSE response did not contain a JSON-RPC result.")
     }
 
-    nonisolated private static func initializeParams() -> [String: Any] {
-        [
+    /// `server` 为 nil 或非插件服务时，形状与此前完全一致；插件的 stdio 服务
+    /// 额外宣告可以反向请求哪些宿主能力（见 `AgentMCPHostRequests`）。
+    nonisolated static func initializeParams(for server: AgentMCPServerConfig? = nil) -> [String: Any] {
+        var extensions: [String: Any] = [
+            "io.modelcontextprotocol/ui": [
+                "mimeTypes": ["text/html;profile=mcp-app"]
+            ]
+        ]
+        if let server, let hostRequests = AgentMCPHostRequests.advertisedCapability(for: server) {
+            extensions[AgentMCPHostRequests.capabilityKey] = hostRequests
+        }
+        return [
             "protocolVersion": "2025-06-18",
-            "capabilities": [
-                "extensions": [
-                    "io.modelcontextprotocol/ui": [
-                        "mimeTypes": ["text/html;profile=mcp-app"]
-                    ]
-                ]
-            ],
+            "capabilities": ["extensions": extensions],
             "clientInfo": ["name": AgentNetworkSupport.clientNameHeaderValue, "version": "1"]
         ]
     }
@@ -630,19 +657,32 @@ enum AgentMCPBridge {
         }
     }
 
+    /// `onServerRequest`：服务端在这次请求进行中反向发来的请求。处理完之后
+    /// 超时从头计：它衡量的是「服务端多久没动静」，宿主替它出图的那几十秒
+    /// 不该算进服务端自己的超时里——否则 10 秒超时的插件出一张图就必然被杀。
     nonisolated private static func waitForResponse(
         id: Int,
         inbox: MCPLineInbox,
         timeout: TimeInterval,
         stderr: MCPDataCollector,
-        process: Process
+        process: Process,
+        onServerRequest: (([String: Any]) -> Void)? = nil
     ) throws -> [String: Any] {
-        let deadline = Date().addingTimeInterval(timeout)
+        var deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             guard let line = inbox.nextLine(until: deadline) else { break }
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
                   let dict = object as? [String: Any] else {
+                continue
+            }
+            if AgentMCPHostRequests.isServerRequest(dict) {
+                // stdio 连接总会传处理器（它负责把响应写回 stdin）；没有处理器的
+                // 调用方拿不到服务端的 stdin，只能跳过这一行。
+                if let onServerRequest {
+                    onServerRequest(dict)
+                    deadline = Date().addingTimeInterval(timeout)
+                }
                 continue
             }
             guard let responseID = dict["id"] as? NSNumber, responseID.intValue == id else {

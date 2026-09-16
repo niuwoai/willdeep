@@ -213,6 +213,62 @@ const { providers } = await window.willdeep.ai.providers();
 
 ---
 
+## 四、MCP 服务反向请求出图（已实现，1.378.0-rc1）
+
+页面出图走 `window.willdeep.ai.generateImage`。可插件的 MCP 服务是一个没有页面的独立进程，
+主 Agent 在聊天里调用插件工具时只到得了它，走不到页面桥。为了不让插件自己再配一份出图
+key，宿主允许插件 MCP 服务在处理 `tools/call` 期间**反过来向宿主发请求**，形状与 MCP 协议
+里的 `sampling/createMessage` 相同。
+
+### 协商
+
+宿主只对**插件来源的 stdio 服务**在 `initialize` 里宣告：
+
+```json
+{ "capabilities": { "extensions": { "io.willdeep/host-requests": { "methods": ["willdeep/images/generate"] } } } }
+```
+
+插件据此判断宿主支不支持。没有这一项（旧宿主、willdeep-rs、用户手工配置的服务）时，
+插件应当直接报「当前宿主不支持出图」，而不是发出请求再干等。
+
+### 请求
+
+插件在工具调用还没返回时，往 stdout 写一行：
+
+```json
+{"jsonrpc":"2.0","id":"img-1","method":"willdeep/images/generate",
+ "params":{"prompt":"…","model":"gpt-image-2","size":"1024x1536","referenceImagePaths":["…"]}}
+```
+
+- `id` **用字符串**：宿主自己发出的请求 id 是整数，两边混用同一种会撞号。
+- `params` 与页面桥 `ai.generateImage` 共用同一个校验器 `AgentPluginImageRequestValidator`，
+  权限（`ai.image`）、参考图路径钳制、输出目录也完全相同（`AgentPluginImageGeneration`）。
+- 宿主把响应写回 stdin，成功时 `result` 为 `{ mediaURL, filePath, model, providerID }`。
+
+### 错误码
+
+| code | 含义 |
+| --- | --- |
+| -32601 | 非插件服务，或方法不认识 |
+| -32602 | 参数不合校验（空提示词、模型不在白名单、尺寸不合法等） |
+| -32000 | 出图失败，`message` 是原因（无 `ai.image` 权限、上游报错、参考图越界） |
+| -32001 | 宿主处理超过 600 秒 |
+
+### 超时
+
+宿主等工具结果的计时在**每处理完一次反向请求后重新开始**：出一张图往往比服务的
+工具超时还长，不重置的话插件永远等不到第二张。单次反向请求本身封顶 600 秒，防止上游
+挂住后 MCP 连接的串行队列永远卡着。
+
+插件一次工具调用可以串行发多条反向请求，但宿主处理期间该连接不接新工具调用，
+所以工具应当自己限制一次出图的张数。
+
+实现：`Xedit/AgentMCPHostRequests.swift`、`Xedit/AgentMCPBridge.swift`（`waitForResponse` 的
+`onServerRequest`）；测试 `XeditTests/AgentMCPHostRequestsTests.swift` 用一个真实的 ruby stdio
+服务走完整往返。
+
+---
+
 ## 权限一览
 
 | 权限 | 给什么 | 状态 |
