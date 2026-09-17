@@ -52,6 +52,8 @@ struct AgentLearningEventsCard: View {
                 ForEach(Array(visibleEvents.enumerated()), id: \.element.id) { index, event in
                     AgentLearningEventRow(
                         event: event,
+                        // popover 里不截断：底部写"2 条建议"，这里就得看得到 2 条。
+                        detailLineLimit: capItems ? 4 : nil,
                         didCopy: copiedEventID == event.id,
                         onCopy: { copy(event) },
                         onReject: onReject.map { reject in
@@ -112,6 +114,7 @@ struct AgentLearningEventsCard: View {
 
 private struct AgentLearningEventRow: View {
     let event: AgentLearningEvent
+    var detailLineLimit: Int? = 4
     let didCopy: Bool
     let onCopy: () -> Void
     /// rc13:popover 形态下用来 dismiss review item;nil 时不渲染 reject 按钮。
@@ -148,7 +151,8 @@ private struct AgentLearningEventRow: View {
                     Text(event.detail)
                         .agentChatSupportingFont()
                         .foregroundStyle(.secondary)
-                        .lineLimit(4)
+                        .lineLimit(detailLineLimit)
+                        .fixedSize(horizontal: false, vertical: detailLineLimit == nil)
                         .textSelection(.enabled)
                 }
 

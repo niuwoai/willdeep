@@ -68,15 +68,21 @@ extension AppState {
         memoryState: AgentMemoryState,
         workspaceURL: URL?
     ) {
+        // 提过的建议（本会话 + 复核队列里的历史）也算"已知"，和已存记忆一起去重。
+        let previouslySuggested = runtime.learningEvents
+            .flatMap { $0.pendingMemoryDrafts.map(\.content) }
+            + AgentLearningReviewStore.previouslySuggestedMemoryContents()
         var events = captureAutomaticMemories(
             for: runtime,
             memoryState: memoryState,
-            workspaceURL: workspaceURL
+            workspaceURL: workspaceURL,
+            previouslySuggestedMemoryContents: previouslySuggested
         )
         events.append(contentsOf: AgentSelfLearning.captureAutomaticMCPCapabilityGap(
             for: runtime,
             memoryState: memoryState,
-            workspaceURL: workspaceURL
+            workspaceURL: workspaceURL,
+            previouslySuggestedMemoryContents: previouslySuggested
         ))
         events.append(contentsOf: AgentSelfLearning.captureAutomaticSkillCandidate(
             for: runtime,
@@ -101,7 +107,8 @@ extension AppState {
     private func captureAutomaticMemories(
         for runtime: AgentRuntime,
         memoryState: AgentMemoryState,
-        workspaceURL: URL?
+        workspaceURL: URL?,
+        previouslySuggestedMemoryContents: [String]
     ) -> [AgentLearningEvent] {
         guard memoryState.settings.normalized.isMemoryEnabled,
               memoryState.settings.normalized.autoSummaryEnabled,
@@ -141,11 +148,11 @@ extension AppState {
                 rootDirectoryPath: record.scope == .project ? workspaceURL?.path : nil
             )
         }
-        // 已经存过的记忆不再建议第二次。会话内去重管不到"上周就存过这条"，
-        // 用户看到的是同一句话反复来敲门。
+        // 已经存过、或以前提过（用户看过/忽略过）的记忆不再建议第二次。
+        // 会话内去重管不到"上周就提过这条"，用户看到的是同一句话反复来敲门。
         let drafts = AgentLearningSuggestionDeduplicator.newMemoryDrafts(
             allDrafts,
-            existingMemoryContents: memoryState.memories.map(\.content)
+            existingMemoryContents: memoryState.memories.map(\.content) + previouslySuggestedMemoryContents
         )
         guard !drafts.isEmpty else { return [] }
         return [

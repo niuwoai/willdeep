@@ -672,7 +672,8 @@ enum AgentSelfLearning {
     static func captureAutomaticMCPCapabilityGap(
         for runtime: AgentRuntime,
         memoryState: AgentMemoryState,
-        workspaceURL: URL?
+        workspaceURL: URL?,
+        previouslySuggestedMemoryContents: [String] = []
     ) -> [AgentLearningEvent] {
         guard memoryState.settings.normalized.isMemoryEnabled,
               memoryState.settings.normalized.autoSummaryEnabled,
@@ -699,9 +700,9 @@ enum AgentSelfLearning {
                         rootDirectoryPath: scope == .project ? workspaceURL?.path : nil
                     )
                 },
-                existingMemoryContents: memoryState.memories.map(\.content)
+                existingMemoryContents: memoryState.memories.map(\.content) + previouslySuggestedMemoryContents
             )
-            // 全部与已有记忆重复时，连事件都不产生。
+            // 全部与已有记忆或以前提过的建议重复时，连事件都不产生。
             if !drafts.isEmpty {
                 events.append(AgentLearningEvent(
                     kind: .memory,

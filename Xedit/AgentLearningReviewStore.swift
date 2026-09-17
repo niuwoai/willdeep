@@ -114,6 +114,14 @@ nonisolated enum AgentLearningReviewStore {
         save(items)
     }
 
+    /// 以前已经提过的记忆建议正文，不论用户当时是保存、看过还是忽略。
+    /// 回合末生成新建议前拿它去重：提过一次的事，不再让用户确认第二遍。
+    static func previouslySuggestedMemoryContents(now: Date = Date()) -> [String] {
+        load(now: now)
+            .filter { $0.event.kind == .memory }
+            .flatMap { $0.event.pendingMemoryDrafts.map(\.content) }
+    }
+
     static func mark(id: UUID, decision: AgentLearningReviewDecision) {
         var items = load()
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }

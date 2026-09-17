@@ -944,6 +944,48 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func previouslySuggestedMemoriesAreNotSuggestedAgain() throws {
+        let suiteName = "com.willdeep.tests.learningReview.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        AgentLearningReviewStore._setTestDefaultsOverride(defaults)
+        defer {
+            AgentLearningReviewStore._setTestDefaultsOverride(nil)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
+        }
+
+        let root = URL(fileURLWithPath: "/tmp/WillDeepProject")
+        let state = AgentMemoryState(settings: .default, memories: [])
+        let runtime = AgentRuntime(session: AgentSession(messages: [
+            AgentMessage(
+                role: .user,
+                content: "以后遇到缺少外部系统集成时，要自动搜索并建议安装 MCP；必要时也要自动添加 memory 和 skill。"
+            ),
+            AgentMessage(role: .assistant, content: "明白，我会把这个作为 harness 自学习策略处理。")
+        ]))
+
+        let first = AgentSelfLearning.captureAutomaticMCPCapabilityGap(
+            for: runtime,
+            memoryState: state,
+            workspaceURL: root
+        )
+        let firstMemoryEvent = try #require(first.first { $0.kind == .memory })
+        // 用户看过后点了忽略：没存进记忆，但这条建议已经提过了。
+        AgentLearningReviewStore.enqueue(events: [firstMemoryEvent], sessionID: nil)
+        AgentLearningReviewStore.mark(id: firstMemoryEvent.id, decision: .dismissed)
+
+        let previous = AgentLearningReviewStore.previouslySuggestedMemoryContents()
+        #expect(Set(previous) == Set(firstMemoryEvent.pendingMemoryDrafts.map(\.content)))
+
+        let second = AgentSelfLearning.captureAutomaticMCPCapabilityGap(
+            for: runtime,
+            memoryState: state,
+            workspaceURL: root,
+            previouslySuggestedMemoryContents: previous
+        )
+        #expect(!second.contains { $0.kind == .memory })
+    }
+
+    @Test
     func learningReviewStoreMarksAndClearsReviewedItems() throws {
         let suiteName = "com.willdeep.tests.learningReview.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
