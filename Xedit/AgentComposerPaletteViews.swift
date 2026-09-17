@@ -481,8 +481,11 @@ struct AgentComposerSkillStrip: View {
 /// is riding along this turn.
 struct AgentComposerAttachmentStrip: View {
     let includeWorkspace: Bool
+    /// `@terminal` / `@browser`：发送时才取快照，这里只显示「附了哪个面板」。
+    var panelStateMentions: [AgentPanelStateMention.PanelKind] = []
     let files: [AgentFileAttachment]
     let onRemoveWorkspace: () -> Void
+    var onRemovePanelStateMention: (AgentPanelStateMention.PanelKind) -> Void = { _ in }
     let onRemoveFile: (String) -> Void
     let onToggleFileSection: (String, String) -> Void
     let onSetAllFileSections: (String, Bool) -> Void
@@ -496,6 +499,16 @@ struct AgentComposerAttachmentStrip: View {
                         label: "@workspace",
                         help: "Workspace root + file list will ride along",
                         onRemove: onRemoveWorkspace
+                    )
+                }
+                ForEach(panelStateMentions, id: \.self) { kind in
+                    chip(
+                        symbol: kind == .terminal ? "terminal" : "globe",
+                        label: "@\(kind.id)",
+                        help: kind == .terminal
+                            ? L10n.PanelMention.terminalPurpose
+                            : L10n.PanelMention.browserPurpose,
+                        onRemove: { onRemovePanelStateMention(kind) }
                     )
                 }
                 ForEach(files) { file in

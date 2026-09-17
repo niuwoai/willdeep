@@ -20,6 +20,9 @@ import Foundation
 /// 只有用户知道，所以才需要这条手动通道。两者同时出现时去重，见
 /// `promptBlock(snapshots:suppressing:)`。
 nonisolated enum AgentPanelStateMention {
+    /// 面板没开时写进 prompt 的事实（prompt 固定英文）。
+    static let terminalNotOpenDetail = "no terminal tab is open"
+    static let browserNoPageDetail = "no page is open"
 
     /// 可被附加的面板。
     ///

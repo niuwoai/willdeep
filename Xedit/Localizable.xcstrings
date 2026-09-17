@@ -29177,6 +29177,8 @@
         }
       }
     },
+    "composer.panel-mention.browser.no-page" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No page open yet" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Aún no hay ninguna página abierta" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucune page ouverte pour l'instant" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ページはまだ開いていません" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内嵌浏览器还没打开页面" } } } },
+    "composer.panel-mention.terminal.not-open" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No terminal tab open yet" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Aún no hay ninguna pestaña de terminal abierta" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun onglet de terminal ouvert pour l'instant" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ターミナルタブはまだ開いていません" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "侧边栏终端还没打开" } } } },
     "composer.add-secret.action" : {
       "comment" : "Button label for adding another protected secret row",
       "extractionState" : "manual",

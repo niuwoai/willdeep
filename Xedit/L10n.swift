@@ -581,6 +581,8 @@ nonisolated enum L10n {
         static let browser = String(localized: "composer.panel-mention.browser", defaultValue: "Side-panel browser")
         static let terminalPurpose = String(localized: "composer.panel-mention.terminal.purpose", defaultValue: "Tell the agent which host this terminal is on")
         static let browserPurpose = String(localized: "composer.panel-mention.browser.purpose", defaultValue: "Tell the agent which page this browser is showing")
+        static let terminalNotOpen = String(localized: "composer.panel-mention.terminal.not-open", defaultValue: "No terminal tab open yet")
+        static let browserNoPage = String(localized: "composer.panel-mention.browser.no-page", defaultValue: "No page open yet")
     }
 
     enum ComposerWorkspace {

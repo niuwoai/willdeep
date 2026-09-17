@@ -834,21 +834,29 @@ private struct ComposerCard: View {
 
         // 终端：只报活动 tab。非活动 tab 的主机一律 unknown（探针只在活动
         // tab 且 shell 空闲时打一次），列出来就是一串「未知」。
-        if AgentPanelStateMention.PanelKind.terminal.matches(query: q),
-           let active = appState.agentTerminalController.activeTab {
+        // 面板没开也照样列出来：用户要的是「能附加终端 / 浏览器」这个入口，
+        // 条目时有时无只会让人以为功能没了。副标题如实写「没开」。
+        if AgentPanelStateMention.PanelKind.terminal.matches(query: q) {
             entries.append(
-                .panelState(kind: .terminal, detail: active.hostLine)
+                .panelState(
+                    kind: .terminal,
+                    detail: appState.agentTerminalController.activeTab?.hostLine
+                        ?? L10n.PanelMention.terminalNotOpen
+                )
             )
         }
 
         if AgentPanelStateMention.PanelKind.browser.matches(query: q) {
             let raw = AgentEmbeddedBrowserController.shared.currentURL
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !raw.isEmpty {
-                entries.append(
-                    .panelState(kind: .browser, detail: AgentSecretStore.redactPlaceholders(in: raw))
+            entries.append(
+                .panelState(
+                    kind: .browser,
+                    detail: raw.isEmpty
+                        ? L10n.PanelMention.browserNoPage
+                        : AgentSecretStore.redactPlaceholders(in: raw)
                 )
-            }
+            )
         }
 
         return entries
@@ -986,11 +994,16 @@ private struct ComposerCard: View {
                 )
             }
 
-            if !appState.agentPendingFiles.isEmpty || appState.agentPendingIncludeWorkspaceOverview {
+            if !appState.agentPendingFiles.isEmpty
+                || appState.agentPendingIncludeWorkspaceOverview
+                || !appState.agentPendingPanelStateMentions.isEmpty {
                 AgentComposerAttachmentStrip(
                     includeWorkspace: appState.agentPendingIncludeWorkspaceOverview,
+                    panelStateMentions: AgentPanelStateMention.PanelKind.allCases
+                        .filter { appState.agentPendingPanelStateMentions.contains($0) },
                     files: appState.agentPendingFiles,
                     onRemoveWorkspace: { appState.toggleAgentWorkspaceOverview() },
+                    onRemovePanelStateMention: { appState.agentPendingPanelStateMentions.remove($0) },
                     onRemoveFile: { appState.detachAgentFile(id: $0) },
                     onToggleFileSection: { fileID, sectionID in
                         appState.toggleAgentFileSection(fileID: fileID, sectionID: sectionID)

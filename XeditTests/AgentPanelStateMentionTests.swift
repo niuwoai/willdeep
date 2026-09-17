@@ -188,6 +188,18 @@ nonisolated struct AtPickerEntryGroupingTests {
         #expect(title.contains("@terminal"))
     }
 
+    /// 面板没开时附上的是「没开」这件事本身，不能标成活动终端。
+    @Test("面板没开也如实进块")
+    func closedPanelsAreReportedAsClosed() throws {
+        let block = try #require(AgentPanelStateMention.promptBlock(snapshots: [
+            .init(kind: .terminal, detail: AgentPanelStateMention.terminalNotOpenDetail, isActive: false),
+            .init(kind: .browser, detail: AgentPanelStateMention.browserNoPageDetail)
+        ]))
+        #expect(block.contains("- Side-panel terminal: no terminal tab is open"))
+        #expect(block.contains("- Side-panel browser: no page is open"))
+        #expect(!block.contains("(active)"))
+    }
+
     /// 副标题直接摆事实，用户选之前就看得见要附什么。
     @Test("面板候选副标题就是事实本身")
     func panelEntrySubtitleIsTheFact() {

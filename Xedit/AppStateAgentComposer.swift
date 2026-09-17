@@ -2788,29 +2788,36 @@ extension AppState {
 
         var snapshots: [AgentPanelStateMention.Snapshot] = []
 
-        if requested.contains(.terminal),
-           let active = agentTerminalController.activeTab {
-            snapshots.append(
-                .init(
-                    kind: .terminal,
-                    title: active.title,
-                    detail: active.hostLine,
-                    isActive: true
+        // 用户明确附了面板、面板却没开时也要说出来：静默丢掉等于让模型
+        // 以为用户什么都没附。
+        if requested.contains(.terminal) {
+            if let active = agentTerminalController.activeTab {
+                snapshots.append(
+                    .init(
+                        kind: .terminal,
+                        title: active.title,
+                        detail: active.hostLine,
+                        isActive: true
+                    )
                 )
-            )
+            } else {
+                snapshots.append(
+                    .init(kind: .terminal, detail: AgentPanelStateMention.terminalNotOpenDetail, isActive: false)
+                )
+            }
         }
 
         if requested.contains(.browser) {
             let raw = AgentEmbeddedBrowserController.shared.currentURL
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !raw.isEmpty {
-                snapshots.append(
-                    .init(
-                        kind: .browser,
-                        detail: AgentSecretStore.redactPlaceholders(in: raw)
-                    )
+            snapshots.append(
+                .init(
+                    kind: .browser,
+                    detail: raw.isEmpty
+                        ? AgentPanelStateMention.browserNoPageDetail
+                        : AgentSecretStore.redactPlaceholders(in: raw)
                 )
-            }
+            )
         }
 
         // 自动注入这一轮会不会讲终端？条件与 AgentTerminalHostContext 一致：
