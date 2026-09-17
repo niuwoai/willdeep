@@ -878,6 +878,14 @@ enum AgentChatHistoryRenderer {
                     // 回合还在跑的时候不给接力按钮:宿主此刻多半正在压缩
                     // 后自动续跑,这两个图标一闪而过只会让人以为要自己动手。
                     handoffRelayPrompt: isAssistantTurnActive ? nil : handoffRelayPrompt,
+                    turnTimestamp: message.role == .assistant
+                        ? (
+                            completedAt: turnPresentation?.completedAt
+                                ?? AgentAssistantTurnGrouping.completedAt(of: [message])
+                                ?? message.createdAt,
+                            key: (turnPresentation?.lastVisibleAssistantMessageID ?? message.id).uuidString
+                        )
+                        : nil,
                     layoutWidth: layoutWidth,
                     baseFontSize: baseFontSize,
                     lineSpacing: supportingLineSpacing,
@@ -931,14 +939,22 @@ enum AgentChatHistoryRenderer {
                 }
             }
             if result.length > renderedMessageStart {
+                let renderedRange = NSRange(
+                    location: renderedMessageStart,
+                    length: result.length - renderedMessageStart
+                )
                 result.addAttribute(
                     .agentChatHistoryMessageID,
                     value: message.id.uuidString,
-                    range: NSRange(
-                        location: renderedMessageStart,
-                        length: result.length - renderedMessageStart
-                    )
+                    range: renderedRange
                 )
+                if message.role == .assistant {
+                    result.addAttribute(
+                        .agentChatHistoryAssistantTurnKey,
+                        value: (turnPresentation?.lastVisibleAssistantMessageID ?? message.id).uuidString,
+                        range: renderedRange
+                    )
+                }
             }
 
             index += 1

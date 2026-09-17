@@ -809,6 +809,7 @@ extension AgentChatHistoryRenderer {
         isVisible: Bool = true,
         turnReportToolCount: Int? = nil,
         handoffRelayPrompt: String? = nil,
+        turnTimestamp: (completedAt: Date, key: String)? = nil,
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
         bodyFont: NSFont? = nil,
@@ -880,6 +881,20 @@ extension AgentChatHistoryRenderer {
                     baseFontSize: baseFontSize,
                     font: metadataFont
                 ))
+            }
+            // 这一轮的完成时间。始终占位（透明），悬停到这一轮时由文本视图用
+            // 临时属性显色——不重排整篇 transcript，也不会因为出现而挤动布局。
+            if isVisible, let turnTimestamp {
+                let timestampStart = result.length
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
+                result.append(AgentChatHistoryFooterChrome.label(
+                    formatFullTimestamp(turnTimestamp.completedAt),
+                    baseFontSize: baseFontSize,
+                    font: metadataFont
+                ))
+                let timestampRange = NSRange(location: timestampStart, length: result.length - timestampStart)
+                result.addAttribute(.foregroundColor, value: NSColor.clear, range: timestampRange)
+                result.addAttribute(.agentChatHistoryTurnTimestamp, value: turnTimestamp.key, range: timestampRange)
             }
         }
 
@@ -1198,6 +1213,18 @@ extension AgentChatHistoryRenderer {
         style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         return style
     }
+
+    /// 完整日期 + 秒，按用户区域习惯排列（中文：2026/9/17 15:02:31）。
+    static func formatFullTimestamp(_ date: Date) -> String {
+        fullTimestampFormatter.string(from: date)
+    }
+
+    private static let fullTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.setLocalizedDateFormatFromTemplate("yyyyMMddHHmmss")
+        return formatter
+    }()
 
     private static func formatTimestamp(_ date: Date) -> String {
         let calendar = Calendar.autoupdatingCurrent

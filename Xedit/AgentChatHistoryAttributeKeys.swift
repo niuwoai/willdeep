@@ -43,6 +43,10 @@ extension NSAttributedString.Key {
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
     static let agentChatHistoryMessageID = NSAttributedString.Key("AgentChatHistoryMessageID")
+    /// 同一轮 Agent 输出的所有消息共用的 key（该轮最后一条可见回复的 id）。
+    static let agentChatHistoryAssistantTurnKey = NSAttributedString.Key("AgentChatHistoryAssistantTurnKey")
+    /// footer 里的完成时间标签，值同上。平时透明占位，悬停到这一轮时才显色。
+    static let agentChatHistoryTurnTimestamp = NSAttributedString.Key("AgentChatHistoryTurnTimestamp")
     static let agentChatHistoryHeadingLevel = NSAttributedString.Key("AgentChatHistoryHeadingLevel")
     static let agentChatHistoryListDepth = NSAttributedString.Key("AgentChatHistoryListDepth")
     static let agentChatHistoryProgressBlockID = NSAttributedString.Key("AgentChatHistoryProgressBlockID")

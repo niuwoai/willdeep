@@ -209,6 +209,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var expandedToolGroupIDs = Set<String>()
     private var expandedProgressBlockIDs = Set<String>()
     private var hoveredUserMessageID: UUID?
+    /// 鼠标所在那一轮 Agent 输出的 key；它的完成时间标签此刻显色。
+    private var hoveredAssistantTurnKey: String?
     private var hoverTrackingArea: NSTrackingArea?
     /// Pending "restore copy button label" work items keyed by the
     /// button's stable text-storage location. Rapid repeated clicks on
@@ -314,13 +316,54 @@ final class AgentChatHistoryNSTextView: NSTextView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        updateHoveredUserMessage(at: convert(event.locationInWindow, from: nil))
+        let point = convert(event.locationInWindow, from: nil)
+        updateHoveredUserMessage(at: point)
+        updateHoveredAssistantTurn(key: assistantTurnKey(at: point))
         super.mouseMoved(with: event)
     }
 
     override func mouseExited(with event: NSEvent) {
         updateHoveredUserMessage(id: nil)
+        updateHoveredAssistantTurn(key: nil)
         super.mouseExited(with: event)
+    }
+
+    private func assistantTurnKey(at point: NSPoint) -> String? {
+        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else { return nil }
+        let containerPoint = NSPoint(
+            x: point.x - textContainerInset.width,
+            y: point.y - textContainerInset.height
+        )
+        guard containerPoint.x >= 0, containerPoint.y >= 0 else { return nil }
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        guard glyphIndex < layoutManager.numberOfGlyphs else { return nil }
+        // glyphIndex(for:) 在空白处返回最近的字形：确认鼠标确实落在那一行里，
+        // 否则 transcript 底部的空白会一直算作最后一轮。
+        let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+        guard lineRect.contains(containerPoint) else { return nil }
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard charIndex < textStorage.length else { return nil }
+        return textStorage.attribute(.agentChatHistoryAssistantTurnKey, at: charIndex, effectiveRange: nil) as? String
+    }
+
+    private func updateHoveredAssistantTurn(key: String?) {
+        guard hoveredAssistantTurnKey != key else { return }
+        hoveredAssistantTurnKey = key
+        applyHoveredTurnTimestamp()
+    }
+
+    /// 只改 layout manager 的临时属性：显隐一个时间标签不值得重排整篇 transcript。
+    private func applyHoveredTurnTimestamp() {
+        guard let layoutManager, let textStorage else { return }
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        textStorage.enumerateAttribute(.agentChatHistoryTurnTimestamp, in: fullRange, options: []) { value, range, _ in
+            guard let key = value as? String else { return }
+            if key == hoveredAssistantTurnKey {
+                layoutManager.addTemporaryAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, forCharacterRange: range)
+            } else {
+                layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: range)
+            }
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -707,6 +750,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             isDark: currentSearchIsDark
         )
         replaceTranscriptStoragePreservingSelection(with: result.attributedString)
+        // 重排后临时属性不跟着新内容走，悬停中的时间标签要重新显色。
+        applyHoveredTurnTimestamp()
         reportSearchResultCountIfNeeded(result.matchCount)
         if scrollToActiveMatch {
             scrollActiveSearchMatchIfNeeded(ranges: result.matchRanges)

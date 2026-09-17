@@ -1118,6 +1118,8 @@ nonisolated struct AgentAssistantTurnPresentation {
     let firstVisibleAssistantMessageID: AgentMessage.ID
     let lastVisibleAssistantMessageID: AgentMessage.ID
     let summaryMessage: AgentMessage
+    /// 这一轮 Agent 输出结束的时刻（各条回复 createdAt + 耗时的最大值）。
+    let completedAt: Date
 
     func isFirstVisibleMessage(_ message: AgentMessage) -> Bool {
         message.id == firstVisibleAssistantMessageID
@@ -1192,7 +1194,8 @@ nonisolated enum AgentAssistantTurnGrouping {
                 assistantMessages: assistantMessages,
                 visibleMessages: visibleMessages,
                 aggregatesCopyContent: aggregatesCopyContent
-            )
+            ),
+            completedAt: completedAt(of: assistantMessages) ?? last.createdAt
         )
         for message in visibleMessages {
             result[message.id] = presentation
@@ -1244,6 +1247,12 @@ nonisolated enum AgentAssistantTurnGrouping {
         return values.isEmpty ? nil : values.reduce(0, +)
     }
 
+    static func completedAt(of assistantMessages: [AgentMessage]) -> Date? {
+        assistantMessages
+            .map { $0.createdAt.addingTimeInterval(max(0, $0.elapsedSeconds ?? 0)) }
+            .max()
+    }
+
     private static func totalElapsedSeconds(
         userMessage: AgentMessage?,
         assistantMessages: [AgentMessage]
@@ -1251,9 +1260,7 @@ nonisolated enum AgentAssistantTurnGrouping {
         guard let first = assistantMessages.first else { return nil }
         let startedAt = userMessage?.createdAt ?? first.createdAt
         let providerElapsed = assistantMessages.compactMap(\.elapsedSeconds).filter { $0 > 0 }
-        let completedAt = assistantMessages
-            .map { $0.createdAt.addingTimeInterval(max(0, $0.elapsedSeconds ?? 0)) }
-            .max() ?? first.createdAt
+        let completedAt = completedAt(of: assistantMessages) ?? first.createdAt
         let wallClockElapsed = completedAt.timeIntervalSince(startedAt)
         guard wallClockElapsed > 0 || !providerElapsed.isEmpty else { return nil }
         return max(wallClockElapsed, providerElapsed.reduce(0, +))
