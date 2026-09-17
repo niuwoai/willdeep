@@ -480,23 +480,21 @@ final class AgentJobRegistry: ObservableObject {
             secretRedactionValues: secretRedactionValues,
             logSink: AgentJobOutputLogSink(rootDirectory: outputLogRootDirectory, jobHandle: "\(handlePrefix)\(shortID)")
         )
-        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty {
-                collector.append(data, stream: .stdout)
-                monitor?.ingest(data)
-            }
+        let stdoutReader = AgentPipeReader(handle: stdoutPipe.fileHandleForReading) { data in
+            collector.append(data, stream: .stdout)
+            monitor?.ingest(data)
         }
-        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty { collector.append(data, stream: .stderr) }
+        let stderrReader = AgentPipeReader(handle: stderrPipe.fileHandleForReading) { data in
+            collector.append(data, stream: .stderr)
         }
+        stdoutReader.startReading()
+        stderrReader.startReading()
 
         do {
             try process.run()
         } catch {
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            stdoutReader.stopReading()
+            stderrReader.stopReading()
             // Insert a synthetic .launchFailed record so the user can
             // see why their job didn't take.
             let job = AgentBackgroundJob(
@@ -582,21 +580,15 @@ final class AgentJobRegistry: ObservableObject {
         // Termination handler runs on a private queue; hop back to the
         // main actor to mutate state and post the notification.
         process.terminationHandler = { [weak self, weak processBox] proc in
-            // Drain any remaining buffered output before the pipes go
-            // away — readabilityHandler can race with terminate().
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            // Read both pipes to EOF before the job is marked finished: one
+            // `availableData` left the tail (usually the verdict line) behind
+            // whenever the readability handler had fallen behind.
             if let processBox {
                 processBox.timeoutWork?.cancel()
                 processBox.stopTrackingAndTerminateDescendants()
-                let remainingStdout = stdoutPipe.fileHandleForReading.availableData
-                processBox.collector.append(remainingStdout, stream: .stdout)
-                monitor?.ingest(remainingStdout)
-                processBox.collector.append(
-                    stderrPipe.fileHandleForReading.availableData,
-                    stream: .stderr
-                )
             }
+            stdoutReader.drainToEnd()
+            stderrReader.drainToEnd()
             let exitStatus = proc.terminationStatus
             let didTimeOut = processBox?.didTimeOut ?? false
             let wasKilled = processBox?.didExplicitKill ?? false
@@ -677,9 +669,7 @@ final class AgentJobRegistry: ObservableObject {
             decoder: specification.decoder,
             secretRedactionValues: secretRedactionValues
         )
-        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
+        let stdoutReader = AgentPipeReader(handle: stdoutPipe.fileHandleForReading) { [weak self] data in
             collector.append(data, stream: .stdout)
             let events = eventCollector.append(data)
             guard !events.isEmpty else { return }
@@ -687,18 +677,17 @@ final class AgentJobRegistry: ObservableObject {
                 self?.recordExecutorEvents(id: id, events: events)
             }
         }
-        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty {
-                collector.append(data, stream: .stderr)
-            }
+        let stderrReader = AgentPipeReader(handle: stderrPipe.fileHandleForReading) { data in
+            collector.append(data, stream: .stderr)
         }
+        stdoutReader.startReading()
+        stderrReader.startReading()
 
         do {
             try process.run()
         } catch {
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            stdoutReader.stopReading()
+            stderrReader.stopReading()
             if process.isRunning {
                 AgentProcessSupport.terminateProcessTree(process)
             }
@@ -776,20 +765,16 @@ final class AgentJobRegistry: ObservableObject {
         }
 
         process.terminationHandler = { [weak self, weak processBox] proc in
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            processBox?.timeoutWork?.cancel()
+            // Same end-of-stream drain as shell jobs; the stdout sink keeps
+            // decoding events, then the partial last line is flushed.
+            stdoutReader.drainToEnd()
+            stderrReader.drainToEnd()
             if let processBox {
-                processBox.timeoutWork?.cancel()
-                let remainingOutput = stdoutPipe.fileHandleForReading.availableData
-                processBox.collector.append(remainingOutput, stream: .stdout)
                 let remainingEvents = processBox.executorEventCollector?.append(
-                    remainingOutput,
+                    Data(),
                     flush: true
                 ) ?? []
-                processBox.collector.append(
-                    stderrPipe.fileHandleForReading.availableData,
-                    stream: .stderr
-                )
                 if !remainingEvents.isEmpty {
                     Task { @MainActor [weak self] in
                         self?.recordExecutorEvents(
