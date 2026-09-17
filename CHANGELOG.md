@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.384.0-rc1 - 2026-09-17
+
+### Changed
+
+- **内置的短剧工坊插件（willdeep-video-studio）从 0.18.0 升到 0.23.0。** 插件自身的变更见其 CHANGELOG，要点：
+  - 0.19.0：生成队列页可直接播成片、显示首帧、进行中的任务自动刷新；首页封面不再一律「暂无封面」。
+  - 0.20.0：格式正确的 AI 出稿直接采用；角色 / 分集剧本 / 分镜有历史记录；角色卡带进度徽标；设计时带内容合规红线、完成后自动审核；出图模型可多选。
+  - 0.21.0：主 Agent 可在聊天里调 `image.generate` 出图。
+  - 0.22.0：`drama.get_progress` 一次返回进度与下一步；`drama.get_stage_context` 把阶段创作材料交给 Agent；只读工具带 `readOnlyHint` 注解。
+  - 0.23.0：主 Agent 可调 `review.run` 跑内容合规预审（走宿主 `willdeep/ai/complete`，1.380.0-rc1 起支持），进度里报告审核状态。
+
 ## 1.383.0-rc4 - 2026-09-17
 
 ### Fixed
