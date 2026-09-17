@@ -111,6 +111,9 @@ nonisolated struct WillDeepRuntimeSession: Decodable {
     let workspace: String?
     let profile: String?
     let model: String?
+    /// 会话里选过的审批档位（rs 0.77 起）；`nil` 表示跟随工作区策略，或服务端
+    /// 是不发这个字段的旧版本。保持原始字符串，映射见 `WillDeepRuntimeApprovalMode`。
+    let approvalMode: String?
     let status: String
     let activeTurnID: String?
     let createdAt: Int
@@ -118,10 +121,44 @@ nonisolated struct WillDeepRuntimeSession: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case id, workspace, profile, model, status
+        case approvalMode = "approval_mode"
         case rootAgentID = "root_agent_id"
         case activeTurnID = "active_turn_id"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+}
+
+/// rs Runtime 的审批档位拼写（工作区 `access` 与会话 `approval_mode` 共用）与
+/// 本端 `AgentApprovalMode` 的对照。两端逐档同义：
+///
+/// | rs | Xedit |
+/// |---|---|
+/// | `strict` | `.requestEveryTime` |
+/// | `smart` | `.smart` |
+/// | `workspace_write` | `.workspaceAccess` |
+/// | `full_access` | `.fullAccess` |
+///
+/// `read_only` 是 rs 的工作区策略，本端没有同名档位，返回 `nil`；认不出的
+/// 新拼写同样返回 `nil`，由调用方决定怎么降级，而不是在这里猜。
+nonisolated enum WillDeepRuntimeApprovalMode {
+    static func agentApprovalMode(from raw: String?) -> AgentApprovalMode? {
+        switch raw {
+        case "strict": return .requestEveryTime
+        case "smart": return .smart
+        case "workspace_write": return .workspaceAccess
+        case "full_access": return .fullAccess
+        default: return nil
+        }
+    }
+
+    static func runtimeValue(for mode: AgentApprovalMode) -> String {
+        switch mode {
+        case .requestEveryTime: return "strict"
+        case .smart: return "smart"
+        case .workspaceAccess: return "workspace_write"
+        case .fullAccess: return "full_access"
+        }
     }
 }
 

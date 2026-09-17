@@ -78,6 +78,11 @@ nonisolated struct WillDeepRuntimeProtocolTests {
         let session = try Self.decode("responses", "session", as: WillDeepRuntimeSession.self)
         #expect(session.data?.status == "running")
         #expect(session.data?.rootAgentID.isEmpty == false)
+        #expect(session.data?.approvalMode == "full_access")
+        #expect(
+            WillDeepRuntimeApprovalMode.agentApprovalMode(from: session.data?.approvalMode)
+                == .fullAccess
+        )
 
         let agent = try Self.decode("responses", "agent", as: WillDeepRuntimeAgent.self)
         #expect(agent.data?.profile == "default")
@@ -131,6 +136,17 @@ nonisolated struct WillDeepRuntimeProtocolTests {
             "control_results", "object_mutation", as: WillDeepRuntimeObjectMutation.self
         )
         #expect(mutation.data?.status.isEmpty == false)
+    }
+
+    @Test("rs approval modes map one-to-one onto AgentApprovalMode")
+    func approvalModesRoundTrip() {
+        for mode in AgentApprovalMode.allCases {
+            let raw = WillDeepRuntimeApprovalMode.runtimeValue(for: mode)
+            #expect(WillDeepRuntimeApprovalMode.agentApprovalMode(from: raw) == mode)
+        }
+        // rs 的只读工作区策略在本端没有对应档位，也不能被悄悄当成 smart。
+        #expect(WillDeepRuntimeApprovalMode.agentApprovalMode(from: "read_only") == nil)
+        #expect(WillDeepRuntimeApprovalMode.agentApprovalMode(from: nil) == nil)
     }
 
     /// The copy in this repo is the thing under test, but a copy that has

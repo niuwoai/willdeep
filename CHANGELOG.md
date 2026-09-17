@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.387.0-rc1 - 2026-09-17
+
+### Added
+
+- **读懂 willdeep-rs Runtime 的会话审批档位（契约对齐，配合 rs 0.77.0-rc1）。** rs 的 CLI/TUI 新增 `/permissions`，
+  审批档位扩成与本端一一对应的四档，外加 rs 独有的只读工作区策略。
+  - `WillDeepRuntimeSession` 新增可选 `approvalMode`（协议字段 `approval_mode`）；旧版 Runtime 不发该字段时为 `nil`。
+  - 新增 `WillDeepRuntimeApprovalMode` 对照：`strict ↔ .requestEveryTime`、`smart ↔ .smart`、
+    `workspace_write ↔ .workspaceAccess`、`full_access ↔ .fullAccess`；`read_only` 与认不出的拼写返回 `nil`，不悄悄当成 smart。
+  - 共享 fixture `willdeep-runtime-public-api-v1.json` 已从 rs 同步（会话示例带 `approval_mode`），往返映射有单测锁定。
+  - 本版只读不写：本端仍不调用 rs 的 `session.update_approval_mode`。
+
 ## 1.386.0-rc1 - 2026-09-17
 
 ### Added
