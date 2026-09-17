@@ -76,6 +76,7 @@ enum AgentSettingsStore {
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     private static let specGateEnabledKey = "com.willdeep.agentSettings.specGate.v1"
+    private static let inputSuggestionsEnabledKey = "com.willdeep.agentSettings.inputSuggestions.v1"
     private static let specGateEnforcementKey = "com.willdeep.agentSettings.specGateEnforcement.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
 
@@ -445,6 +446,17 @@ enum AgentSettingsStore {
     /// 装上（设计文档 §11 的 P3），阻断本身另有一个默认关的开关，
     /// 那时才需要设置界面。现在给这个 key 是留一个逃生阀——判定万一
     /// 在某些输入上开销异常，可以不发版就关掉。
+    /// 回合结束后预测用户下一句、在输入框里以灰字显示。默认开：用的是
+    /// 标题模型（没配就用快速模型），本地模型开着时优先走本地。
+    static func loadInputSuggestionsEnabled() -> Bool {
+        guard defaults.object(forKey: inputSuggestionsEnabledKey) != nil else { return true }
+        return defaults.bool(forKey: inputSuggestionsEnabledKey)
+    }
+
+    static func saveInputSuggestionsEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: inputSuggestionsEnabledKey)
+    }
+
     static func loadSpecGateEnabled() -> Bool {
         guard defaults.object(forKey: specGateEnabledKey) != nil else { return true }
         return defaults.bool(forKey: specGateEnabledKey)

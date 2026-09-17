@@ -290,6 +290,16 @@ final class AppState: ObservableObject {
             AgentFontSmoothing.apply(enabled: agentFontSmoothingEnabled)
         }
     }
+    /// 回合结束后在输入框里预测下一句（Tab 采用）。
+    @Published var agentInputSuggestionsEnabled: Bool = AgentSettingsStore.loadInputSuggestionsEnabled() {
+        didSet {
+            guard oldValue != agentInputSuggestionsEnabled else { return }
+            AgentSettingsStore.saveInputSuggestionsEnabled(agentInputSuggestionsEnabled)
+            if !agentInputSuggestionsEnabled {
+                agentRuntimes.values.forEach { $0.clearInputSuggestion() }
+            }
+        }
+    }
     /// 判定「这个需求要不要先写设计文档」。默认开，因为它只记录不打扰。
     @Published var agentSpecGateEnabled: Bool = AgentSettingsStore.loadSpecGateEnabled() {
         didSet {

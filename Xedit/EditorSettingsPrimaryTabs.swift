@@ -121,6 +121,13 @@ extension EditorSettingsView {
                     .foregroundStyle(.secondary)
             }
 
+            Section(L10n.Composer.inputSuggestionSettingsSectionTitle) {
+                Toggle(L10n.Composer.inputSuggestionSettingsToggle, isOn: $appState.agentInputSuggestionsEnabled)
+                Text(L10n.Composer.inputSuggestionSettingsFootnote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L10n.SpecGateSettings.sectionTitle) {
                 Toggle(L10n.SpecGateSettings.detectionToggle, isOn: $appState.agentSpecGateEnabled)
                 Text(L10n.SpecGateSettings.detectionFootnote)

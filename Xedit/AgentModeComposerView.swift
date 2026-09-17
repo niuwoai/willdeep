@@ -1093,7 +1093,11 @@ private struct ComposerCard: View {
                     onSkillCommit: { commitSelectedSkillEntry() },
                     onSkillCancel: { closeSkillMenu() },
                     onSkillQueryChange: { handleSkillQueryChange($0) },
-                    coordinatorRef: coordinatorRef
+                    coordinatorRef: coordinatorRef,
+                    inputSuggestion: appState.agentInputSuggestionsEnabled
+                        ? appState.activeRuntime?.inputSuggestion
+                        : nil,
+                    onDismissInputSuggestion: { appState.activeRuntime?.clearInputSuggestion() }
                 )
                 .focused($inputFocused)
                 // 1.85.0-rc15:封顶从 ~7 行收到 ~3 行(对齐 codex 默认体感;

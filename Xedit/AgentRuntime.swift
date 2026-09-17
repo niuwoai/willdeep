@@ -98,6 +98,19 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Composer state (per-session draft — switching tabs preserves)
 
     @Published var input: String = ""
+    /// 回合结束后预测的用户下一句，输入框为空时以灰字显示，Tab 采用。
+    /// 只活在内存里，不落盘、不跨重启。
+    @Published var inputSuggestion: String?
+    /// 正在进行的预测请求；新一轮开始或用户开始打字时取消。
+    var inputSuggestionTask: Task<Void, Never>?
+
+    func clearInputSuggestion() {
+        inputSuggestionTask?.cancel()
+        inputSuggestionTask = nil
+        if inputSuggestion != nil {
+            inputSuggestion = nil
+        }
+    }
     @Published var pendingImages: [AgentImageAttachment] = []
     @Published var pendingTextAttachments: [AgentTextAttachment] = []
     @Published var pendingSkills: [AgentSkillEntry] = []
@@ -116,7 +129,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
     // MARK: - Turn lifecycle
 
-    @Published var isResponding: Bool = false
+    @Published var isResponding: Bool = false {
+        didSet {
+            // 新一轮开始，上一轮末尾预测的「下一句」就过期了。
+            guard isResponding, !oldValue else { return }
+            clearInputSuggestion()
+        }
+    }
     /// True while a sent message is parked in `pendingDispatchQueue`
     /// waiting for a free per-provider concurrency slot. The user's
     /// message is already visible in the transcript; this drives a

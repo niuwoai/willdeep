@@ -195,5 +195,10 @@ extension AppState {
         if !wasUserStopped && (shouldResumePendingEvents || wasKernelPreempted) {
             resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
+        // 放在最后：排队消息或后台完成若已经拉起新一轮，这里看到的是
+        // isResponding == true，自然不预测。
+        if !wasUserStopped {
+            requestAgentInputSuggestionIfNeeded(for: runtime)
+        }
     }
 }

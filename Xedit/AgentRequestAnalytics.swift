@@ -5,6 +5,8 @@ nonisolated enum AgentAuxiliaryRequestPurpose: String, Codable, Equatable, Senda
     case contextCompression
     case imageDescription
     case workerRouting
+    /// 回合结束后预测用户下一句，显示为输入框灰字。
+    case inputSuggestion
 }
 
 /// Compact, prompt-free telemetry for helper model calls associated with a

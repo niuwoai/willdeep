@@ -138,6 +138,10 @@ struct ComposerTextEditor: NSViewRepresentable {
     /// pointer back to SwiftUI menu callbacks (used by the @-token
     /// replacement helper). Filled in inside `makeCoordinator`.
     let coordinatorRef: ComposerCoordinatorRef
+    /// 回合结束后预测的用户下一句。输入框为空时替代占位文字以灰字显示，
+    /// Tab 采用、Esc 或开始打字即放弃。nil = 不显示。
+    var inputSuggestion: String? = nil
+    var onDismissInputSuggestion: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         let coord = Coordinator(
@@ -198,6 +202,8 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.textContainerInset = NSSize(width: 0, height: 2)
         textView.placeholder = placeholder
+        textView.inputSuggestion = inputSuggestion
+        context.coordinator.onDismissInputSuggestion = onDismissInputSuggestion
         textView.string = text
         textView.onDropAttachments = onDropAttachments
         // NSTextView 默认注册的拖放类型里未必有文件/图片(取决于 isRichText
@@ -224,6 +230,8 @@ struct ComposerTextEditor: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? ComposerNSTextView else { return }
         textView.placeholder = placeholder
+        textView.inputSuggestion = inputSuggestion
+        context.coordinator.onDismissInputSuggestion = onDismissInputSuggestion
         textView.onDropAttachments = onDropAttachments
         // Applied before the text-sync dance below: font is independent of the
         // binding-echo / IME-marked-text races guarded there, and skipping it
@@ -294,6 +302,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         let onSkillCommit: () -> Bool
         let onSkillCancel: () -> Void
         let onSkillQueryChange: (String?) -> Void
+        var onDismissInputSuggestion: (() -> Void)?
 
         // History cursor state. `historyIndex` counts back from the most
         // recent user message: 0 = newest, 1 = next-newest, etc. nil
@@ -400,6 +409,10 @@ struct ComposerTextEditor: NSViewRepresentable {
             onSlashQueryChange(currentSlashQuery(in: textView).map { "/" + $0 } ?? "")
             updateAtMenuVisibility(for: textView)
             updateSkillMenuVisibility(for: textView)
+            // 用户开始自己打字 = 不采用预测的下一句。
+            if !newValue.isEmpty, (textView as? ComposerNSTextView)?.inputSuggestion != nil {
+                onDismissInputSuggestion?()
+            }
             textView.needsDisplay = true
         }
 
@@ -482,6 +495,21 @@ struct ComposerTextEditor: NSViewRepresentable {
                     return true
                 case #selector(NSResponder.cancelOperation(_:)):
                     onAtCancel()
+                    return true
+                default:
+                    break
+                }
+            }
+
+            // 预测的下一句：只在输入框为空、没有菜单开着时接管 Tab / Esc。
+            if let suggestion = (textView as? ComposerNSTextView)?.visibleInputSuggestion {
+                switch commandSelector {
+                case #selector(NSResponder.insertTab(_:)):
+                    _ = replaceComposerText(with: suggestion)
+                    onDismissInputSuggestion?()
+                    return true
+                case #selector(NSResponder.cancelOperation(_:)):
+                    onDismissInputSuggestion?()
                     return true
                 default:
                     break
@@ -783,6 +811,20 @@ fileprivate final class ComposerNSTextView: NSTextView {
             }
         }
     }
+    fileprivate var inputSuggestion: String? {
+        didSet {
+            if inputSuggestion != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
+
+    /// 此刻真正显示出来的建议：输入框为空、不在输入法组字中才算。
+    fileprivate var visibleInputSuggestion: String? {
+        guard string.isEmpty, !hasMarkedText(),
+              let inputSuggestion, !inputSuggestion.isEmpty else { return nil }
+        return inputSuggestion
+    }
 
     // A plain-text NSTextView (`isRichText = false`) only advertises text
     // flavors as readable, so AppKit DISABLES the `paste:` action — and
@@ -923,7 +965,8 @@ fileprivate final class ComposerNSTextView: NSTextView {
     }
 
     private func drawPlaceholderIfNeeded() {
-        guard string.isEmpty, !placeholder.isEmpty, !hasMarkedText() else { return }
+        let suggestion = visibleInputSuggestion
+        guard string.isEmpty, !hasMarkedText(), suggestion != nil || !placeholder.isEmpty else { return }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let textFont = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
@@ -938,14 +981,34 @@ fileprivate final class ComposerNSTextView: NSTextView {
             width: max(0, bounds.width - origin.x - textContainerInset.width - containerPadding),
             height: ceil(textFont.ascender - textFont.descender + textFont.leading) + 2
         )
-        (placeholder as NSString).draw(
-            in: rect,
-            withAttributes: [
+        guard let suggestion else {
+            (placeholder as NSString).draw(
+                in: rect,
+                withAttributes: [
+                    .font: textFont,
+                    .foregroundColor: NSColor.placeholderTextColor,
+                    .paragraphStyle: paragraph
+                ]
+            )
+            return
+        }
+        let ghost = NSMutableAttributedString(
+            string: suggestion,
+            attributes: [
                 .font: textFont,
                 .foregroundColor: NSColor.placeholderTextColor,
                 .paragraphStyle: paragraph
             ]
         )
+        ghost.append(NSAttributedString(
+            string: "  " + L10n.Composer.inputSuggestionAcceptHint,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: max(1, textFont.pointSize - 2)),
+                .foregroundColor: NSColor.tertiaryLabelColor,
+                .paragraphStyle: paragraph
+            ]
+        ))
+        ghost.draw(in: rect)
     }
 
     override func paste(_ sender: Any?) {
