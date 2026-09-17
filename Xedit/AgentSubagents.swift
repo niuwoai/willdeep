@@ -603,6 +603,93 @@ final class AgentSubagentRegistry: ObservableObject {
         return true
     }
 
+    // MARK: Model control (send_agent_message / stop_agent)
+
+    enum ModelControlError: LocalizedError, Equatable {
+        case notFound(String)
+        case finished(String, status: String)
+        case rejectedMessage(AgentSubagentInterventionError)
+
+        var errorDescription: String? {
+            switch self {
+            case .notFound(let reference):
+                return "background agent not found: \(reference). Only background subagents started by this session can be addressed."
+            case .finished(let reference, let status):
+                return "background agent \(reference) has already finished (status: \(status)); its report has been or will be delivered"
+            case .rejectedMessage(.tooLong(let characters, let limit)):
+                return "message is \(characters) characters; the limit is \(limit) and messages are never truncated. Shorten it and send again."
+            case .rejectedMessage(.emptyInstruction):
+                return "message is empty"
+            case .rejectedMessage(.runUnavailable):
+                return "background agent has already finished; its report has been or will be delivered"
+            }
+        }
+    }
+
+    /// A running background Worker owned by `parentRuntimeID`, addressed by
+    /// its `agent_xxxxxx` handle or full UUID. Anything else — another
+    /// session's run, a coordinator-owned planning run, an invented id — is
+    /// "not found", without revealing whether it exists.
+    func modelControlledRun(_ reference: String, parentRuntimeID: UUID) throws -> AgentSubagentRun {
+        let reference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = reference.lowercased()
+        let match: AgentSubagentRun?
+        if let id = UUID(uuidString: reference) {
+            match = runs.first { $0.id == id }
+        } else if lowered.hasPrefix("agent_") {
+            match = runs.first { $0.displayHandle == lowered && $0.parentRuntimeID == parentRuntimeID }
+        } else {
+            match = nil
+        }
+        guard let run = match, run.parentRuntimeID == parentRuntimeID,
+              !coordinatorOwnedRunIDs.contains(run.id) else {
+            throw ModelControlError.notFound(reference)
+        }
+        guard run.status == .running, !stopRequestedRunIDs.contains(run.id), tasks[run.id] != nil else {
+            throw ModelControlError.finished(
+                reference, status: run.status == .running ? "stopping" : run.status.rawValue)
+        }
+        return run
+    }
+
+    /// Queue the main Agent's instruction for the Worker's next round. The
+    /// length check comes first and never truncates (≤ 4000 scalars).
+    @discardableResult
+    func sendModelMessage(to reference: String, message: String, parentRuntimeID: UUID) throws -> AgentSubagentRun {
+        let limit = AgentSubagentInterventionOrigin.parentAgentCharacterLimit
+        let count = message.unicodeScalars.count
+        guard count <= limit else {
+            throw ModelControlError.rejectedMessage(.tooLong(characters: count, limit: limit))
+        }
+        guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ModelControlError.rejectedMessage(.emptyInstruction)
+        }
+        let run = try modelControlledRun(reference, parentRuntimeID: parentRuntimeID)
+        guard let channel = interventionChannels[run.id] else {
+            throw ModelControlError.finished(reference, status: run.status.rawValue)
+        }
+        do {
+            try channel.submit(text: message, mode: .nextRound, origin: .parentAgent)
+        } catch let error as AgentSubagentInterventionError {
+            throw ModelControlError.rejectedMessage(error)
+        }
+        return run
+    }
+
+    /// Model-initiated stop. Unlike the user's `stop(runID:)`, the report is
+    /// NOT suppressed: it is queued for the parent like any finished run
+    /// (status `cancelled` in the Mac subagent report).
+    @discardableResult
+    func stopFromModel(_ reference: String, parentRuntimeID: UUID) throws -> AgentSubagentRun {
+        let run = try modelControlledRun(reference, parentRuntimeID: parentRuntimeID)
+        stopRequestedRunIDs.insert(run.id)
+        tasks[run.id]?.cancel()
+        agentSubagentLog.info(
+            "subagent stop requested by parent agent run=\(run.id.uuidString, privacy: .public) parent=\(parentRuntimeID.uuidString, privacy: .public)"
+        )
+        return run
+    }
+
     /// Cancel only background subagents born in the stopped turn. Returns the
     /// number signalled so the host can provide one concise acknowledgement.
     @discardableResult
@@ -1918,7 +2005,15 @@ enum AgentSubagentRunner {
             let mode = submission.mode == .interruptCurrentStep
                 ? "interrupt"
                 : "next-round"
-            return "\(index + 1). [\(mode)] \(submission.text)"
+            let origin = submission.origin == .parentAgent ? ", from the main agent" : ""
+            return "\(index + 1). [\(mode)\(origin)] \(submission.text)"
+        }
+        if submissions.contains(where: { $0.origin == .parentAgent }) {
+            return """
+            The main agent that started this Worker (or the user) sent new instructions while it was running. Treat the following text as the newest instruction, adjust the route immediately, and do not repeat the abandoned step unless the instruction asks for it.
+
+            \(instructions.joined(separator: "\n"))
+            """
         }
         return """
         The user redirected this Worker while it was running. Treat the following text as the newest user instruction, adjust the route immediately, and do not repeat the abandoned step unless the instruction asks for it.

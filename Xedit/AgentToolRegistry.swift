@@ -308,6 +308,8 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "job_id", type: .string, description: "Job handle from `list_jobs` or the `run_command` response (e.g. `job_ab12cd`).", required: true)
             ]
         ),
+        AgentMonitorTool.descriptor,
+    ] + AgentSubagentControlTools.descriptors + [
         AgentToolDescriptor(
             name: "list_skills",
             description: "List installed skills from WillDeep's bundled skills, user skill roots, and plugin cache so the agent can choose a specialized workflow before acting. Read-only.",

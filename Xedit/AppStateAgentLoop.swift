@@ -1458,6 +1458,7 @@ extension AppState {
             // 整类插件工具判成未知。
             let advertisedToolNames = Set(requestTools.map(\.name))
             for call in latestToolCalls {
+                var call = call
                 // Parse argumentsJSON into a dict for downstream risk/dispatch.
                 // The model occasionally emits malformed JSON (especially on
                 // partial streams or wrong tool schemas). Pre-rc37 we
@@ -1468,7 +1469,7 @@ extension AppState {
                 // surfaced as an explicit `.failed` tool call so the
                 // assistant can see the malformed payload it produced and
                 // re-emit a fixed call.
-                let argsDict: [String: AgentJSONValue]
+                var argsDict: [String: AgentJSONValue]
                 if call.argumentsJSON.isEmpty {
                     argsDict = [:]
                 } else {
@@ -1561,6 +1562,20 @@ extension AppState {
                         outcomeStatus: .failed,
                         errorMessage: validationError
                     )
+                    continue
+                }
+
+                // The single choke point for `monitor`: from here on it is the
+                // background `run_command` it runs, so risk, auto-approval,
+                // cards, judge and sandbox decide exactly as for that command.
+                // Read-only turns reject it outright (see AgentMonitorTool).
+                let isMonitorCall = call.toolName == AgentMonitorTool.name
+                (call.toolName, argsDict) = AgentMonitorTool.authorizationForm(
+                    toolName: call.toolName, arguments: argsDict)
+                if isMonitorCall, denyMonitorInReadOnlyTurn(
+                    call, messageID: assistantID, arguments: argsDict, runtime: runtime,
+                    planProgressReconciliation: isPlanProgressReconciliationActive) {
+                    anyDenied = true
                     continue
                 }
 
@@ -2250,6 +2265,10 @@ extension AppState {
                         runtimeDescriptor: remoteRuntimeDescriptor,
                         workspaceLocation: workspaceLocation
                     )
+                    continue
+                }
+                if AgentSubagentControlTools.names.contains(call.toolName) {
+                    executeSubagentControlToolCall(call, recordID: recordID, arguments: argsDict, runtime: runtime)
                     continue
                 }
 

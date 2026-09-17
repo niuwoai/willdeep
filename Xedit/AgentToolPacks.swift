@@ -42,6 +42,7 @@ enum AgentToolPackCatalog {
         "list_directory", "git_status",
         "run_command", "create_file", "write_file", "edit_file", "apply_patch",
         "list_queued_tasks", "list_jobs", "get_job_output", "kill_job",
+        AgentMonitorTool.name, "send_agent_message", "stop_agent",
         "list_skills", "read_skill", "activate_expert", "spawn_agent", "ask_user",
         "update_plan"
     ]

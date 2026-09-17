@@ -480,6 +480,31 @@ extension L10n {
             )
             return String(format: template, round)
         }
+        static func interventionRemaining(_ count: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.intervention-remaining",
+                defaultValue: "%d characters left"
+            )
+            return String(format: template, count)
+        }
+        static func interventionTooLongError(_ count: Int, limit: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.intervention-too-long-error",
+                defaultValue: "The instruction is %1$d characters; the limit is %2$d. Shorten it before sending."
+            )
+            return String(format: template, count, limit)
+        }
+        static let interventionMainAgent = String(
+            localized: "agent-delegation.intervention-main-agent",
+            defaultValue: "Main Agent"
+        )
+        static func interventionFromMainAgent(_ count: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.intervention-from-main-agent",
+                defaultValue: "Sent an instruction (%d characters; content not shown here)"
+            )
+            return String(format: template, count)
+        }
         static func interventionAppliedAtRound(_ round: Int) -> String {
             let template = String(
                 localized: "agent-delegation.intervention-applied-at-round",

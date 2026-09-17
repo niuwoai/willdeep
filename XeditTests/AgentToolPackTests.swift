@@ -26,7 +26,9 @@ struct AgentToolPackTests {
         let tools = AgentToolRegistry.tools(activeExperts: [], loadedPacks: [])
         let names = tools.map(\.name)
 
-        #expect(names.count <= 24)
+        // 26 since background-task contract C2: `monitor`, `send_agent_message`
+        // and `stop_agent` are core like the job tools they complement.
+        #expect(names.count <= 26)
         #expect(names.first == AgentToolPackCatalog.loaderToolName)
         #expect(names.contains("read_file"))
         #expect(names.contains("edit_file"))

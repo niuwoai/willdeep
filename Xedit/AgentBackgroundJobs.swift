@@ -102,6 +102,9 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     /// Adopted detached job whose process was gone with no `exit` published:
     /// the outcome is unknown, not a failure with an exit status.
     var vanished = false
+    /// A `monitor` tool run: stdout lines become `<monitor-event>` notices and
+    /// its end is reported as `<monitor-ended>` instead of the v1 completion.
+    var isMonitor = false
 
     nonisolated var isAlive: Bool { status == .running }
     nonisolated var needsAttention: Bool {
@@ -116,7 +119,7 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     nonisolated var duration: TimeInterval {
         (finishedAt ?? Date()).timeIntervalSince(startedAt)
     }
-    nonisolated var displayHandle: String { "job_\(shortID)" }
+    nonisolated var displayHandle: String { isMonitor ? "mon_\(shortID)" : "job_\(shortID)" }
 }
 
 /// Host-only replay material for a sandboxed background command. The public
@@ -292,6 +295,11 @@ final class AgentJobRegistry: ObservableObject {
     /// background job without waiting for the next model turn.
     var onJobFinished: ((AgentBackgroundJob) -> Void)?
 
+    /// Host hook for `monitor` events and end notices, delivered on the main
+    /// actor in the order the monitor produced them.
+    var onMonitorPublication: ((AgentMonitorSession.Publication) -> Void)?
+    private var monitorSessions: [UUID: AgentMonitorSession] = [:]
+
     /// Live `Process` + buffer state, keyed by job id. Stripped from
     /// `jobs` (the publishable snapshot) so SwiftUI diffs only the
     /// cheap metadata.
@@ -339,7 +347,9 @@ final class AgentJobRegistry: ObservableObject {
         goalPhaseID: String? = nil,
         survivesTurnStop: Bool = false,
         label: String? = nil,
-        automaticSandboxRetryApprovalSource: AgentToolApprovalSource? = nil
+        automaticSandboxRetryApprovalSource: AgentToolApprovalSource? = nil,
+        /// Non-nil starts a `monitor` run (`mon_` handle, stdout line events).
+        monitorLabel: String? = nil
     ) throws -> AgentBackgroundJob {
         try checkTurnAdmission(runtimeID: runtimeID, turnID: turnID)
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -355,17 +365,36 @@ final class AgentJobRegistry: ObservableObject {
         }
 
         var id = UUID()
+        let handlePrefix = monitorLabel == nil ? "job_" : "mon_"
         // A 6-hex handle can collide with a detached job directory from an
         // earlier launch; never reuse (and truncate) one of those.
-        while detachedJobDirectoryIsTaken(handle: "job_\(String(id.uuidString.prefix(6)).lowercased())") {
+        while detachedJobDirectoryIsTaken(handle: "\(handlePrefix)\(String(id.uuidString.prefix(6)).lowercased())") {
             id = UUID()
         }
         let shortID = String(id.uuidString.prefix(6)).lowercased()
+        let monitor = monitorLabel.map { monitorLabel in
+            AgentMonitorSession(
+                handle: "\(handlePrefix)\(shortID)",
+                label: monitorLabel,
+                runtimeID: runtimeID,
+                deliver: { [weak self] publication in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { self?.onMonitorPublication?(publication) }
+                    }
+                },
+                requestStop: { [weak self, id] in
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { _ = self?.kill(id: id) }
+                    }
+                }
+            )
+        }
+        if let monitor { monitorSessions[id] = monitor }
         let workingDirectoryPath = workingDirectory?.path
         if let turnID {
             originatingTurnIDs[id] = turnID
         }
-        if sandboxMode != .escalated,
+        if sandboxMode != .escalated, monitor == nil,
            let automaticSandboxRetryApprovalSource {
             sandboxRetrySpecifications[id] = AgentBackgroundSandboxRetrySpecification(
                 command: trimmed,
@@ -398,7 +427,7 @@ final class AgentJobRegistry: ObservableObject {
         // Injected secret values are replaced by the collector before bytes
         // reach disk; a detached job writes its log directly, so a job that
         // carries any stays on the in-process path (it is swept on quit).
-        if lifetime == .persistent, detachesPersistentJobs, secretRedactionValues.isEmpty,
+        if lifetime == .persistent, detachesPersistentJobs, secretRedactionValues.isEmpty, monitor == nil,
            runtimeIDForDisplay == nil, remotePID == nil {
             var detachedEnvironment = AgentSandboxPolicy.sandboxedEnvironment(
                 mode: sandboxMode,
@@ -449,11 +478,14 @@ final class AgentJobRegistry: ObservableObject {
         let collector = AgentJobOutputCollector(
             limit: Self.maxOutputBytes,
             secretRedactionValues: secretRedactionValues,
-            logSink: AgentJobOutputLogSink(rootDirectory: outputLogRootDirectory, jobHandle: "job_\(shortID)")
+            logSink: AgentJobOutputLogSink(rootDirectory: outputLogRootDirectory, jobHandle: "\(handlePrefix)\(shortID)")
         )
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty { collector.append(data, stream: .stdout) }
+            if !data.isEmpty {
+                collector.append(data, stream: .stdout)
+                monitor?.ingest(data)
+            }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
@@ -485,13 +517,19 @@ final class AgentJobRegistry: ObservableObject {
                 lifetime: lifetime,
                 goalPhaseID: goalPhaseID,
                 survivesTurnStop: survivesTurnStop,
-                label: visibleLabel
+                label: visibleLabel,
+                isMonitor: monitor != nil
             )
             insertOrUpdate(job)
             collector.appendString(error.localizedDescription, stream: .stderr)
             collector.finishLog()
             processes[id] = AgentJobProcess(process: process, collector: collector)
-            pendingCompletionEvents[runtimeID, default: []].append(id)
+            if let monitor = monitorSessions.removeValue(forKey: id) {
+                monitor.finish(reason: .launchFailed, exitCode: nil, durationSeconds: 0,
+                               outputPath: collector.logURL?.path)
+            } else {
+                pendingCompletionEvents[runtimeID, default: []].append(id)
+            }
             return job
         }
 
@@ -515,7 +553,8 @@ final class AgentJobRegistry: ObservableObject {
             lifetime: lifetime,
             goalPhaseID: goalPhaseID,
             survivesTurnStop: survivesTurnStop,
-            label: visibleLabel
+            label: visibleLabel,
+            isMonitor: monitor != nil
         )
         let processBox = AgentJobProcess(process: process, collector: collector)
         processes[id] = processBox
@@ -550,10 +589,9 @@ final class AgentJobRegistry: ObservableObject {
             if let processBox {
                 processBox.timeoutWork?.cancel()
                 processBox.stopTrackingAndTerminateDescendants()
-                processBox.collector.append(
-                    stdoutPipe.fileHandleForReading.availableData,
-                    stream: .stdout
-                )
+                let remainingStdout = stdoutPipe.fileHandleForReading.availableData
+                processBox.collector.append(remainingStdout, stream: .stdout)
+                monitor?.ingest(remainingStdout)
                 processBox.collector.append(
                     stderrPipe.fileHandleForReading.availableData,
                     stream: .stderr
@@ -1131,6 +1169,7 @@ final class AgentJobRegistry: ObservableObject {
         let normalized = handle
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "job_", with: "")
+            .replacingOccurrences(of: "mon_", with: "")
             .lowercased()
         return jobs.first { job in
             job.runtimeID == runtimeID && (
@@ -1547,6 +1586,19 @@ final class AgentJobRegistry: ObservableObject {
         sandboxRetrySpecifications.removeValue(forKey: id)
 
         let suppressCompletion = suppressedCompletionJobIDs.remove(id) != nil
+        if let monitor = monitorSessions.removeValue(forKey: id) {
+            // The monitor reports its own end; no v1 completion is queued. A
+            // Stop / app-quit sweep still records it, without waking anyone.
+            let reason: AgentMonitorNotice.EndReason = wasKilled ? .killed : (didTimeOut ? .timedOut : .exited)
+            monitor.finish(
+                reason: reason,
+                exitCode: exitCode,
+                durationSeconds: UInt64(max(0, updated.duration).rounded(.down)),
+                outputPath: localCollector(id: id)?.logURL?.path,
+                wakes: !suppressCompletion
+            )
+            return
+        }
         if updated.isDetached {
             deliverDetachedCompletion(updated, suppressed: suppressCompletion)
             return

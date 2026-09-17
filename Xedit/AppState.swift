@@ -986,6 +986,9 @@ final class AppState: ObservableObject {
                 : nil
             return (settings, workingDirectory, requestedSessionID ?? self.activeAgentSessionID, skin)
         }
+        agentJobRegistry.onMonitorPublication = { [weak self] publication in
+            self?.publishMonitorKernelEvent(publication)
+        }
         agentJobRegistry.onJobFinished = { [weak self] job in
             guard let self else { return }
             self.surfaceDelegatedBackgroundJobCompletionIfNeeded(job)

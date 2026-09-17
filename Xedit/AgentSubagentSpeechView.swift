@@ -223,7 +223,7 @@ struct AgentSubagentSpeechView: View {
                     )
                 }
                 .buttonStyle(.bordered)
-                .disabled(interventionDraftTrimmed.isEmpty)
+                .disabled(!AgentSubagentInterventionDraftPolicy.canSubmit(interventionDraft))
                 // Return now inserts a newline — the field is two lines and
                 // has to be typeable as two lines — so the keyboard path to
                 // sending moves to ⌘↩ rather than disappearing.
@@ -240,16 +240,35 @@ struct AgentSubagentSpeechView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
-                .disabled(interventionDraftTrimmed.isEmpty)
+                .disabled(!AgentSubagentInterventionDraftPolicy.canSubmit(interventionDraft))
                 .accessibilityIdentifier("subagent-intervention-interrupt")
             }
-            Text(L10n.AgentDelegation.interventionHelp)
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: appState.agentChatBaseFontSize,
-                    visualMinimum: 9,
-                    weight: .regular
-                ))
-                .foregroundStyle(.tertiary)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(L10n.AgentDelegation.interventionHelp)
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize,
+                        visualMinimum: 9,
+                        weight: .regular
+                    ))
+                    .foregroundStyle(.tertiary)
+                Spacer(minLength: 4)
+                // Over-length drafts are refused, never truncated: show what
+                // is left so the limit is visible before it bites.
+                let remaining = AgentSubagentInterventionDraftPolicy.remainingCharacters(interventionDraft)
+                Text(remaining >= 0
+                     ? L10n.AgentDelegation.interventionRemaining(remaining)
+                     : L10n.AgentDelegation.interventionTooLongError(
+                        AgentSubagentInterventionDraftPolicy.characterCount(interventionDraft),
+                        limit: AgentSubagentInterventionOrigin.userCharacterLimit))
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize,
+                        visualMinimum: 9,
+                        weight: remaining >= 0 ? .regular : .medium
+                    ))
+                    .monospacedDigit()
+                    .foregroundStyle(remaining >= 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.red))
+                    .accessibilityIdentifier("subagent-intervention-remaining")
+            }
             if let interventionError {
                 Text(interventionError)
                     .font(AgentDesign.chatSupportingFont(
@@ -317,10 +336,6 @@ struct AgentSubagentSpeechView: View {
         }
     }
 
-    private var interventionDraftTrimmed: String {
-        interventionDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     private func sendIntervention(mode: AgentSubagentInterventionMode) {
         guard let runID else { return }
         do {
@@ -349,7 +364,9 @@ struct AgentSubagentSpeechView: View {
                 .foregroundStyle(Color.accentColor)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
-                    Text(L10n.AgentDelegation.interventionYou)
+                    Text(receipt.origin == .parentAgent
+                         ? L10n.AgentDelegation.interventionMainAgent
+                         : L10n.AgentDelegation.interventionYou)
                         .font(AgentDesign.chatSupportingFont(
                             baseFontSize: appState.agentChatBaseFontSize,
                             visualMinimum: 10,

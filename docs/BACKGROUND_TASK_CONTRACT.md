@@ -113,8 +113,8 @@ CLI 仍经事件内核投递，`<runtime-events>` 外壳保留（负责合批与
 | B1 ✅ | CLI：追加写日志 + 尾部缓冲、`get_job_output` 统一语义、通知 v1、提示词段落、金样测试、保留策略、漂移脚本 | willdeep-rs | `0.75.0-rc1` |
 | B2 ✅ | Mac：文件 sink + 尾部环形、六个消费方核对、通知 v1、提示词两处替换 + 三档哈希重录、金样测试 | Xedit | MINOR |
 | B3 ✅ | 漂移检查脚本（rs 仓库）+ Mac 提示词逐字断言 | 两边 | 随 B2（1.379.0-rc1） |
-| C1 | CLI：`monitor` 工具 + `send_agent_message` / `stop_agent` | willdeep-rs | `0.76.0-rc1` |
-| C2 | Mac：`monitor` 工具 + `send_agent_message` / `stop_agent` | Xedit | MINOR |
+| C1 ✅ | CLI：`monitor` 工具 + `send_agent_message` / `stop_agent`（实现细则已回写「C·一 / C·二」的「实现细则」小节，C2 必须照做） | willdeep-rs | `0.76.0-rc1` |
+| C2 ✅ | Mac：`monitor` 工具 + `send_agent_message` / `stop_agent`（实现偏差见下方「C2 落地偏差」） | Xedit | MINOR（未 bump） |
 | C3 ✅ | Mac：`lifetime: persistent` 的本地作业退出 App 后保活、下次启动认领（实现偏差：带注入密钥的作业不脱离、仍随退出清理；脱离日志由 shell 直写，不受 256MB 上限；测试宿主用默认目录时不脱离也不认领） | Xedit | MINOR（未 bump） |
 
 第三批设计见文末「第三批」一节。
@@ -201,6 +201,27 @@ output_path: …/output.log
 
 **提示词**：不动两端稳定前缀（Mac 刚破过一次缓存）。用法写进 `monitor` 工具描述：「需要对**进行中**的输出作出反应时用 monitor；只关心最终结果用 `run_in_background`；每行都是一次模型注意力，命令里先用 grep --line-buffered 过滤到值得反应的行，并覆盖失败形态（Error / FAILED / Traceback），别只盯成功标记」。
 
+**实现细则（C1 落地时定下，属于合同，两端一致）**
+
+1. 超过 2000 字符的行保留前 1999 个字符再加 `…`（结果恰好 2000 字符）。
+2. 只含空白的行不产生事件，但照样写进日志。
+3. 合批除 50 行外还有正文上限：累计约 20000 字符即提前收口（内核正文上限 24000，超了会截坏框架）。
+4. 唤醒节流的做法：30 秒内的后续事件以「只入队、不唤醒」进内核，下一个回合边界随其他事件交给模型；结束事件不受限。
+5. 触发防刷屏的那一批不投递；结束事件的 `events` 记已投递数（即 30）。
+6. `output_path` 指向 stdout 日志（CLI 分流为 `stdout.log`；Mac 合并日志为 `output.log`）。CLI 日志目录 `~/.willdeep/monitors/<mon_id>/`。
+7. 句柄 `mon_<6 位十六进制>`；运行中 `get_job_output(mon_id)` 返回状态与日志末尾。
+8. 只读审批模式下 `monitor` 直接拒绝。
+
+**C2 落地偏差（Mac）**
+
+1. 审批：`monitor` 在主循环唯一入口改写成带宿主私有参数 `_monitor` 的 `run_command`（`run_in_background: true`），风险、自动批准、审批卡、裁判、沙箱与审计都按那条命令走；模型自己塞进 `run_command` 的 `_monitor` 在同一处剥掉。代价：审批卡与沙箱审计里显示为 `run_command`。
+2. Mac 没有「只读审批模式」：等价处理为规划只读回合、设计门禁、计划进度核对回合里直接拒绝 `monitor`；远端工作区也拒绝（只支持本机）。
+3. 进程复用 `AgentJobRegistry`：句柄 `mon_xxxxxx`，日志 `background-jobs/<mon_id>/output.log`（stdout/stderr 合并，`output_path` 即它），生命周期 `turn`，随 Stop 与退出 App 清理；被 Stop / 退出清理收掉时结束通知照发但只入队、不唤醒。
+4. 内核：事件以 `source=background_job, kind=host_notice, trust=host, content_provenance=tool` 发布，元数据 `notice_contract=monitor-event.v1 / monitor-ended.v1`；`modelNotice` 对这类事件不再整段转义框架（非宿主或非 tool 来源照样转义），但仍做注入标记中和（极少数命中时插入零宽字符）。
+5. `stop_agent` 的报告照常投递（不同于界面停止会压掉报告），但 Mac 子 Agent 报告不是 v1 格式，状态拼写为 `cancelled` 而不是 `killed`。
+6. 审计：不写 sandbox.jsonl（避免把消息正文写进审计）；每次调用记统一日志（subsystem `com.willdeep.agent`，category `subagent-control`，只记工具、目标与结果），投递成功的消息在子 Agent 活动回执里留一条不含正文的记录（显示为「主 Agent 发来一条指令（N 字）」）。消息首尾空白在投递前去掉，长度按原文计。
+7. 核心工具面由 24 个放宽到 26 个上限（新增三个工具进核心，`AgentToolPackTests` 同步）；提示词稳定前缀未改，无哈希重录。
+
 ### C·二、`send_agent_message` / `stop_agent`
 
 | 工具 | 参数 | 行为 |
@@ -212,6 +233,8 @@ output_path: …/output.log
 - **不需要审批**（等同于在自己的子任务里改主意），但每次调用写审计（CLI：approvals.jsonl 同格式；Mac：子 Agent 活动回执）。
 - 子 Agent 自己拿不到这两个工具。
 - `agent_id` 就是 `spawn_agent` 返回的句柄（CLI 的 agent id / Mac 的 `agent_xxxxxx`）；目标已结束时报「已结束，报告已投递或即将投递」。
+- 实现细则（C1）：`agent_id` 同时接受 UUID 与短句柄；审计只记目标与结果，**不记消息正文**；子 Agent 的工具面同时剔除 `spawn_agent` 与恢复类工具。
+- 已知缺口（CLI）：daemon 托管会话里 monitor 事件不唤醒空闲会话；TUI 切换会话后旧 monitor 事件仍记在原会话；`~/.willdeep/monitors/` 暂无保留策略。
 - Mac 界面插话的 1000 字符静默截断改为：界面仍 1000 字符但**显示剩余字数并拒绝超长提交**；模型通道 4000 字符。
 
 ### C·三、Mac：`persistent` 作业退出保活

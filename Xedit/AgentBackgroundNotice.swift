@@ -123,14 +123,15 @@ nonisolated enum AgentBackgroundNotice {
 
     // MARK: - Fields
 
-    private static func label(_ value: String) -> String {
+    /// Shared with `AgentMonitorNotice`: same first-line, 200-character rule.
+    static func label(_ value: String) -> String {
         let first = rustLines(Array(value.unicodeScalars)).first ?? []
         let cleaned = Array(clean(string(trimWhitespace(first))).unicodeScalars)
         guard cleaned.count > labelCharacters else { return string(cleaned) }
         return string(Array(cleaned.prefix(labelCharacters))) + ellipsis
     }
 
-    private static func path(_ value: String?) -> String {
+    static func path(_ value: String?) -> String {
         value.map(clean) ?? "none"
     }
 

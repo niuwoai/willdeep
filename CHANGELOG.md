@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.382.0-rc1 - 2026-09-17
+
+### Added
+
+- **`monitor` 工具：盯着一条命令的进行中输出，每批新行作为事件推给 Agent。** 以前 Agent 想知道「发布日志里
+  有没有报错」只能 sleep 之后反复 `get_job_output`；现在 stdout 按 200ms 合批成 `<monitor-event>`，进程退出、
+  超时（默认 300 秒、上限 1800 秒）、被 `kill_job` 停掉或刷屏时发 `<monitor-ended>`。60 秒内超过 30 个事件
+  自动停掉；每个 monitor 30 秒内最多唤醒一次空闲会话，其余事件排到下一个回合边界。审批与 `run_command`
+  **同一道闸**（同一命令同一判定），只规划不执行的回合、设计门禁回合与远端工作区直接拒绝。事件格式与
+  WillDeep CLI 0.76.0-rc1 逐字一致，金样 `docs/contracts/monitor-event.v1.txt`。
+- **Agent 可以给自己派出的后台子 Agent 发消息（`send_agent_message`）或叫停（`stop_agent`）。** 只能动本会话
+  派出、仍在运行的子 Agent；消息在它的下一轮生效，最多 4000 字符、超长直接报错；不弹审批，记统一日志
+  （只记目标与结果，不记正文）。子 Agent 自己拿不到这两个工具。被 Agent 叫停的子 Agent 仍会交回报告。
+- 界面给子 Agent 插话不再静默截断到 1000 字符：显示剩余字数，超长时发送按钮不可点。
+
+### Changed
+
+- 核心工具面上限从 24 个放宽到 26 个（新增 `monitor`、`send_agent_message`、`stop_agent`）。发消息与叫停
+  必须和 `spawn_agent` 一样常驻，否则 Agent 派出后台子 Agent 后还要先加载工具包才能管它。
+
+### Known issues
+
+- `monitor` 的审批卡片与沙箱审计显示为 `run_command`（审批复用同一路径的代价）。
+- 被 Agent 叫停的子 Agent 报告状态写作 `cancelled`（合同为 `killed`；Mac 子 Agent 报告尚非 v1 格式）。
+- `monitor` 的 `launch_failed` 分支未覆盖测试。
+
 ## 1.381.0-rc1 - 2026-09-17
 
 ### Added

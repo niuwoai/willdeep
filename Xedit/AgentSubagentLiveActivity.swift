@@ -67,6 +67,17 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
         let submittedAt: Date
         let requestedRound: Int
         var deliveryState: InterventionDeliveryState
+        /// `.parentAgent` receipts audit `send_agent_message` without the
+        /// message body: `text` is only a character-count placeholder.
+        var origin: AgentSubagentInterventionOrigin = .user
+    }
+
+    /// What a receipt may show. The main Agent's message body stays in the
+    /// Worker transcript only.
+    static func receiptText(for submission: AgentSubagentInterventionSubmission) -> String {
+        submission.origin == .parentAgent
+            ? L10n.AgentDelegation.interventionFromMainAgent(submission.text.unicodeScalars.count)
+            : submission.text
     }
 
     /// Keep the tail, not the head: the newest round is what the user is
@@ -149,11 +160,12 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
         case .queued(let submission):
             let receipt = InterventionReceipt(
                 id: submission.id,
-                text: submission.text,
+                text: Self.receiptText(for: submission),
                 mode: submission.mode,
                 submittedAt: submission.submittedAt,
                 requestedRound: submission.requestedRound,
-                deliveryState: .queued
+                deliveryState: .queued,
+                origin: submission.origin
             )
             if let index = interventionReceipts.firstIndex(where: { $0.id == receipt.id }) {
                 interventionReceipts[index] = receipt
@@ -168,11 +180,12 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
             } else {
                 interventionReceipts.append(InterventionReceipt(
                     id: submission.id,
-                    text: submission.text,
+                    text: Self.receiptText(for: submission),
                     mode: submission.mode,
                     submittedAt: submission.submittedAt,
                     requestedRound: submission.requestedRound,
-                    deliveryState: .applied(effectiveRound: effectiveRound)
+                    deliveryState: .applied(effectiveRound: effectiveRound),
+                    origin: submission.origin
                 ))
             }
         }

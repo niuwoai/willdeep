@@ -15,12 +15,48 @@ enum AgentSubagentInterventionMode: String, Equatable, Sendable {
     case interruptCurrentStep
 }
 
+/// Who steered the Worker. The user types into the card (1000 characters);
+/// the main Agent uses `send_agent_message` (4000 characters). Neither
+/// channel truncates: over-length input is rejected.
+nonisolated enum AgentSubagentInterventionOrigin: String, Equatable, Sendable {
+    case user
+    case parentAgent
+
+    static let userCharacterLimit = 1_000
+    static let parentAgentCharacterLimit = 4_000
+
+    var characterLimit: Int {
+        switch self {
+        case .user: return Self.userCharacterLimit
+        case .parentAgent: return Self.parentAgentCharacterLimit
+        }
+    }
+}
+
 struct AgentSubagentInterventionSubmission: Equatable, Sendable, Identifiable {
     let id: UUID
     let text: String
     let mode: AgentSubagentInterventionMode
     let submittedAt: Date
     let requestedRound: Int
+    var origin: AgentSubagentInterventionOrigin = .user
+}
+
+/// The card's draft rule, kept pure so it is testable without a view: the
+/// counter shows what is left, and an over-length draft cannot be sent.
+nonisolated enum AgentSubagentInterventionDraftPolicy {
+    static func characterCount(_ draft: String) -> Int {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).count
+    }
+
+    static func remainingCharacters(_ draft: String) -> Int {
+        AgentSubagentInterventionOrigin.userCharacterLimit - characterCount(draft)
+    }
+
+    static func canSubmit(_ draft: String) -> Bool {
+        let count = characterCount(draft)
+        return count > 0 && count <= AgentSubagentInterventionOrigin.userCharacterLimit
+    }
 }
 
 enum AgentSubagentInterventionEvent: Equatable, Sendable {
@@ -31,6 +67,7 @@ enum AgentSubagentInterventionEvent: Equatable, Sendable {
 enum AgentSubagentInterventionError: LocalizedError, Equatable {
     case emptyInstruction
     case runUnavailable
+    case tooLong(characters: Int, limit: Int)
 
     var errorDescription: String? {
         switch self {
@@ -38,6 +75,8 @@ enum AgentSubagentInterventionError: LocalizedError, Equatable {
             return L10n.AgentDelegation.interventionEmptyError
         case .runUnavailable:
             return L10n.AgentDelegation.interventionUnavailableError
+        case .tooLong(let characters, let limit):
+            return L10n.AgentDelegation.interventionTooLongError(characters, limit: limit)
         }
     }
 }
@@ -49,7 +88,9 @@ enum AgentSubagentInterventionError: LocalizedError, Equatable {
 final class AgentSubagentInterventionChannel {
     typealias EventHandler = (AgentSubagentInterventionEvent) -> Void
 
-    static let instructionCharacterLimit = 1_000
+    static let instructionCharacterLimit = AgentSubagentInterventionOrigin.userCharacterLimit
+    /// `send_agent_message` limit, counted in Unicode scalars like the CLI.
+    static let parentAgentMessageCharacterLimit = AgentSubagentInterventionOrigin.parentAgentCharacterLimit
 
     var onEvent: EventHandler?
 
@@ -84,18 +125,28 @@ final class AgentSubagentInterventionChannel {
     func submit(
         text: String,
         mode: AgentSubagentInterventionMode,
-        submittedAt: Date = Date()
+        submittedAt: Date = Date(),
+        origin: AgentSubagentInterventionOrigin = .user
     ) throws -> AgentSubagentInterventionSubmission {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The card counts what it shows (trimmed characters); the model
+        // channel counts the message as sent, in scalars, like the CLI.
+        let count = origin == .user
+            ? AgentSubagentInterventionDraftPolicy.characterCount(text)
+            : text.unicodeScalars.count
+        guard count <= origin.characterLimit else {
+            throw AgentSubagentInterventionError.tooLong(characters: count, limit: origin.characterLimit)
+        }
         guard !trimmed.isEmpty else {
             throw AgentSubagentInterventionError.emptyInstruction
         }
         let submission = AgentSubagentInterventionSubmission(
             id: UUID(),
-            text: String(trimmed.prefix(Self.instructionCharacterLimit)),
+            text: trimmed,
             mode: mode,
             submittedAt: submittedAt,
-            requestedRound: max(1, currentRound + 1)
+            requestedRound: max(1, currentRound + 1),
+            origin: origin
         )
         pending.append(submission)
         onEvent?(.queued(submission))

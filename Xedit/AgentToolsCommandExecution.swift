@@ -66,6 +66,10 @@ extension AgentToolRunner {
         context: AgentToolContext,
         foregroundMaxTimeout: TimeInterval = maxCommandTimeout
     ) async throws -> AgentToolResult {
+        // `monitor` arrives here already authorized as this very command.
+        if AgentMonitorTool.isMonitorInvocation(arguments) {
+            return try await AgentMonitorTool.start(arguments: arguments, context: context)
+        }
         var effectiveArguments = arguments
         let selectedBackgroundAutomatically =
             arguments["run_in_background"] == nil
