@@ -271,16 +271,6 @@ struct SlashCommand: Identifiable {
         return (command, argsForCommand(rawInput))
     }
 
-    /// The palette is completing a later slash token of a message that
-    /// already starts with a command, e.g. `/no-sandbox /sub`. Selecting then
-    /// completes the token instead of executing everything typed so far.
-    static func isCompletingChainedCommand(input: String, currentToken: String) -> Bool {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("/"), currentToken.hasPrefix("/") else { return false }
-        let firstToken = trimmed.prefix { !$0.isWhitespace }
-        return firstToken != Substring(currentToken)
-    }
-
     /// Several commands written back to back at the start of a message:
     /// `/no-sandbox /subagent 修一下登录`. Returns nil unless at least two
     /// leading tokens are exact commands — a single command keeps the
@@ -308,7 +298,13 @@ struct SlashCommand: Identifiable {
             remainder = trimmed.dropFirst(token.count)
         }
         guard matched.count >= 2 else { return nil }
-        let text = String(remainder).trimmingCharacters(in: .whitespacesAndNewlines)
+        return chain(matched: matched, text: String(remainder))
+    }
+
+    /// 把「一串已认出的命令 + 剩下的正文」排成执行顺序。串写在开头和写在
+    /// 句中两种形态共用，保证正文只交给一个命令。
+    static func chain(matched: [SlashCommand], text rawText: String) -> SlashCommandChain {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         let consumerIndex = matched.lastIndex(where: { $0.argumentMode.requiresArguments })
             ?? matched.lastIndex(where: { $0.argumentMode.acceptsArguments })
         var steps: [SlashCommandChain.Step] = []

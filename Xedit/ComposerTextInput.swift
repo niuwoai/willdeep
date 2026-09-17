@@ -142,6 +142,9 @@ struct ComposerTextEditor: NSViewRepresentable {
     /// Tab 采用、Esc 或开始打字即放弃。nil = 不显示。
     var inputSuggestion: String? = nil
     var onDismissInputSuggestion: (() -> Void)? = nil
+    /// 缓冲区里被认成斜杠命令的词（UTF-16 范围）。这些词高亮显示，回删时
+    /// 整个词一起删。nil = 不识别。
+    var slashCommandTokenRanges: ((String) -> [NSRange])? = nil
 
     func makeCoordinator() -> Coordinator {
         let coord = Coordinator(
@@ -204,6 +207,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.placeholder = placeholder
         textView.inputSuggestion = inputSuggestion
         context.coordinator.onDismissInputSuggestion = onDismissInputSuggestion
+        textView.slashCommandTokenRanges = slashCommandTokenRanges
         textView.string = text
         textView.onDropAttachments = onDropAttachments
         // NSTextView 默认注册的拖放类型里未必有文件/图片(取决于 isRichText
@@ -232,6 +236,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.placeholder = placeholder
         textView.inputSuggestion = inputSuggestion
         context.coordinator.onDismissInputSuggestion = onDismissInputSuggestion
+        textView.slashCommandTokenRanges = slashCommandTokenRanges
         textView.onDropAttachments = onDropAttachments
         // Applied before the text-sync dance below: font is independent of the
         // binding-echo / IME-marked-text races guarded there, and skipping it
@@ -819,6 +824,19 @@ fileprivate final class ComposerNSTextView: NSTextView {
         }
     }
 
+    fileprivate var slashCommandTokenRanges: ((String) -> [NSRange])?
+
+    /// 回删落在命令词末尾时整个词一起删：命令词是一个整体，删成 `/no-sub`
+    /// 就既不是命令也不是正文。
+    override func deleteBackward(_ sender: Any?) {
+        let selection = selectedRange()
+        if selection.length == 0, !hasMarkedText(),
+           let token = slashCommandTokenRanges?(string).first(where: { NSMaxRange($0) == selection.location }) {
+            setSelectedRange(token)
+        }
+        super.deleteBackward(sender)
+    }
+
     /// 此刻真正显示出来的建议：输入框为空、不在输入法组字中才算。
     fileprivate var visibleInputSuggestion: String? {
         guard string.isEmpty, !hasMarkedText(),
@@ -961,6 +979,16 @@ fileprivate final class ComposerNSTextView: NSTextView {
         for match in AgentSecretStore.placeholderMatches(in: string) {
             layoutManager.addTemporaryAttribute(.foregroundColor, value: tagColor, forCharacterRange: match.range)
             layoutManager.addTemporaryAttribute(.font, value: tagFont, forCharacterRange: match.range)
+        }
+        // 认出的斜杠命令用深蓝色、稍粗，和正文区分开：一眼看得出哪些词会被
+        // 当命令处理、不会作为正文发出去。
+        if let ranges = slashCommandTokenRanges?(string), !ranges.isEmpty {
+            let commandColor = NSColor.systemBlue.blended(withFraction: 0.3, of: .labelColor) ?? .systemBlue
+            let commandFont = NSFont.systemFont(ofSize: inputSize, weight: .semibold)
+            for range in ranges where NSMaxRange(range) <= fullRange.length {
+                layoutManager.addTemporaryAttribute(.foregroundColor, value: commandColor, forCharacterRange: range)
+                layoutManager.addTemporaryAttribute(.font, value: commandFont, forCharacterRange: range)
+            }
         }
     }
 

@@ -742,10 +742,12 @@ private struct ComposerCard: View {
     @State private var pendingUnknownAttachment: PendingUnknownAttachmentConfirmation?
 
     private var filteredSlashCommands: [SlashCommand] {
-        SlashCommand.filter(
-            slashMenuQuery,
-            allCommands: SlashCommand.builtIn(state: appState)
-        )
+        let commands = SlashCommand.builtIn(state: appState)
+        let matches = SlashCommand.filter(slashMenuQuery, allCommands: commands)
+        // 正文里只提供修饰类命令：其他命令只在消息开头才算命令，列出来选了也不会执行。
+        let isInProse = SlashCommand.isCompletingNonLeadingToken(input: appState.agentInput, currentToken: slashMenuQuery)
+            && SlashCommand.invocation(in: appState.agentInput, commands: commands) == nil
+        return isInProse ? matches.filter(\.isInlineModifier) : matches
     }
 
     /// Unified entries for the `@` picker — workspace shortcut + files found
@@ -1110,7 +1112,14 @@ private struct ComposerCard: View {
                     inputSuggestion: appState.agentInputSuggestionsEnabled
                         ? appState.activeRuntime?.inputSuggestion
                         : nil,
-                    onDismissInputSuggestion: { appState.activeRuntime?.clearInputSuggestion() }
+                    onDismissInputSuggestion: { appState.activeRuntime?.clearInputSuggestion() },
+                    slashCommandTokenRanges: { text in
+                        guard text.contains("/") else { return [] }
+                        return SlashCommand.recognizedTokens(
+                            in: text,
+                            commands: SlashCommand.builtIn(state: appState)
+                        ).map(\.range)
+                    }
                 )
                 .focused($inputFocused)
                 // 1.85.0-rc15:封顶从 ~7 行收到 ~3 行(对齐 codex 默认体感;
@@ -1250,7 +1259,10 @@ private struct ComposerCard: View {
         let command = commands[safeIndex]
         // 光标所在的斜杠词不是开头那个（`/no-sandbox /sub` 里正在补第二个）：
         // 只补全这个词，整串命令留到回车时一起执行。
-        if SlashCommand.isCompletingChainedCommand(input: appState.agentInput, currentToken: slashMenuQuery),
+        // 光标所在的斜杠词不是整条消息的第一个词（开头命令串的后一个、句中、
+        // 句尾）：只补全这个词，整条消息留到回车时一起处理。此前句中选中会
+        // 立刻执行，`/no-subagent` 的执行就是发送，用户的半截话连 `/no` 一起发了。
+        if SlashCommand.isCompletingNonLeadingToken(input: appState.agentInput, currentToken: slashMenuQuery),
            coordinatorRef.coordinator?.replaceCurrentTriggerToken(trigger: 0x2F, replacement: command.title + " ") == true {
             slashMenuVisible = false
             slashMenuSelection = 0
@@ -1279,7 +1291,7 @@ private struct ComposerCard: View {
     /// composer send path.
     private func submitComposer() {
         let commands = SlashCommand.builtIn(state: appState)
-        if let chain = SlashCommand.invocationChain(in: appState.agentInput, commands: commands) {
+        if let chain = SlashCommand.composerChain(in: appState.agentInput, commands: commands) {
             executeSlashCommandChain(chain)
             return
         }
