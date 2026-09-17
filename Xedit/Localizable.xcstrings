@@ -83173,31 +83173,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ recent learning events"
+            "value" : "%@ suggestion(s)"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ eventos de aprendizaje recientes"
+            "value" : "%@ sugerencia(s)"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ événements d'apprentissage récents"
+            "value" : "%@ suggestion(s)"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "直近の学習イベント %@ 件"
+            "value" : "提案 %@ 件"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "近期学习事件 %@ 条"
+            "value" : "共 %@ 条建议"
           }
         }
       }

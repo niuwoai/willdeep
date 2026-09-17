@@ -1759,7 +1759,7 @@ nonisolated enum L10n {
 
         static let learningCardTitle = String(localized: "transcript.learning.title", defaultValue: "Agent learned from this turn")
         static func learningCardSubtitle(_ a1: String) -> String {
-            let template = String(localized: "transcript.learning.subtitle", defaultValue: "%@ recent learning events")
+            let template = String(localized: "transcript.learning.subtitle", defaultValue: "%@ suggestion(s)")
             return String(format: template, a1)
         }
         static func learningMore(_ a1: String) -> String {

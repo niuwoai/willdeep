@@ -41,7 +41,9 @@ struct AgentLearningEventsCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L10n.Transcript.learningCardTitle)
                         .agentChatSupportingFont(weight: .semibold)
-                    Text(L10n.Transcript.learningCardSubtitle(String(activeEvents.count)))
+                    Text(L10n.Transcript.learningCardSubtitle(
+                        String(AgentSelfLearning.suggestionItemCount(activeEvents))
+                    ))
                         .agentChatSupportingFont()
                         .foregroundStyle(.secondary)
                 }
