@@ -25,8 +25,16 @@ struct AgentDetachedJobTests {
         let root = makeRoot(); defer { cleanUp(root) }
         let runtimeID = UUID()
         var first: AgentJobRegistry? = AgentJobRegistry(outputLogRootDirectory: root)
+        // The ticker runs until the test opens the gate, so "still alive when the
+        // second registry adopts it" never depends on how loaded the host is — a
+        // fixed 1.5 s ticker finished before adoption under a full parallel run.
+        // Outside `root`: the second registry scans that directory for jobs to adopt.
+        let gate = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-detached-gate-\(UUID().uuidString)").path
+        defer { try? FileManager.default.removeItem(atPath: gate) }
         let job = try #require(first).start(
-            command: "i=0; while [ $i -lt 15 ]; do echo tick$i; i=$((i+1)); sleep 0.1; done; echo DETACHED_DONE",
+            command: "i=0; " + AgentJobFixtureCommand.waitForGate(gate, body: "echo tick$i; i=$((i+1))")
+                + "; echo DETACHED_DONE",
             workingDirectory: nil,
             runtimeID: runtimeID,
             timeoutSeconds: nil,
@@ -61,6 +69,7 @@ struct AgentDetachedJobTests {
         #expect(adopted.displayHandle == job.displayHandle)
         #expect(second.outputLogURL(id: job.id)?.path == logURL.path)
 
+        AgentJobFixtureCommand.openGate(gate)
         #expect(await waitUntil { second.job(id: job.id)?.isAlive == false })
         let finished = try #require(second.job(id: job.id))
         #expect(finished.status == .completed)
@@ -303,7 +312,23 @@ struct AgentDetachedJobTests {
     func aliveDetachedJobAloneDoesNotBlockQuit() async throws {
         let root = makeRoot(); defer { cleanUp(root) }
         let registry = AgentJobRegistry(outputLogRootDirectory: root)
-        let appState = AppState(backgroundJobRegistry: registry, loadSessionCatalog: false)
+        // The quit guard also counts active dispatch goals and media tasks. Their
+        // default stores are process-wide (a per-pid defaults suite, the real
+        // media-tasks file), so goals left running by earlier suites made this
+        // test ask for confirmation in full runs while passing alone. Isolate both.
+        // Prefix "willdeep-dispatch-" is registered with TestDefaultsHygiene.
+        let suiteName = "willdeep-dispatch-detached-quit-\(UUID().uuidString)"
+        let dispatchDefaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { dispatchDefaults.removePersistentDomain(forName: suiteName) }
+        let mediaDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-detached-quit-media-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: mediaDirectory) }
+        let appState = AppState(
+            dispatchStore: AgentDispatchStore(defaults: dispatchDefaults),
+            backgroundJobRegistry: registry,
+            mediaTaskRegistry: AgentMediaTaskRegistry(fileURL: mediaDirectory.appendingPathComponent("tasks.json")),
+            loadSessionCatalog: false
+        )
         let session = appState.startNewAgentSession()
         let job = try registry.start(command: AgentJobFixtureCommand.idle(), workingDirectory: nil,
                                      runtimeID: session.id, timeoutSeconds: nil, lifetime: .persistent,

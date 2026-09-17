@@ -2165,7 +2165,9 @@ struct WillDeepTests {
         // same registry now prices ~30% higher without having grown.
         // Measured terminal-host metadata intentionally added to the registry
         // brings the complete surface to 48,008 tokens; retain a narrow ceiling.
-        let maximumExpectedToolSchemaTokens = 48_512
+        // 1.381/1.382 background-task contract batch 3 intentionally adds the
+        // `monitor` tool and sub-agent message/stop controls: 48,831 tokens.
+        let maximumExpectedToolSchemaTokens = 49_344
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)

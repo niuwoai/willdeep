@@ -63,9 +63,13 @@ struct AgentMonitorToolTests {
     @Test("stdout 行在命令结束前就作为事件到达；stderr 只进日志；结束通知带退出码与投递数")
     func linesArriveWhileTheCommandIsStillRunning() async throws {
         let harness = try Harness()
+        // 命令在 gate 文件出现前不退出：「ERROR 事件先于退出到达」由测试显式放行，
+        // 不再赌固定 sleep 1 撑得过满载时的准备耗时（全量并行下曾 22s 才走到断言）。
+        let gate = harness.root.appendingPathComponent("release-gate").path
         let handle = try await harness.start(
-            "printf 'ok 1\\n'; printf 'to-stderr\\n' >&2; sleep 1; printf 'ERR%s: boom\\n' OR; printf '   \\n'; sleep 1; exit 1",
-            timeout: 30
+            "printf 'ok 1\\n'; printf 'to-stderr\\n' >&2; sleep 1; printf 'ERR%s: boom\\n' OR; printf '   \\n'; "
+                + AgentJobFixtureCommand.waitForGate(gate) + "; exit 1",
+            timeout: 90
         )
         #expect(handle.hasPrefix("mon_") && handle.count == 10)
         let job = try #require(harness.job(handle))
@@ -89,6 +93,7 @@ struct AgentMonitorToolTests {
         #expect(progress.payload.contains("status: running"))
         #expect(progress.payload.contains("ERROR: boom"))
 
+        AgentJobFixtureCommand.openGate(gate)
         let ended = try #require(await harness.waitFor { $0.isEnded })
         #expect(ended.dedupeKey == "monitor:\(handle):ended")
         #expect(ended.payload.contains("reason: exited\nexit_code: 1\n"), "\(ended.payload)")

@@ -34,6 +34,20 @@ enum AgentJobFixtureCommand {
         "trap '' TERM; " + boundedSleepLoop
     }
 
+    /// Blocks until `gatePath` exists, running `body` once per 0.1 s tick,
+    /// with the same deadline as `boundedSleepLoop`. For tests that assert
+    /// "the job is still running" at some point: the test creates the gate
+    /// file once it has checked, instead of racing a fixed `sleep` that a
+    /// fully loaded test host can outlast.
+    static func waitForGate(_ gatePath: String, body: String = ":") -> String {
+        let ticks = maximumIdleSeconds * 10
+        return "__wd=0; while [ ! -e '\(gatePath)' ] && [ \"$__wd\" -lt \(ticks) ]; "
+            + "do \(body); sleep 0.1; __wd=$((__wd + 1)); done"
+    }
+    /// Creates the gate file a `waitForGate` fixture is waiting on.
+    static func openGate(_ gatePath: String) {
+        FileManager.default.createFile(atPath: gatePath, contents: Data())
+    }
     /// POSIX-sh countdown rather than `while true`. `sleep 1` keeps the
     /// signal-delivery latency the kill tests rely on.
     static let boundedSleepLoop =

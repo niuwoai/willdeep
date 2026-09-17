@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.382.0-rc2 - 2026-09-17
+
+### Fixed
+
+- **全量测试门禁恢复：两个后台作业测试不再赌固定 sleep，工具 schema 预算跟上新工具。**
+  - `AgentMonitorToolTests` 与 `AgentDetachedJobTests` 断言「作业此刻仍在运行」，夹具却是跑 1.5~2 秒就自然退出的命令；
+    全量并行时准备耗时 20 秒以上，命令先跑完，断言必红（单跑两个套件是绿的）。改为夹具等测试创建 gate 文件
+    才退出（`AgentJobFixtureCommand.waitForGate`，仍带 60 秒自毁死线，不留孤儿进程）。
+  - 工具 schema token 预算上限从 48,512 调到 49,344：第三批新增的 `monitor` 与子 Agent 发消息/叫停工具
+    是有意扩充，实测完整工具面 48,831。
+  - `aliveDetachedJobAloneDoesNotBlockQuit` 全量必红、单跑绿：退出守卫还会看调度目标与媒体任务，而它们的默认存储是
+    进程级共享的（按 pid 的 defaults suite、真实 media-tasks 文件），前面套件留下的活跃目标让它误判「有活要确认」。
+    改为注入独立的调度 defaults 与媒体任务文件。
+
 ## 1.382.0-rc1 - 2026-09-17
 
 ### Added
