@@ -130,6 +130,10 @@ extension AppState {
                 let dispatchProject = agentDispatchCoordinator.goals.first {
                     $0.sessionID == source.id
                 }
+                let activity = AgentPeerSessionActivity(
+                    plan: live?.currentPlan ?? source.currentPlan,
+                    messages: live?.messages ?? source.messages
+                )
                 return AgentWorkspaceSessionSnapshot(
                     id: source.id,
                     title: source.title,
@@ -159,7 +163,11 @@ extension AppState {
                     isDispatchProject: source.presentationScope == .dispatchBoard
                         && source.dispatchParentProjectID == nil
                         && goal != nil,
-                    isDispatchPaused: dispatchProject?.isPaused ?? false
+                    isDispatchPaused: dispatchProject?.isPaused ?? false,
+                    planCompletedStepCount: activity.planCompletedStepCount,
+                    planTotalStepCount: activity.planTotalStepCount,
+                    currentStepText: activity.currentStepText,
+                    lastUserRequest: activity.lastUserRequest
                 )
             }
     }

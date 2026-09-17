@@ -640,8 +640,12 @@ struct ComposerTextEditor: NSViewRepresentable {
             guard let token = currentTriggerQuery(in: textView, trigger: 0x2F) else { return nil }
             let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
             guard token.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
-            // 第二个斜杠意味着这是一条路径，不是命令。
-            guard textView.string.filter({ $0 == "/" }).count == 1 else { return nil }
+            // 紧跟着的斜杠意味着光标停在一条路径中间（`/Users|/rocky`），不是命令。
+            // 此前要求整段只有一个斜杠，于是 `/no-sandbox /sub` 这种串写的第二个
+            // 命令永远唤不起面板；路径已经由上面的字符集和「斜杠前必须是空白」挡住。
+            let nsString = textView.string as NSString
+            let caret = textView.selectedRange().location
+            if caret < nsString.length, nsString.character(at: caret) == 0x2F { return nil }
             return token
         }
 

@@ -230,7 +230,7 @@ enum AgentToolPackCatalog {
 
     private static let sessionAutomationToolNames: Set<String> = [
         "list_projects", "list_project_sessions", "manage_sessions",
-        "list_workspace_sessions", "search_sessions", "suggest_session_title",
+        "list_workspace_sessions", "send_session_message", "search_sessions", "suggest_session_title",
         "rename_session", "change_workspace", "run_workflow", "schedule_task",
         "declare_environment_trust", "complete_scheduled_task"
     ]

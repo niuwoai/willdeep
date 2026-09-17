@@ -2167,7 +2167,9 @@ struct WillDeepTests {
         // brings the complete surface to 48,008 tokens; retain a narrow ceiling.
         // 1.381/1.382 background-task contract batch 3 intentionally adds the
         // `monitor` tool and sub-agent message/stop controls: 48,831 tokens.
-        let maximumExpectedToolSchemaTokens = 49_344
+        // 1.383.0-rc1: `send_session_message` plus peer-activity wording on
+        // `list_workspace_sessions` measure 49,121.
+        let maximumExpectedToolSchemaTokens = 49_600
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)

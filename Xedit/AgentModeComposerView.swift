@@ -1231,6 +1231,16 @@ private struct ComposerCard: View {
         guard !commands.isEmpty else { return false }
         let safeIndex = min(max(0, slashMenuSelection), commands.count - 1)
         let command = commands[safeIndex]
+        // 光标所在的斜杠词不是开头那个（`/no-sandbox /sub` 里正在补第二个）：
+        // 只补全这个词，整串命令留到回车时一起执行。
+        if SlashCommand.isCompletingChainedCommand(input: appState.agentInput, currentToken: slashMenuQuery),
+           coordinatorRef.coordinator?.replaceCurrentTriggerToken(trigger: 0x2F, replacement: command.title + " ") == true {
+            slashMenuVisible = false
+            slashMenuSelection = 0
+            slashMenuQuery = ""
+            inputFocused = true
+            return true
+        }
         // 先把当前 raw input 里的 args 切出来 —— workflow 命令需要它，
         // core 命令忽略。然后再清空输入框。
         //
@@ -1252,6 +1262,10 @@ private struct ComposerCard: View {
     /// composer send path.
     private func submitComposer() {
         let commands = SlashCommand.builtIn(state: appState)
+        if let chain = SlashCommand.invocationChain(in: appState.agentInput, commands: commands) {
+            executeSlashCommandChain(chain)
+            return
+        }
         guard let invocation = SlashCommand.invocation(in: appState.agentInput, commands: commands) else {
             appState.sendAgentMessage()
             return
@@ -1284,6 +1298,28 @@ private struct ComposerCard: View {
         slashMenuQuery = ""
         appState.agentInput = ""
         command.action(args)
+    }
+
+    /// Runs `/a /b text` in order. A required-argument command with no text
+    /// runs nothing: the earlier commands must not take effect while the
+    /// user is still fixing the message.
+    private func executeSlashCommandChain(_ chain: SlashCommandChain) {
+        if let incomplete = chain.missingRequiredArguments {
+            incomplete.action("")
+            inputFocused = true
+            return
+        }
+        slashMenuVisible = false
+        slashMenuSelection = 0
+        slashMenuQuery = ""
+        appState.agentInput = ""
+        for step in chain.steps {
+            step.command.action(step.args)
+        }
+        if let message = chain.trailingMessage {
+            appState.agentInput = message
+            appState.sendAgentMessage()
+        }
     }
 
     private func handleAtQueryChange(_ query: String?) {

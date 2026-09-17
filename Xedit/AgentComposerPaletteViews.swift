@@ -131,6 +131,17 @@ struct SlashCommand: Identifiable {
                 NSPasteboard.general.setString(last.content, forType: .string)
             },
         ]
+        let collaboration: [SlashCommand] = [
+            SlashCommand(id: "sessions", title: "/sessions", subtitle: L10n.SessionHandoff.sessionsCommandSubtitle,
+                         symbol: "rectangle.stack.badge.person.crop", aliases: ["peers"]) { _ in
+                state.askAgentAboutPeerSessions()
+            },
+            SlashCommand(id: "handoff", title: "/handoff", subtitle: L10n.SessionHandoff.commandSubtitle,
+                         symbol: "arrow.up.forward.app",
+                         argumentMode: .optional(placeholder: L10n.SessionHandoff.commandPlaceholder)) { args in
+                state.handoffActiveSessionToCLI(instructions: args)
+            },
+        ]
         // 委派开关：正文照常作为普通用户消息发送，只是这一回合带上
         // 明确的 delegation policy。`/no-subagent` 是硬保证（工具表里
         // 直接摘掉 spawn_agent），`/subagent` 是强指令 + 事后审计 ——
@@ -184,7 +195,7 @@ struct SlashCommand: Identifiable {
                 state.startWorkflow(slashCommand: workflow.slashCommand, args: args)
             }
         }
-        return core + delegationCommands + [designToCode] + workflows
+        return core + collaboration + delegationCommands + [designToCode] + workflows
     }
 
     /// Filters by fuzzy-ish prefix on the slash-stripped query. The text
@@ -258,6 +269,79 @@ struct SlashCommand: Identifiable {
         let bareName = String(commandName.dropFirst())
         guard let command = commands.first(where: { $0.answersTo(exactName: bareName) }) else { return nil }
         return (command, argsForCommand(rawInput))
+    }
+
+    /// The palette is completing a later slash token of a message that
+    /// already starts with a command, e.g. `/no-sandbox /sub`. Selecting then
+    /// completes the token instead of executing everything typed so far.
+    static func isCompletingChainedCommand(input: String, currentToken: String) -> Bool {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("/"), currentToken.hasPrefix("/") else { return false }
+        let firstToken = trimmed.prefix { !$0.isWhitespace }
+        return firstToken != Substring(currentToken)
+    }
+
+    /// Several commands written back to back at the start of a message:
+    /// `/no-sandbox /subagent 修一下登录`. Returns nil unless at least two
+    /// leading tokens are exact commands — a single command keeps the
+    /// `invocation(in:commands:)` behaviour unchanged.
+    ///
+    /// The text after the chain belongs to ONE command, never to several:
+    /// `/no-sandbox` and `/subagent` both send their args as a message, so
+    /// handing the text to both would send it twice. The consumer is the
+    /// last command that requires arguments, else the last one that accepts
+    /// them; the others run first with empty args, in written order. When no
+    /// command takes the text it is sent as an ordinary message afterwards.
+    static func invocationChain(
+        in rawInput: String,
+        commands: [SlashCommand]
+    ) -> SlashCommandChain? {
+        var remainder = Substring(rawInput)
+        var matched: [SlashCommand] = []
+        while true {
+            let trimmed = remainder.drop { $0.isWhitespace }
+            guard trimmed.hasPrefix("/") else { break }
+            let token = trimmed.prefix { !$0.isWhitespace }
+            let bareName = String(token.dropFirst())
+            guard let command = commands.first(where: { $0.answersTo(exactName: bareName) }) else { break }
+            matched.append(command)
+            remainder = trimmed.dropFirst(token.count)
+        }
+        guard matched.count >= 2 else { return nil }
+        let text = String(remainder).trimmingCharacters(in: .whitespacesAndNewlines)
+        let consumerIndex = matched.lastIndex(where: { $0.argumentMode.requiresArguments })
+            ?? matched.lastIndex(where: { $0.argumentMode.acceptsArguments })
+        var steps: [SlashCommandChain.Step] = []
+        for (index, command) in matched.enumerated() where index != consumerIndex {
+            steps.append(.init(command: command, args: ""))
+        }
+        if let consumerIndex {
+            steps.append(.init(command: matched[consumerIndex], args: text))
+        }
+        return SlashCommandChain(
+            steps: steps,
+            trailingMessage: consumerIndex == nil && !text.isEmpty ? text : nil
+        )
+    }
+}
+
+/// Resolved form of several leading slash commands. `steps` are already in
+/// execution order.
+struct SlashCommandChain {
+    struct Step {
+        let command: SlashCommand
+        let args: String
+    }
+
+    let steps: [Step]
+    /// Text no command consumed; the composer sends it as a normal message
+    /// after every step ran.
+    let trailingMessage: String?
+
+    /// A required-argument command left without text would only surface its
+    /// missing-arguments error after the earlier commands already ran.
+    var missingRequiredArguments: SlashCommand? {
+        steps.first { $0.command.argumentMode.requiresArguments && $0.args.isEmpty }?.command
     }
 }
 

@@ -347,7 +347,8 @@ extension AppState {
         arguments: [String],
         in repositoryRoot: URL,
         allowedExitStatuses: Set<Int32> = [0],
-        timeout: TimeInterval = gitCommandTimeout
+        timeout: TimeInterval = gitCommandTimeout,
+        extraEnvironment: [String: String] = [:]
     ) -> GitCommandResult {
         // 满载(全并行测试、系统 fork 风暴)时 posix_spawn 可能瞬态失败
         // (EAGAIN),process.run() 抛错会被 runGit 吞成空串,表现为"git 没
@@ -359,7 +360,8 @@ extension AppState {
                 arguments: arguments,
                 in: repositoryRoot,
                 allowedExitStatuses: allowedExitStatuses,
-                timeout: timeout
+                timeout: timeout,
+                extraEnvironment: extraEnvironment
             )
             let spawnFailed = result.status == -1 && !result.timedOut
             guard spawnFailed, attempt < 2 else { return result }
@@ -372,7 +374,8 @@ extension AppState {
         arguments: [String],
         in repositoryRoot: URL,
         allowedExitStatuses: Set<Int32>,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        extraEnvironment: [String: String]
     ) -> GitCommandResult {
         let process = Process()
         let outputID = UUID().uuidString
@@ -423,6 +426,7 @@ extension AppState {
             "GIT_OPTIONAL_LOCKS": "0",
             "GIT_TERMINAL_PROMPT": "0"
         ]) { current, _ in current }
+            .merging(extraEnvironment) { _, explicit in explicit }
         process.standardOutput = stdoutHandle
         process.standardError = stderrHandle
 

@@ -79,7 +79,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "list_workspace_sessions",
-            description: "List WillDeep Agent sessions that belong to the CURRENT workspace group, including title, mode, activity time, running/queued state, Goal summary/progress, and dispatch-console ownership. Read-only. Use this when the user asks what sessions or Goals exist in this workspace, or before deciding whether new work would duplicate an existing Goal.",
+            description: "List WillDeep Agent sessions that belong to the CURRENT workspace group, including title, mode, activity time, running/queued state, Goal summary/progress, plan progress with the current step, the latest user request, and dispatch-console ownership. Read-only. Use this when the user asks what sessions or Goals exist in this workspace, before deciding whether new work would duplicate what another session is already doing, or before coordinating with a peer via send_session_message.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "include_archived", type: .boolean, description: "When true, include archived sessions in this workspace. Defaults to false.", required: false),
@@ -309,7 +309,7 @@ enum AgentToolRegistry {
             ]
         ),
         AgentMonitorTool.descriptor,
-    ] + AgentSubagentControlTools.descriptors + [
+    ] + AgentSubagentControlTools.descriptors + [AgentPeerMessageTool.descriptor] + [
         AgentToolDescriptor(
             name: "list_skills",
             description: "List installed skills from WillDeep's bundled skills, user skill roots, and plugin cache so the agent can choose a specialized workflow before acting. Read-only.",

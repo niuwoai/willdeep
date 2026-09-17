@@ -2271,6 +2271,10 @@ extension AppState {
                     executeSubagentControlToolCall(call, recordID: recordID, arguments: argsDict, runtime: runtime)
                     continue
                 }
+                if call.toolName == AgentPeerMessageTool.name {
+                    executePeerSessionMessageToolCall(call, recordID: recordID, arguments: argsDict, runtime: runtime)
+                    continue
+                }
 
                 if isPatchReviewTool {
                     runtime.collectingPatchReviewMessageIDs.insert(assistantID)

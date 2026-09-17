@@ -131,6 +131,13 @@ struct AgentWorkspaceSessionSnapshot: Equatable {
     let dispatchTaskID: UUID?
     let isDispatchProject: Bool
     let isDispatchPaused: Bool
+    /// What the session is doing right now, for peer coordination. Filled
+    /// from the live runtime when loaded, else from the persisted session;
+    /// defaults keep older call sites (and tests) source-compatible.
+    var planCompletedStepCount: Int = 0
+    var planTotalStepCount: Int = 0
+    var currentStepText: String? = nil
+    var lastUserRequest: String? = nil
 
     /// The session belongs to the dispatch console — either a project created
     /// there or one of its task sessions. The console is a separate surface

@@ -187,6 +187,7 @@ nonisolated enum AgentToolDisplay {
         "git_status": "查看 Git 状态",
         "rename_session": "重命名会话",
         "list_projects": "列出项目",
+        "send_session_message": "给其他会话发消息",
         "list_project_sessions": "列出项目会话",
         "manage_sessions": "批量管理会话",
         "change_workspace": "更改 Workspace",

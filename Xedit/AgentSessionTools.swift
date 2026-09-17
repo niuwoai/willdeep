@@ -145,6 +145,15 @@ enum AgentSessionTools {
             if let statement = session.goalStatement, !statement.isEmpty {
                 line += " goal=\(statement) progress=\(session.goalCompletedItemCount)/\(session.goalTotalItemCount)"
             }
+            if session.planTotalStepCount > 0 {
+                line += " plan=\(session.planCompletedStepCount)/\(session.planTotalStepCount)"
+            }
+            if let step = session.currentStepText, !step.isEmpty {
+                line += " current_step=\(AgentPeerSessionActivity.excerpt(step, limit: 120))"
+            }
+            if let request = session.lastUserRequest, !request.isEmpty {
+                line += " last_request=\(request)"
+            }
             lines.append(line)
         }
 
@@ -176,7 +185,11 @@ enum AgentSessionTools {
                     "dispatch_parent_project_id": session.dispatchParentProjectID?.uuidString ?? NSNull(),
                     "dispatch_task_id": session.dispatchTaskID?.uuidString ?? NSNull(),
                     "is_dispatch_project": session.isDispatchProject,
-                    "is_dispatch_paused": session.isDispatchPaused
+                    "is_dispatch_paused": session.isDispatchPaused,
+                    "plan_completed_step_count": session.planCompletedStepCount,
+                    "plan_total_step_count": session.planTotalStepCount,
+                    "current_step": session.currentStepText ?? NSNull(),
+                    "last_user_request": session.lastUserRequest ?? NSNull()
                 ] as [String: Any]
             }
         ]
