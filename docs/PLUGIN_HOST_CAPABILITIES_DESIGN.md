@@ -225,11 +225,26 @@ key，宿主允许插件 MCP 服务在处理 `tools/call` 期间**反过来向�
 宿主只对**插件来源的 stdio 服务**在 `initialize` 里宣告：
 
 ```json
-{ "capabilities": { "extensions": { "io.willdeep/host-requests": { "methods": ["willdeep/images/generate"] } } } }
+{ "capabilities": { "extensions": { "io.willdeep/host-requests": { "methods": ["willdeep/images/generate", "willdeep/ai/complete"] } } } }
 ```
 
-插件据此判断宿主支不支持。没有这一项（旧宿主、willdeep-rs、用户手工配置的服务）时，
-插件应当直接报「当前宿主不支持出图」，而不是发出请求再干等。
+插件据此判断宿主支不支持**哪个方法**（`willdeep/ai/complete` 从 1.380.0-rc1 起才有）。
+没有对应项（旧宿主、willdeep-rs、用户手工配置的服务）时，插件应当直接报「当前宿主不支持」，
+而不是发出请求再干等。
+
+### 问模型：`willdeep/ai/complete`（1.380.0-rc1）
+
+`params` 与页面桥 `window.willdeep.ai.complete` 的请求对象相同（`system`、`messages`（user
+消息可带 `imagePaths` / `videoPaths`）、`provider`、`model`、`tools`、`skills`），走同一个
+校验器 `AgentPluginAIRequestValidator` 和同一份实现 `runPluginAICompletion`：`ai.chat`
+权限、模型白名单、附件路径钳制、视频抽帧、不收图的模型当场拒、审计日志全部相同。
+
+与页面的区别：不流式（没有页面可推增量，`streamID` 被忽略）；不占页面的并发闸（MCP
+连接本身串行）。成功时 `result = { text, model, providerID, toolCalls }`；错误码同出图。
+模型路由挂在 AppState 上，取当前窗口的；各窗口读的是同一份 provider 设置。
+
+起因是短剧工坊的 `review.run`：Agent 替用户出完图、出完片后要让插件配置的多模态审核模型
+看一眼，插件进程自己没有模型凭据。
 
 ### 请求
 

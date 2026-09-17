@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.380.0-rc1 - 2026-09-17
+
+### Added
+
+- **插件的 MCP 服务可以反过来请宿主问一次模型（`willdeep/ai/complete`）。**
+  起因是让主 Agent 在聊天里替用户跑完短剧流水线时也能做内容审核：出完图、出完片之后要让
+  插件设置里选定的多模态审核模型看一眼，而插件的 MCP 进程没有任何模型凭据，审核此前只能在
+  插件页面里跑。
+  - 请求形状与页面桥 `window.willdeep.ai.complete` 相同，走同一个校验器与同一份实现：
+    `ai.chat` 权限、provider / 模型白名单、`imagePaths` / `videoPaths` 钳制到本插件生成目录、
+    视频抽 8 帧、模型不收图当场拒、插件审计日志，一处都不另写。
+  - 不流式；成功返回 `{ text, model, providerID, toolCalls }`，参数不合法 -32602，调用失败
+    -32000 并带原因。
+  - initialize 宣告的方法列表随之变为 `["willdeep/images/generate", "willdeep/ai/complete"]`，
+    插件按方法判断宿主支持什么。
+
 ## 1.379.0-rc4 - 2026-09-17
 
 ### Fixed

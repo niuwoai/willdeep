@@ -46,7 +46,7 @@ struct AgentMCPHostRequestsTests {
     func initializeAdvertisesCapabilityOnlyForPlugins() {
         let pluginExtensions = (AgentMCPBridge.initializeParams(for: pluginServer())["capabilities"] as? [String: Any])?["extensions"] as? [String: Any]
         let advertised = pluginExtensions?[AgentMCPHostRequests.capabilityKey] as? [String: Any]
-        #expect(advertised?["methods"] as? [String] == [AgentMCPHostRequests.imageGenerateMethod])
+        #expect(advertised?["methods"] as? [String] == ["willdeep/images/generate", "willdeep/ai/complete"])
         #expect(pluginExtensions?["io.modelcontextprotocol/ui"] != nil, "原有的 UI 扩展不能丢")
 
         let user = AgentMCPServerConfig(name: "x", source: .user, transport: .stdio, command: "/bin/echo")
@@ -99,6 +99,69 @@ struct AgentMCPHostRequestsTests {
         #expect((error?["message"] as? String)?.contains("ai.image") == true)
     }
 
+    @Test("问模型：与页面桥同一个校验器，附图路径原样交给实现，结果带回模型名")
+    func aiCompleteUsesPageValidatorAndReturnsText() async {
+        let seen = RequestRecorder()
+        AgentMCPHostRequests.setAICompleterForTesting { pluginID, request in
+            seen.record(pluginID: pluginID, request: request)
+            return AgentPluginAIResult(text: "```short_drama_review\n{}\n```", model: "qwen3.8-max", providerID: "dashscope")
+        }
+        defer { AgentMCPHostRequests.setAICompleterForTesting(nil) }
+
+        let response = await AgentMCPHostRequests.respond(
+            to: ["id": "a1", "method": AgentMCPHostRequests.aiCompleteMethod, "params": [
+                "system": "你是审核员",
+                "provider": "dashscope", "model": "qwen3.8-max",
+                "messages": [["role": "user", "content": "审这张图", "imagePaths": ["/tmp/x/a.png"]]],
+            ]],
+            server: pluginServer()
+        )
+        let result = response["result"] as? [String: Any]
+        #expect(result?["model"] as? String == "qwen3.8-max")
+        #expect((result?["text"] as? String)?.contains("short_drama_review") == true)
+        #expect(result?["toolCalls"] as? [Any] != nil, "toolCalls 恒在，空数组表示用正文回答")
+        let request = seen.last()
+        #expect(request?.pluginID == "willdeep-video-studio")
+        #expect(request?.messages.first?.role == .system)
+        #expect(request?.messages.last?.imagePaths == ["/tmp/x/a.png"], "路径钳制在实现里做，这里不能先丢掉")
+    }
+
+    @Test("问模型：空请求回 -32602，模型失败回 -32000 并带原因")
+    func aiCompleteRejectsAndReportsFailures() async {
+        AgentMCPHostRequests.setAICompleterForTesting { _, _ in throw AgentPluginAIError.permissionDenied }
+        defer { AgentMCPHostRequests.setAICompleterForTesting(nil) }
+
+        let empty = await AgentMCPHostRequests.respond(
+            to: ["id": "a2", "method": AgentMCPHostRequests.aiCompleteMethod, "params": ["messages": []]], server: pluginServer()
+        )
+        #expect((empty["error"] as? [String: Any])?["code"] as? Int == AgentMCPHostRequests.ErrorCode.invalidParams)
+
+        let denied = await AgentMCPHostRequests.respond(
+            to: ["id": "a3", "method": AgentMCPHostRequests.aiCompleteMethod, "params": ["messages": [["role": "user", "content": "hi"]]]],
+            server: pluginServer()
+        )
+        let error = denied["error"] as? [String: Any]
+        #expect(error?["code"] as? Int == AgentMCPHostRequests.ErrorCode.failed)
+        #expect((error?["message"] as? String)?.isEmpty == false)
+
+        let user = AgentMCPServerConfig(name: "x", source: .user, transport: .stdio, command: "/bin/echo")
+        let fromUser = await AgentMCPHostRequests.respond(
+            to: ["id": "a4", "method": AgentMCPHostRequests.aiCompleteMethod, "params": ["messages": [["role": "user", "content": "hi"]]]],
+            server: user
+        )
+        #expect((fromUser["error"] as? [String: Any])?["code"] as? Int == AgentMCPHostRequests.ErrorCode.methodNotFound)
+    }
+
+    private final class RequestRecorder: @unchecked Sendable {
+        struct Seen { let pluginID: String; let messages: [AgentPluginAIMessage] }
+        private let lock = NSLock()
+        private var value: Seen?
+        func record(pluginID: String, request: AgentPluginAIRequest) {
+            lock.lock(); value = Seen(pluginID: pluginID, messages: request.messages); lock.unlock()
+        }
+        func last() -> Seen? { lock.lock(); defer { lock.unlock() }; return value }
+    }
+
     @Test("端到端：工具调用期间反向出图，宿主干活的时间不算服务端超时")
     func stdioServerCanRequestImagesMidToolCall() async throws {
         let calls = CallRecorder()
@@ -133,7 +196,7 @@ struct AgentMCPHostRequestsTests {
         #expect(image["model"] as? String == "nano-banana-2")
 
         let advertised = result["advertised"] as? [String]
-        #expect(advertised == [AgentMCPHostRequests.imageGenerateMethod], "插件在 initialize 里就能看到宿主支持出图")
+        #expect(advertised == AgentMCPHostRequests.supportedMethods, "插件在 initialize 里就能看到宿主支持出图")
         #expect(calls.all().map(\.pluginID) == ["willdeep-video-studio"])
         #expect(calls.all().first?.prompt == "a red lantern")
     }

@@ -28,6 +28,12 @@ nonisolated enum AgentMCPHostRequests {
     /// 在 initialize 的 `capabilities.extensions` 里宣告，插件据此判断宿主支不支持。
     static let capabilityKey = "io.willdeep/host-requests"
     static let imageGenerateMethod = "willdeep/images/generate"
+    /// 问一次模型（1.380.0-rc1）。形状、校验、权限（`ai.chat`）、附图附视频的路径钳制
+    /// 与页面桥 `window.willdeep.ai.complete` 完全相同，只是不流式：MCP 这条路
+    /// 没有页面可推增量。起因是内容审核——Agent 替用户出完图、出完片之后要让插件
+    /// 配置的多模态审核模型看一眼，插件进程自己没有任何模型凭据。
+    static let aiCompleteMethod = "willdeep/ai/complete"
+    static let supportedMethods = [imageGenerateMethod, aiCompleteMethod]
 
     /// 单次反向请求的处理上限。出一张图通常几十秒，带参考图要先上传；
     /// 十分钟之外只可能是上游挂住了，不能让 MCP 连接的串行队列永远卡着。
@@ -62,10 +68,38 @@ nonisolated enum AgentMCPHostRequests {
         }
     }
 
+    typealias AICompleter = @Sendable (AgentPluginID, AgentPluginAIRequest) async throws -> AgentPluginAIResult
+
+    nonisolated(unsafe) private static var aiCompleterOverride: AICompleter?
+
+    /// 测试入口：替换真实模型调用。传 nil 恢复。
+    static func setAICompleterForTesting(_ completer: AICompleter?) {
+        overrideLock.lock()
+        defer { overrideLock.unlock() }
+        aiCompleterOverride = completer
+    }
+
+    private static func aiCompleter() -> AICompleter {
+        overrideLock.lock()
+        defer { overrideLock.unlock() }
+        if let aiCompleterOverride { return aiCompleterOverride }
+        return { pluginID, request in
+            // 模型路由（provider 库、默认 flash 档）挂在 AppState 上。MCP 调用不带
+            // 窗口归属，取当前窗口；各窗口读的是同一份 provider 设置。
+            try await Task { @MainActor in
+                let registry = EditorAppStateRegistry.shared
+                guard let appState = registry.current ?? registry.appStatesForTerminationCheck.first else {
+                    throw AgentPluginAIError.unavailable
+                }
+                return try await appState.runPluginAICompletion(pluginID: pluginID, request: request)
+            }.value
+        }
+    }
+
     /// 要在 initialize 里宣告的能力；非插件服务返回 nil。
     static func advertisedCapability(for server: AgentMCPServerConfig) -> [String: Any]? {
         guard pluginID(for: server) != nil else { return nil }
-        return ["methods": [imageGenerateMethod]]
+        return ["methods": supportedMethods]
     }
 
     /// 插件服务的 id 形如 `plugin:<插件ID>:<服务名>`（`AgentMCPServerDirectory.loadPluginServers`）。
@@ -136,6 +170,30 @@ nonisolated enum AgentMCPHostRequests {
                         "filePath": image.filePath,
                         "model": image.model,
                         "providerID": image.providerID,
+                    ],
+                ]
+            } catch {
+                return errorResponse(id: id, code: ErrorCode.failed, message: error.localizedDescription)
+            }
+        case aiCompleteMethod:
+            let params = message["params"] as? [String: Any] ?? [:]
+            let request: AgentPluginAIRequest
+            switch AgentPluginAIRequestValidator.request(from: params) {
+            case .failure(let error):
+                return errorResponse(id: id, code: ErrorCode.invalidParams, message: error.localizedDescription)
+            case .success(let validated):
+                request = validated
+            }
+            do {
+                let result = try await aiCompleter()(pluginID, request)
+                return [
+                    "jsonrpc": "2.0",
+                    "id": id ?? NSNull(),
+                    "result": [
+                        "text": result.text,
+                        "model": result.model,
+                        "providerID": result.providerID,
+                        "toolCalls": result.toolCalls.map(\.jsonObject),
                     ],
                 ]
             } catch {
