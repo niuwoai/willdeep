@@ -15,8 +15,33 @@ enum AppTerminationGuard {
     static func shouldAllowTermination(appStates: [AppState]) -> Bool {
         shouldAllowTermination(
             appStates: appStates,
-            confirmation: presentConfirmation
+            confirmation: {
+                presentConfirmation(keepRunningLabels: jobsSurvivingTermination(appStates: appStates)
+                    .map { $0.label ?? $0.command })
+            }
         )
+    }
+
+    /// Detached `.persistent` jobs keep running after quit and are adopted by
+    /// the next launch, so they never block quitting; the dialog only lists
+    /// them. Several app states may share one registry.
+    static func jobsSurvivingTermination(appStates: [AppState]) -> [AgentBackgroundJob] {
+        var visited: Set<ObjectIdentifier> = []
+        var jobs: [AgentBackgroundJob] = []
+        for appState in appStates {
+            let registry = appState.agentJobRegistry
+            guard visited.insert(ObjectIdentifier(registry)).inserted else { continue }
+            jobs.append(contentsOf: registry.aliveDetachedJobs)
+        }
+        return jobs
+    }
+
+    /// Informative text: the standard warning, plus the jobs that will keep
+    /// running when there are any.
+    static func confirmationMessage(keepRunningLabels: [String]) -> String {
+        guard !keepRunningLabels.isEmpty else { return L10n.AppTermination.message }
+        let list = keepRunningLabels.map { "• \($0)" }.joined(separator: "\n")
+        return L10n.AppTermination.message + "\n\n" + L10n.AppTermination.detachedJobsKeepRunning(list)
     }
 
     static func shouldAllowTermination(
@@ -29,11 +54,11 @@ enum AppTerminationGuard {
         return confirmation()
     }
 
-    private static func presentConfirmation() -> Bool {
+    private static func presentConfirmation(keepRunningLabels: [String]) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = L10n.AppTermination.title
-        alert.informativeText = L10n.AppTermination.message
+        alert.informativeText = confirmationMessage(keepRunningLabels: keepRunningLabels)
         alert.addButton(withTitle: L10n.AppTermination.keepWorking)
         alert.addButton(withTitle: L10n.AppTermination.quitAnyway)
         return alert.runModal() == .alertSecondButtonReturn
@@ -58,7 +83,7 @@ extension AppState {
                 || runtime.isAwaitingProviderSlot
                 || runtime.isCompressingContext
                 || !runtime.workflowTasks.isEmpty
-                || !agentJobRegistry.aliveJobs(forRuntime: runtime.id).isEmpty
+                || agentJobRegistry.aliveJobs(forRuntime: runtime.id).contains { !$0.isDetached }
                 || agentSubagentRegistry.activeCount(forParentRuntime: runtime.id) > 0
         }
     }

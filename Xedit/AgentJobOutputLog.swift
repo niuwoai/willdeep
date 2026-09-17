@@ -41,6 +41,14 @@ nonisolated final class AgentJobOutputLogSink: @unchecked Sendable {
         directory = rootDirectory.appendingPathComponent(jobHandle, isDirectory: true)
         logURL = directory.appendingPathComponent(Self.logFileName)
         let fileManager = FileManager.default
+        // 脱离作业（C·三）的目录属于另一个进程组里仍可能在写的作业：
+        // 不截断它的日志、不删它的侧车，宁可这次不落盘。
+        guard !fileManager.fileExists(
+            atPath: directory.appendingPathComponent(AgentDetachedJobFiles.metaFileName).path
+        ) else {
+            NSLog("Background job log skipped for %@: directory belongs to a detached job", jobHandle)
+            return nil
+        }
         do {
             try fileManager.createDirectory(
                 at: directory,
@@ -114,6 +122,22 @@ nonisolated final class AgentJobOutputLogSink: @unchecked Sendable {
         Self.activeLock.unlock()
     }
 
+    /// 脱离作业没有 sink，但同样要在清理与句柄分配时被当作「进程内仍在写」。
+    static func retainActiveDirectory(_ jobHandle: String) {
+        activeLock.lock(); defer { activeLock.unlock() }
+        activeDirectoryNames.insert(jobHandle)
+    }
+
+    static func releaseActiveDirectory(_ jobHandle: String) {
+        activeLock.lock(); defer { activeLock.unlock() }
+        activeDirectoryNames.remove(jobHandle)
+    }
+
+    static func isActiveDirectory(_ jobHandle: String) -> Bool {
+        activeLock.lock(); defer { activeLock.unlock() }
+        return activeDirectoryNames.contains(jobHandle)
+    }
+
     private func writeSidecar(_ name: String, contents: Data) throws {
         let url = directory.appendingPathComponent(name)
         try contents.write(to: url, options: .atomic)
@@ -155,7 +179,9 @@ nonisolated final class AgentJobOutputLogSink: @unchecked Sendable {
         activeLock.unlock()
         let candidates = entries.compactMap { url -> (URL, Date)? in
             guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true,
-                  !skipped.contains(url.lastPathComponent) else { return nil }
+                  !skipped.contains(url.lastPathComponent),
+                  // 上次启动留下、仍在运行的脱离作业（无论谁认领了它）。
+                  !AgentDetachedJobFiles.recordedProcessIsAlive(directory: url) else { return nil }
             let directoryDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate ?? .distantPast
             let logDate = (try? url.appendingPathComponent(logFileName)

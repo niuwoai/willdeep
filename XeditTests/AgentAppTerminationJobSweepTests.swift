@@ -26,9 +26,10 @@ struct AgentAppTerminationJobSweepTests {
 
     // MARK: - Policy
 
-    /// `.persistent` is deliberately swept. It means "outlives the turn", not
-    /// "outlives the app": nothing re-adopts a local pid on the next launch,
-    /// so sparing one here strands it forever.
+    /// An in-process job is swept whatever its lifetime — `.persistent`
+    /// included. Lifetime means "outlives the turn"; only a job that actually
+    /// detached is re-adopted by the next launch, so sparing any other one
+    /// strands it forever.
     @Test
     func everyAliveLocalLifetimeIsSweptIncludingPersistent() {
         for lifetime in AgentBackgroundJobLifetime.allCases {
@@ -38,6 +39,15 @@ struct AgentAppTerminationJobSweepTests {
                 "lifetime \(lifetime.rawValue) was skipped by the quit sweep"
             )
         }
+    }
+
+    /// Contract「C·三」: a detached `.persistent` job keeps running after quit
+    /// and is re-adopted on the next launch; the sweep must leave it alone.
+    @Test
+    func detachedPersistentJobIsNotSwept() {
+        var detached = makeStubJob(status: .running, lifetime: .persistent)
+        detached.isDetached = true
+        #expect(!AgentAppTerminationJobSweep.shouldTerminateOnQuit(detached))
     }
 
     @Test
@@ -138,6 +148,43 @@ struct AgentAppTerminationJobSweepTests {
         #expect(registry.job(id: persistentJob.id)?.status == .killed)
         #expect(registry.consumePendingCompletions(forRuntime: runtimeID).isEmpty)
         #expect(notifiedJobIDs.isEmpty)
+    }
+
+    /// With detaching enabled, the persistent job survives the sweep while the
+    /// turn job beside it is still killed.
+    @Test
+    func quitSweepSparesDetachedPersistentJobsOnly() async throws {
+        let logRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-sweep-detached-\(UUID().uuidString)", isDirectory: true)
+        let registry = AgentJobRegistry(outputLogRootDirectory: logRoot)
+        defer { try? FileManager.default.removeItem(at: logRoot) }
+        let runtimeID = UUID()
+        let turnJob = try registry.start(
+            command: AgentJobFixtureCommand.idle(),
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil
+        )
+        let persistentJob = try registry.start(
+            command: AgentJobFixtureCommand.idle(),
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil,
+            lifetime: .persistent
+        )
+        defer { _ = killpg(persistentJob.pid, SIGKILL) }
+        #expect(persistentJob.isDetached)
+        #expect(!turnJob.isDetached)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let signaled = registry.terminateAliveJobsForAppTermination()
+        #expect(signaled.allSatisfy { $0.pid != persistentJob.pid })
+
+        #expect(await waitUntilFinished(registry: registry, id: turnJob.id))
+        #expect(registry.job(id: turnJob.id)?.status == .killed)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(registry.job(id: persistentJob.id)?.isAlive == true)
+        #expect(Darwin.kill(persistentJob.pid, 0) == 0)
     }
 
     /// A shell that ignores SIGTERM is exactly the case the old code lost:

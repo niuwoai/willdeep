@@ -18,19 +18,22 @@ enum AgentAppTerminationJobSweep {
     /// difference is that here the app itself waits it out.
     nonisolated static let gracePeriod: TimeInterval = 2
 
-    /// Quit ends every alive job this app spawned locally, `.persistent`
-    /// included. Lifetime answers "does this outlive the turn / phase / goal",
-    /// never "does this outlive the app": no launch re-adopts a local pid, so
-    /// a job spared here is unreachable for the rest of its life. The user has
-    /// already been asked once — `AppTerminationGuard` counts alive jobs as
+    /// Quit ends every alive job this app spawned in-process, whatever its
+    /// lifetime. Lifetime answers "does this outlive the turn / phase / goal";
+    /// only a *detached* job outlives the app, because only it is re-adopted
+    /// by the next launch (own process group, output on disk, `exit` file —
+    /// see `AgentDetachedJob.swift`). A `.persistent` job that could not
+    /// detach (e.g. it carries injected secrets) is still swept: sparing it
+    /// would strand it. The user has already been asked once —
+    /// `AppTerminationGuard` counts in-process alive jobs as
     /// termination-sensitive activity — so the sweep adds no second dialog.
     ///
-    /// Remote daemon work is the exception. It does not run on this machine,
-    /// quitting does not orphan it, and its exit receipt is what lets the next
-    /// launch recover the result. Cancelling it here would destroy that
-    /// evidence for work this app does not own.
+    /// Remote daemon work is the other exception. It does not run on this
+    /// machine, quitting does not orphan it, and its exit receipt is what lets
+    /// the next launch recover the result. Cancelling it here would destroy
+    /// that evidence for work this app does not own.
     nonisolated static func shouldTerminateOnQuit(_ job: AgentBackgroundJob) -> Bool {
-        guard job.isAlive else { return false }
+        guard job.isAlive, !job.isDetached else { return false }
         return job.remoteRuntimeID == nil && !job.requiresExitReceipt
     }
 

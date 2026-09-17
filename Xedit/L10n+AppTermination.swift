@@ -23,5 +23,15 @@ extension L10n {
             localized: "app-termination.active-task.quit-anyway",
             defaultValue: "Quit Anyway"
         )
+        /// `%@` is a bulleted list of job labels, one per line.
+        static func detachedJobsKeepRunning(_ list: String) -> String {
+            String(
+                format: String(
+                    localized: "app-termination.detached-jobs.keep-running",
+                    defaultValue: "These background tasks will keep running after WillDeep quits and reconnect on next launch:\n%@"
+                ),
+                list
+            )
+        }
     }
 }

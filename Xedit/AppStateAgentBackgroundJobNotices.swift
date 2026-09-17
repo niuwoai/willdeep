@@ -58,6 +58,8 @@ extension AppState {
     /// Contract status for a registry job. A lost monitoring channel is
     /// reported as a failure: the host could not confirm the outcome.
     nonisolated static func backgroundNoticeStatus(for job: AgentBackgroundJob) -> AgentBackgroundNotice.Status {
+        // Adopted detached job: process gone, no exit published — unknown.
+        if job.vanished { return .vanished }
         if job.monitoringFailure != nil { return .failed }
         switch job.status {
         case .completed: return .completed

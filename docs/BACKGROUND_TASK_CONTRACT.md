@@ -112,7 +112,12 @@ CLI 仍经事件内核投递，`<runtime-events>` 外壳保留（负责合批与
 |---|---|---|---|
 | B1 ✅ | CLI：追加写日志 + 尾部缓冲、`get_job_output` 统一语义、通知 v1、提示词段落、金样测试、保留策略、漂移脚本 | willdeep-rs | `0.75.0-rc1` |
 | B2 ✅ | Mac：文件 sink + 尾部环形、六个消费方核对、通知 v1、提示词两处替换 + 三档哈希重录、金样测试 | Xedit | MINOR |
-| B3 | 漂移检查脚本两端落地；`XEDIT_TOOL_PARITY.md` 更新 | 两边 | 随 B2 |
+| B3 ✅ | 漂移检查脚本（rs 仓库）+ Mac 提示词逐字断言 | 两边 | 随 B2（1.379.0-rc1） |
+| C1 | CLI：`monitor` 工具 + `send_agent_message` / `stop_agent` | willdeep-rs | `0.76.0-rc1` |
+| C2 | Mac：`monitor` 工具 + `send_agent_message` / `stop_agent` | Xedit | MINOR |
+| C3 ✅ | Mac：`lifetime: persistent` 的本地作业退出 App 后保活、下次启动认领（实现偏差：带注入密钥的作业不脱离、仍随退出清理；脱离日志由 shell 直写，不受 256MB 上限；测试宿主用默认目录时不脱离也不认领） | Xedit | MINOR（未 bump） |
+
+第三批设计见文末「第三批」一节。
 
 B1 先做：改动面小、没有提示词缓存代价，做完就能用它验证 v1 格式读起来顺不顺，再动 Mac。
 
@@ -130,6 +135,102 @@ B1 先做：改动面小、没有提示词缓存代价，做完就能用它验�
 2. 成功通知带 10 行尾巴——会让每条成功通知多 ~300 token，换少一次工具调用。
 3. 保留策略 7 天 / 200 个是否合适。
 4. 本文不含 Monitor 工具、Mac 退出保活、子 Agent `instruct_agent`，那是第三批。
+
+## 第三批：Monitor、给子 Agent 发消息、Mac 退出保活
+
+> 状态：设计已按默认值推进（2026-09-17）。以下「默认」均可改，改了要同时改两端与金样。
+
+### 现状（调研结论）
+
+| 能力 | CLI | macOS |
+|---|---|---|
+| 按行流式读输出 | **无**，`capture()` 按 8KB 块读 | 只有 executor 的 JSON 事件流按行切（`AgentExecutorEventCollector`） |
+| 宿主事件唤醒限流 | 宿主事件**不计**入 6 次 / 5 分钟外部额度 | 同上：`trust == .host` 直接唤醒 |
+| 模型给运行中子 Agent 发消息 / 停止 | **无工具**；`instruct_agent` 只接到 TUI、daemon CLI、HTTP | **无工具**；只有界面插话（1000 字符，**静默截断**）和界面停止 |
+| 后台作业跨进程存活 | 已有：`DetachedJobStore`（supervisor、exit 文件、启动时刻、owner、delivered） | **无**：退出时连 `.persistent` 一起杀；子进程输出走管道，App 一退日志就断 |
+
+### C·一、`monitor` 工具
+
+用途：盯着一条命令的输出，**每行（合批后）是一个事件**推给模型，进程退出或超时即结束。对标 Claude Code 的 Monitor；替代「sleep + get_job_output」式轮询。
+
+**参数**
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `command` | 必填 | 与 `run_command` **同一条审批路径**（同一命令同一判定，不开新口子） |
+| `label` | 必填 | 面向用户，出现在每条事件里 |
+| `timeout_seconds` | 300 | 上限 1800；到点杀进程组并发结束事件 |
+
+**行为（默认值）**
+
+1. 只有 **stdout** 是事件源；stderr 只进日志。每行截到 2000 字符。
+2. **合批**：200ms 内到达的行合成一个事件，单个事件最多 50 行（多出的并入下一批）。
+3. **防刷屏**：任意 60 秒内超过 30 个事件 → 自动停止并发 `reason: flooded` 的结束事件。宿主事件不走外部唤醒额度，所以这道闸只能长在 Monitor 自己身上。
+4. **唤醒**：会话空闲时事件会唤醒它，但**每个 Monitor 每 30 秒最多唤醒一次**；其余事件排队，在下一个回合边界一起交给模型（`yieldAtBoundary`，从不抢占正在跑的步骤）。结束事件不受这条限制。
+5. **生命周期**：随宿主进程存活（不做脱离）；`list_jobs` 可见、`kill_job` 可停；无头模式把运行中的 Monitor 算作「还在跑」，等它结束。
+6. 完整 stdout/stderr 照样按第一节落盘，事件里给 `output_path`。
+
+**事件格式 v1**（金样见 `docs/contracts/monitor-event.v1.txt`，与通知同样的脱敏与标签中和规则）
+
+~~~
+<monitor-event>
+id: mon_ab12cd
+label: 盯发布日志
+seq: 3
+lines: 2
+```text
+Uploading dmg… 100%
+ERROR: notarization rejected
+```
+</monitor-event>
+~~~
+
+~~~
+<monitor-ended>
+id: mon_ab12cd
+label: 盯发布日志
+reason: exited
+exit_code: 1
+duration: 4m12s
+events: 7
+output_path: …/output.log
+</monitor-ended>
+~~~
+
+`reason`：`exited` / `timed_out` / `killed` / `flooded` / `launch_failed`。
+
+**提示词**：不动两端稳定前缀（Mac 刚破过一次缓存）。用法写进 `monitor` 工具描述：「需要对**进行中**的输出作出反应时用 monitor；只关心最终结果用 `run_in_background`；每行都是一次模型注意力，命令里先用 grep --line-buffered 过滤到值得反应的行，并覆盖失败形态（Error / FAILED / Traceback），别只盯成功标记」。
+
+### C·二、`send_agent_message` / `stop_agent`
+
+| 工具 | 参数 | 行为 |
+|---|---|---|
+| `send_agent_message` | `agent_id`, `message` | 投递到运行中后台子 Agent 的指令收件箱，**下一个回合边界**生效（不打断当前步骤）；`message` ≤ 4000 字符，**超出直接报错，不截断** |
+| `stop_agent` | `agent_id` | 停止运行中的后台子 Agent；它的报告照常以 `status: killed` 投回 |
+
+- **只能动本会话起的子 Agent**：按父会话归属校验，别的会话的 id 一律报「找不到」。
+- **不需要审批**（等同于在自己的子任务里改主意），但每次调用写审计（CLI：approvals.jsonl 同格式；Mac：子 Agent 活动回执）。
+- 子 Agent 自己拿不到这两个工具。
+- `agent_id` 就是 `spawn_agent` 返回的句柄（CLI 的 agent id / Mac 的 `agent_xxxxxx`）；目标已结束时报「已结束，报告已投递或即将投递」。
+- Mac 界面插话的 1000 字符静默截断改为：界面仍 1000 字符但**显示剩余字数并拒绝超长提交**；模型通道 4000 字符。
+
+### C·三、Mac：`persistent` 作业退出保活
+
+只针对 `lifetime: persistent` 的**本地** shell 作业（dev server、长时间 watch）；`turn` / `phase` / `goal` 仍随 App 退出清理。
+
+1. **脱离启动**：不再用 `Process` + 管道，改为 `posix_spawn`（`POSIX_SPAWN_SETPGROUP`，自成进程组）起一个极薄的 `/bin/sh` 包装：命令输出直接重定向进 `output.log`（**文件，不是管道**），命令结束后把退出码写 `exit.pending` 再原子改名为 `exit`。沙箱包装照旧套在命令外层。
+2. **作业记录**：`meta.json`（句柄、pid、进程启动时刻、owner runtime id、label、命令、超时截止时刻），0600。
+3. **运行中**：App 读日志文件的增量更新内存尾部（替代管道回调），UI、`get_job_output`、通知一律不变。
+4. **退出 App**：退出清理跳过这类作业；退出确认框把它们单列为「会继续运行」，不再算作阻塞退出的理由。
+5. **下次启动认领**：扫描作业记录 → 进程在且启动时刻对得上 = 重新接管为运行中；有 `exit` = 已结束，向 owner 会话投递一次完成通知（`delivered` 标记防重复，与 CLI 同一判据）；进程不在也没 `exit` = `vanished`。owner 会话已删除则只在任务面板里显示、不唤醒。
+6. **超时**：截止时刻写在记录里，接管时按剩余时间重新挂计时器；已过期的立即杀进程组并记 `timed_out`。
+7. 日志清理（第一节第 4 条）跳过仍在运行的作业目录。
+
+### 分期与验收
+
+- **C1 验收**：CLI 无头 + mock provider：一条每秒打印一行、第 3 行打 `ERROR` 的 monitor → 模型在进程结束前收到含 `ERROR` 的事件；刷屏命令触发 `flooded`；`send_agent_message` 进得了子 Agent 的下一轮；跨会话 id 被拒。
+- **C2 验收**：Mac 同样三条，外加金样逐字一致（两份金样都进漂移脚本）。
+- **C3 验收**：起一个 persistent `sleep 60; echo done` → 退出 App（测试里模拟 registry 销毁）→ 进程仍在、日志继续增长 → 新 registry 认领为运行中 → 结束后 owner 会话收到**恰好一次**完成通知；另测 exit 已在 / vanished / 超时过期三种认领分支。
 
 ## 附录 A：共用提示词原文
 

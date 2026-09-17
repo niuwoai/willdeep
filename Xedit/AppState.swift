@@ -1106,6 +1106,7 @@ final class AppState: ObservableObject {
             self.metadataOnlySessionIDs = metadataOnlyIDs
             self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
             await self.restoreDaemonStartReceipts()
+            self.releaseAdoptedDetachedJobCompletions()
             self.hasLoadedAgentSessionCatalog = true
             CollaborationRelayEventPump.shared.attach(to: self)
             // Older builds promoted Dispatch task worktrees into named

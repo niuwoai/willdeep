@@ -95,6 +95,13 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     /// Optional user-facing `label` passed to `run_command`, already
     /// redacted. Completion notices prefer it over the raw command.
     var label: String? = nil
+    /// Local `.persistent` shell job launched detached from the app (own
+    /// process group, output straight to disk). It survives quitting and is
+    /// re-adopted on the next launch — see `AgentDetachedJob.swift`.
+    var isDetached = false
+    /// Adopted detached job whose process was gone with no `exit` published:
+    /// the outcome is unknown, not a failure with an exit status.
+    var vanished = false
 
     nonisolated var isAlive: Bool { status == .running }
     nonisolated var needsAttention: Bool {
@@ -198,15 +205,38 @@ final class AgentJobRegistry: ObservableObject {
     /// Root of the per-job full output logs (`<handle>/output.log`).
     let outputLogRootDirectory: URL
 
-    init(daemonStartDirectory: URL? = nil, outputLogRootDirectory: URL? = nil) {
+    /// Whether local `.persistent` shell jobs launch detached and whether this
+    /// registry adopts detached jobs left by an earlier launch.
+    let detachesPersistentJobs: Bool
+    /// Detached jobs owned by this registry (started here or adopted).
+    var detachedMonitors: [UUID: AgentDetachedJobMonitor] = [:]
+    /// Jobs adopted from an earlier launch. Their completion waits for the
+    /// session catalog (`releaseAdoptedDetachedCompletions`) so a notice is
+    /// only delivered to an owner that still exists.
+    var adoptedDetachedJobIDs: Set<UUID> = []
+    var awaitingAdoptedDeliveryIDs: [UUID] = []
+    var adoptedDetachedCompletionsReleased = false
+    var adoptedDetachedOwnerExists: ((UUID) -> Bool)?
+
+    /// - Parameter detachesPersistentJobs: nil = on, except for a test host
+    ///   using the real Application Support root — a test must never adopt,
+    ///   deliver or leave behind the user's real jobs.
+    init(daemonStartDirectory: URL? = nil, outputLogRootDirectory: URL? = nil,
+         detachesPersistentJobs: Bool? = nil) {
         daemonStartJournal = .init(directory: daemonStartDirectory
             ?? AgentSessionStore.directory.appendingPathComponent("daemon-start-receipts", isDirectory: true))
         let logRoot = outputLogRootDirectory ?? AgentJobOutputLogSink.defaultRootDirectory
         self.outputLogRootDirectory = logRoot
-        // A fresh registry owns no alive jobs; directories still being written
-        // by another window's registry are skipped inside `prune`.
+        self.detachesPersistentJobs = detachesPersistentJobs
+            ?? (outputLogRootDirectory != nil
+                || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil)
+        // Adopt before retention runs: a job still alive from the previous
+        // launch must be owned (and excluded) before prune looks at its dir.
+        let adoptedAlive = self.detachesPersistentJobs ? adoptDetachedJobs() : []
+        // Directories still being written by another window's registry, and
+        // any recorded detached process still alive, are skipped in `prune`.
         Self.logRetentionQueue.async {
-            AgentJobOutputLogSink.prune(rootDirectory: logRoot)
+            AgentJobOutputLogSink.prune(rootDirectory: logRoot, excluding: adoptedAlive)
         }
     }
 
@@ -218,7 +248,7 @@ final class AgentJobRegistry: ObservableObject {
     /// Process termination and timeout escalation must not share the
     /// global utility queue. Under a cold Xcode test build that queue can
     /// be starved long enough for a requested kill to miss its UI budget.
-    private static let lifecycleQueue = DispatchQueue(
+    static let lifecycleQueue = DispatchQueue(
         label: "com.willdeep.agent-background-jobs.lifecycle",
         qos: .userInitiated
     )
@@ -241,7 +271,7 @@ final class AgentJobRegistry: ObservableObject {
     /// surfaced as a `<background-task-notification>` into the model
     /// turn. Keyed by runtime so two concurrent sessions can't steal
     /// each other's notifications.
-    private var pendingCompletionEvents: [UUID: [UUID]] = [:]
+    var pendingCompletionEvents: [UUID: [UUID]] = [:]
 
     /// Runtime id answers "which conversation?"; this side table answers the
     /// narrower Stop question: "which exact turn created it?". Keeping the
@@ -256,7 +286,7 @@ final class AgentJobRegistry: ObservableObject {
     /// acknowledgement. Suppress their normal completion wake-up so the app
     /// does not immediately start another model turn just to announce the
     /// same kill a second time.
-    private var suppressedCompletionJobIDs: Set<UUID> = []
+    var suppressedCompletionJobIDs: Set<UUID> = []
 
     /// Optional host hook for UI paths that need to surface a finished
     /// background job without waiting for the next model turn.
@@ -324,7 +354,12 @@ final class AgentJobRegistry: ObservableObject {
             return redacted.isEmpty ? nil : redacted
         }
 
-        let id = UUID()
+        var id = UUID()
+        // A 6-hex handle can collide with a detached job directory from an
+        // earlier launch; never reuse (and truncate) one of those.
+        while detachedJobDirectoryIsTaken(handle: "job_\(String(id.uuidString.prefix(6)).lowercased())") {
+            id = UUID()
+        }
         let shortID = String(id.uuidString.prefix(6)).lowercased()
         let workingDirectoryPath = workingDirectory?.path
         if let turnID {
@@ -354,13 +389,44 @@ final class AgentJobRegistry: ObservableObject {
             )
         }
 
-        let process = Process()
         let launch = AgentSandboxPolicy.shellLaunch(
             command: trimmed,
             mode: sandboxMode,
             rootDirectory: workingDirectory,
             additionalWorkspaceRoots: additionalWorkspaceRoots
         )
+        // Injected secret values are replaced by the collector before bytes
+        // reach disk; a detached job writes its log directly, so a job that
+        // carries any stays on the in-process path (it is swept on quit).
+        if lifetime == .persistent, detachesPersistentJobs, secretRedactionValues.isEmpty,
+           runtimeIDForDisplay == nil, remotePID == nil {
+            var detachedEnvironment = AgentSandboxPolicy.sandboxedEnvironment(
+                mode: sandboxMode,
+                rootDirectory: workingDirectory,
+                command: trimmed,
+                base: environment ?? AgentToolRunner.shellEnvironment()
+            )
+            detachedEnvironment["PWD"] = workingDirectory?.path
+                ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+            if let detached = startDetached(
+                id: id,
+                launch: launch,
+                environment: detachedEnvironment,
+                workingDirectory: workingDirectory,
+                runtimeID: runtimeID,
+                runtimeDisplayName: runtimeDisplayName,
+                timeoutSeconds: timeoutSeconds,
+                visibleCommand: visibleCommand.isEmpty ? "[secret]" : visibleCommand,
+                visibleLabel: visibleLabel,
+                lifetime: lifetime,
+                goalPhaseID: goalPhaseID,
+                survivesTurnStop: survivesTurnStop
+            ) {
+                return detached
+            }
+        }
+
+        let process = Process()
         process.executableURL = launch.executableURL
         process.arguments = launch.arguments
         process.currentDirectoryURL = workingDirectory
@@ -1036,7 +1102,7 @@ final class AgentJobRegistry: ObservableObject {
         if isTurnStopped(runtimeID: runtimeID, turnID: turnID) { throw CancellationError() }
     }
 
-    func hasLocalProcessExitReceipt(id: UUID) -> Bool { processes[id] != nil }
+    func hasLocalProcessExitReceipt(id: UUID) -> Bool { processes[id] != nil || detachedMonitors[id] != nil }
 
     @discardableResult
     func requestStop(id: UUID, runtimeID: UUID, turnID: UUID) -> Bool {
@@ -1091,6 +1157,9 @@ final class AgentJobRegistry: ObservableObject {
         let full: String
         if let proc = processes[id] {
             full = proc.collector.stringValue(for: stream)
+        } else if let monitor = detachedMonitors[id] {
+            // Detached logs are one merged stream on disk.
+            full = stream == .stderr ? "" : monitor.collector.stringValue(for: .combined)
         } else if let collector = managedCommandOutput[id] {
             let captured = collector.stringValue(for: stream)
             let diagnostics = stream == .stdout ? "" : managedExecutorOutput(
@@ -1115,7 +1184,7 @@ final class AgentJobRegistry: ObservableObject {
 
     /// Full combined output log for a local shell job, when it was written.
     func outputLogURL(id: UUID) -> URL? {
-        guard let url = processes[id]?.collector.logURL,
+        guard let url = processes[id]?.collector.logURL ?? detachedMonitors[id]?.logURL,
               FileManager.default.fileExists(atPath: url.path) else { return nil }
         return url
     }
@@ -1162,6 +1231,9 @@ final class AgentJobRegistry: ObservableObject {
             proc.markExplicitKill()
             AgentProcessSupport.terminateProcessTree(proc.process)
             return true
+        }
+        if let monitor = detachedMonitors[id], job(id: id)?.isAlive == true {
+            return monitor.requestKill(.killed)
         }
         return requestManagedCancellation(id: id, status: .killed)
     }
@@ -1314,7 +1386,7 @@ final class AgentJobRegistry: ObservableObject {
 
     // MARK: - Internal mutations
 
-    private func insertOrUpdate(_ job: AgentBackgroundJob) {
+    func insertOrUpdate(_ job: AgentBackgroundJob) {
         if let index = jobs.firstIndex(where: { $0.id == job.id }) {
             jobs[index] = job
         } else {
@@ -1334,6 +1406,11 @@ final class AgentJobRegistry: ObservableObject {
         jobs[index] = updated
     }
 
+    /// In-memory output tail of a local shell job, in-process or detached.
+    private func localCollector(id: UUID) -> AgentJobOutputCollector? {
+        processes[id]?.collector ?? detachedMonitors[id]?.collector
+    }
+
     private func evictOldHistory(for runtimeID: UUID) {
         let scoped = jobs.enumerated().filter { $0.element.runtimeID == runtimeID }
         guard scoped.count > Self.historyLimit else { return }
@@ -1345,6 +1422,8 @@ final class AgentJobRegistry: ObservableObject {
         for entry in removable.prefix(drop) {
             jobs.removeAll(where: { $0.id == entry.element.id })
             processes.removeValue(forKey: entry.element.id)
+            detachedMonitors.removeValue(forKey: entry.element.id)
+            adoptedDetachedJobIDs.remove(entry.element.id)
             managedExecutorEvents.removeValue(forKey: entry.element.id)
             managedCommandOutput.removeValue(forKey: entry.element.id)
             managedExecutorCancellations.removeValue(forKey: entry.element.id)
@@ -1355,7 +1434,7 @@ final class AgentJobRegistry: ObservableObject {
         }
     }
 
-    private func markFinished(
+    func markFinished(
         id: UUID,
         exitCode: Int32,
         didTimeOut: Bool,
@@ -1386,7 +1465,7 @@ final class AgentJobRegistry: ObservableObject {
         } else {
             updated.status = .failed
         }
-        updated.outputByteCount = processes[id]?.collector.byteCount ?? 0
+        updated.outputByteCount = localCollector(id: id)?.byteCount ?? 0
         if updated.latestExecutorEvent?.kind != .finished {
             let status: AgentExecutorEventStatus
             if wasKilled {
@@ -1410,7 +1489,7 @@ final class AgentJobRegistry: ObservableObject {
         if updated.status == .failed,
            !isTurnStopped(runtimeID: updated.runtimeID, turnID: originatingTurnIDs[id]),
            let specification = sandboxRetrySpecifications.removeValue(forKey: id),
-           let output = processes[id]?.collector.stringValue(for: .combined),
+           let output = localCollector(id: id)?.stringValue(for: .combined),
            AgentSandboxPolicy.looksLikeSandboxDenial(
                exitStatus: exitCode,
                output: output,
@@ -1436,7 +1515,11 @@ final class AgentJobRegistry: ObservableObject {
                label: specification.label,
                automaticSandboxRetryApprovalSource: nil
            ) {
-            processes[id]?.collector.appendString(
+            if updated.isDetached {
+                // The escalated replay reports instead; never deliver this one later.
+                _ = claimDetachedDelivery(id: id)
+            }
+            localCollector(id: id)?.appendString(
                 "\n[WillDeep] Sandbox denial detected; automatically retried outside the sandbox as \(retry.displayHandle).\n",
                 stream: .stderr
             )
@@ -1464,6 +1547,10 @@ final class AgentJobRegistry: ObservableObject {
         sandboxRetrySpecifications.removeValue(forKey: id)
 
         let suppressCompletion = suppressedCompletionJobIDs.remove(id) != nil
+        if updated.isDetached {
+            deliverDetachedCompletion(updated, suppressed: suppressCompletion)
+            return
+        }
         if !suppressCompletion {
             pendingCompletionEvents[updated.runtimeID, default: []].append(id)
             AgentToolApprovalNotifier.notifyJobFinished(job: updated)
@@ -1699,7 +1786,7 @@ private nonisolated final class AgentExecutorEventCollector: @unchecked Sendable
 /// the head is the part that can be dropped. The optional log sink receives
 /// every combined-stream byte (after injected-secret replacement) so the
 /// complete output stays readable at `output_path`.
-private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
+nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
     static let earlierOutputOmittedMarker = "...[earlier output omitted]\n"
 
     private let limit: Int
@@ -1732,6 +1819,12 @@ private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
         guard let logSink else { return }
         lock.lock(); defer { lock.unlock() }
         logSink.finish(tail: combinedData)
+    }
+
+    /// Raw in-memory combined tail (no omitted marker, no read-side redaction).
+    var combinedTail: Data {
+        lock.lock(); defer { lock.unlock() }
+        return combinedData
     }
 
     func append(_ chunk: Data, stream: AgentJobOutputStream) {
