@@ -254,4 +254,120 @@ struct AgentMobileGatewayPublishThrottleTests {
         }
         #expect(probes == 2)
     }
+
+    // MARK: - Phone presence gate
+
+    private let t0 = Date(timeIntervalSince1970: 2_000_000)
+
+    /// The whole point of the gate: a desktop sitting in the relay room with no
+    /// phone attached must not rebuild snapshots on every `objectWillChange`.
+    @Test @MainActor
+    func connectedWithoutAPhoneSkipsTheSnapshotTick() {
+        let decision = AgentMobileGatewaySnapshotSchedule.decide(
+            isConnected: true,
+            hasSocket: true,
+            hasPendingSnapshot: false,
+            presence: AgentMobileGatewayPhonePresence(),
+            now: t0
+        )
+        #expect(decision == .skipNoActivePhone)
+    }
+
+    @Test @MainActor
+    func activePhoneSchedulesExactlyOnePendingSnapshot() {
+        var presence = AgentMobileGatewayPhonePresence()
+        _ = presence.recordInbound(type: "session.list", at: t0)
+        let first = AgentMobileGatewaySnapshotSchedule.decide(
+            isConnected: true, hasSocket: true, hasPendingSnapshot: false,
+            presence: presence, now: t0.addingTimeInterval(1)
+        )
+        let coalesced = AgentMobileGatewaySnapshotSchedule.decide(
+            isConnected: true, hasSocket: true, hasPendingSnapshot: true,
+            presence: presence, now: t0.addingTimeInterval(1.2)
+        )
+        #expect(first == .schedule)
+        #expect(coalesced == .alreadyScheduled)
+    }
+
+    @Test @MainActor
+    func disconnectedSocketSkipsEvenWithARecentPhone() {
+        var presence = AgentMobileGatewayPhonePresence()
+        _ = presence.recordInbound(type: "session.list", at: t0)
+        let notVerified = AgentMobileGatewaySnapshotSchedule.decide(
+            isConnected: false, hasSocket: true, hasPendingSnapshot: false,
+            presence: presence, now: t0
+        )
+        let noSocket = AgentMobileGatewaySnapshotSchedule.decide(
+            isConnected: true, hasSocket: false, hasPendingSnapshot: false,
+            presence: presence, now: t0
+        )
+        #expect(notVerified == .skipDisconnected)
+        #expect(noSocket == .skipDisconnected)
+    }
+
+    /// Android heartbeats every 5s (15s on older builds); once those stop for a
+    /// full window the phone is gone and the tick must go quiet again.
+    @Test @MainActor
+    func presenceExpiresAfterTheActivityWindow() {
+        var presence = AgentMobileGatewayPhonePresence()
+        _ = presence.recordInbound(type: "session.list", at: t0)
+        let window = AgentMobileGatewayPhonePresence.activityWindow
+        #expect(presence.isPhoneActive(at: t0.addingTimeInterval(window)))
+        #expect(!presence.isPhoneActive(at: t0.addingTimeInterval(window + 1)))
+        let decision = AgentMobileGatewaySnapshotSchedule.decide(
+            isConnected: true, hasSocket: true, hasPendingSnapshot: false,
+            presence: presence, now: t0.addingTimeInterval(window + 1)
+        )
+        #expect(decision == .skipNoActivePhone)
+    }
+
+    /// The activity window must outlast several heartbeats of the slowest
+    /// shipped client, or an idle-but-attached phone would flap.
+    @Test @MainActor
+    func activityWindowCoversSeveralSlowHeartbeats() {
+        #expect(AgentMobileGatewayPhonePresence.activityWindow >= 3 * 15)
+    }
+
+    /// A relay echo of our own broadcast (or any desktop-originated event) is
+    /// not a phone and must not keep the tick alive.
+    @Test @MainActor
+    func desktopOriginatedEnvelopesDoNotCountAsAPhone() {
+        var presence = AgentMobileGatewayPhonePresence()
+        let snapshotEcho = presence.recordInbound(type: "state.snapshot", at: t0)
+        let ackEcho = presence.recordInbound(type: "ack", at: t0)
+        let errorEcho = presence.recordInbound(type: "command.error", at: t0)
+        #expect(!snapshotEcho)
+        #expect(!ackEcho)
+        #expect(!errorEcho)
+        #expect(!presence.isPhoneActive(at: t0))
+    }
+
+    /// Only the idle -> active edge reports true: that is when the caller resets
+    /// the payload dedup, and doing it on every heartbeat would resend
+    /// `workspace.list` / `capabilities` every 5s.
+    @Test @MainActor
+    func onlyTheIdleToActiveEdgeAsksForAFullPicture() {
+        var presence = AgentMobileGatewayPhonePresence()
+        let window = AgentMobileGatewayPhonePresence.activityWindow
+        let first = presence.recordInbound(type: "session.list", at: t0)
+        let heartbeat = presence.recordInbound(type: "session.list", at: t0.addingTimeInterval(5))
+        let command = presence.recordInbound(type: "message.send", at: t0.addingTimeInterval(9))
+        let comeback = presence.recordInbound(
+            type: "session.list",
+            at: t0.addingTimeInterval(9 + window + 1)
+        )
+        #expect(first)
+        #expect(!heartbeat)
+        #expect(!command)
+        #expect(comeback)
+    }
+
+    @Test @MainActor
+    func resetForgetsThePhone() {
+        var presence = AgentMobileGatewayPhonePresence()
+        _ = presence.recordInbound(type: "session.list", at: t0)
+        presence.reset()
+        #expect(!presence.isPhoneActive(at: t0))
+        #expect(presence.lastPhoneActivity == nil)
+    }
 }

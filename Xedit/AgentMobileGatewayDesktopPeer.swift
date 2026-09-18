@@ -62,6 +62,76 @@ final class AgentMobileGatewayAtomicFlag: @unchecked Sendable {
     }
 }
 
+/// Tracks whether a phone is actually on the other end of the socket.
+///
+/// "Connected" only means the desktop reached the relay room (or the LAN
+/// gateway). Since the relay became the default, that is true for almost every
+/// install whether or not a phone was ever paired — and the 400ms snapshot tick
+/// kept rebuilding `state.snapshot` / `workspace.list` on the main thread for
+/// nobody. The Android client heartbeats with `session.list` every 5s (15s on
+/// older builds) while it is attached, so "a phone command arrived recently" is
+/// a reliable presence signal without any protocol change.
+struct AgentMobileGatewayPhonePresence {
+    /// Four missed heartbeats of the older 15s client; twelve of the current 5s one.
+    static let activityWindow: TimeInterval = 60
+
+    /// Envelope types only a phone sends. Anything else arriving on the socket
+    /// (a relay echo of our own `state.snapshot`, a stray event) is not proof of
+    /// a phone and must not keep the snapshot tick alive.
+    static let phoneCommandTypes: Set<String> = [
+        "session.list", "session.create", "workspace.list", "capabilities.get",
+        "push.register", "session.select", "message.send", "turn.stop",
+        "tool.decide", "patch.decide", "diff.get", "job.kill", "file.read",
+        "queue.update"
+    ]
+
+    private(set) var lastPhoneActivity: Date?
+
+    /// Records an inbound envelope. Returns true when this command brings the
+    /// phone back from idle (or is the first one ever) — the caller owes it a
+    /// full picture rather than a diff against what an absent peer was told.
+    mutating func recordInbound(type: String, at now: Date) -> Bool {
+        guard Self.phoneCommandTypes.contains(type) else { return false }
+        let wasActive = isPhoneActive(at: now)
+        lastPhoneActivity = now
+        return !wasActive
+    }
+
+    func isPhoneActive(at now: Date) -> Bool {
+        guard let lastPhoneActivity else { return false }
+        return now.timeIntervalSince(lastPhoneActivity) <= Self.activityWindow
+    }
+
+    mutating func reset() {
+        lastPhoneActivity = nil
+    }
+}
+
+/// The gate in front of the periodic snapshot publish, pulled out so the
+/// "does this `objectWillChange` cost any main-thread work" answer is testable
+/// without a live socket.
+enum AgentMobileGatewaySnapshotSchedule {
+    enum Decision: Equatable {
+        case skipDisconnected
+        case skipNoActivePhone
+        case alreadyScheduled
+        case schedule
+    }
+
+    static func decide(
+        isConnected: Bool,
+        hasSocket: Bool,
+        hasPendingSnapshot: Bool,
+        presence: AgentMobileGatewayPhonePresence,
+        now: Date
+    ) -> Decision {
+        guard isConnected, hasSocket else { return .skipDisconnected }
+        guard presence.isPhoneActive(at: now) else { return .skipNoActivePhone }
+        guard !hasPendingSnapshot else { return .alreadyScheduled }
+        return .schedule
+    }
+}
+
 @MainActor
 final class AgentMobileGatewayDesktopPeer: ObservableObject {
     @Published private(set) var isConnected = false
@@ -103,6 +173,10 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private var messageEventState = AgentMobileGatewayMessageEventState()
     /// Drops the periodic envelopes that came out identical to the last tick.
     private var payloadDedup = AgentMobileGatewayPayloadDedup()
+    /// Keeps the periodic tick off while no phone is listening. Survives socket
+    /// reconnects on purpose (a relay blip does not mean the phone left); only
+    /// `disconnect()` forgets it.
+    private var phonePresence = AgentMobileGatewayPhonePresence()
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
@@ -153,6 +227,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         snapshotQueued.clear()
         messageEventState.reset()
         payloadDedup.reset()
+        phonePresence.reset()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
@@ -285,8 +360,14 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         // than after the sleep — lets the next change re-arm the window, while
         // `snapshotTask` goes on capping the real publish rate at one per 400ms.
         snapshotQueued.clear()
-        guard isConnected, webSocketTask != nil else { return }
-        guard snapshotTask == nil else { return }
+        let decision = AgentMobileGatewaySnapshotSchedule.decide(
+            isConnected: isConnected,
+            hasSocket: webSocketTask != nil,
+            hasPendingSnapshot: snapshotTask != nil,
+            presence: phonePresence,
+            now: Date()
+        )
+        guard decision == .schedule else { return }
         snapshotTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard !Task.isCancelled else { return }
@@ -326,6 +407,11 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
                 return
             }
             let envelope = try decoder.decode(AgentMobileGatewayEnvelope.self, from: data)
+            if phonePresence.recordInbound(type: envelope.type, at: Date()) {
+                // The phone is back after the tick went quiet: whatever the
+                // dedup remembers was said to nobody, so start from scratch.
+                payloadDedup.reset()
+            }
             let response = AgentMobileGatewayCommandRouter.handle(envelope, controller: appState)
             send(response)
             if response.type == "ack" {

@@ -422,26 +422,84 @@ extension AppState {
 
     // MARK: - 历史
 
-    /// 读取所有历史圆桌报告(从内存 runtime + 已落盘会话)。给主页历史列表用。
-    func loadRoundtableHistory() -> [AgentRoundtableReport] {
+    /// 读取所有历史圆桌报告(内存 runtime + 已落盘圆桌会话),给主页历史列表和专家档案用。
+    ///
+    /// 主线程只做两件便宜事:扫内存 runtime、从已加载的侧边栏目录里挑出
+    /// `.roundtable` 作用域的会话 id。整份会话 JSON 的解码放到后台 ——
+    /// 以前这里同步调 `AgentSessionStore.loadAll()`,主窗口一打开圆桌就在主线程
+    /// 把全部会话的 catalog 解一遍(采样实测 ~0.4s),而 catalog 里的会话是
+    /// 去掉 messages 的骨架,扫下来一条落盘报告都拿不到,纯属白干。
+    func loadRoundtableHistory() async -> [AgentRoundtableHistoryItem] {
+        var resident: [AgentRoundtableHistoryItem] = []
+        for (sessionID, runtime) in agentRuntimes {
+            resident += AgentRoundtableHistoryLoader.items(sessionID: sessionID, messages: runtime.messages)
+        }
+        let residentIDs = Set(agentRuntimes.keys)
+        // 目录还没加载完(刚启动)时交给后台自己扫一遍骨架目录。
+        let catalogCandidates: [UUID]? = hasLoadedAgentSessionCatalog
+            ? AgentRoundtableHistoryLoader.storedCandidateIDs(catalog: agentSessions, excluding: residentIDs)
+            : nil
+        let stored = await Task.detached(priority: .userInitiated) {
+            let candidates = catalogCandidates ?? AgentRoundtableHistoryLoader.storedCandidateIDs(
+                catalog: AgentSessionStore.loadAll(),
+                excluding: residentIDs
+            )
+            return AgentRoundtableHistoryLoader.loadStored(
+                candidateIDs: candidates,
+                load: AgentSessionStore.peekStoredSession(id:)
+            )
+        }.value
+        return AgentRoundtableHistoryLoader.merge(resident: resident, stored: stored)
+    }
+}
+
+/// 圆桌历史列表的一行:报告本身 + 承载它的会话 id。落盘会话点开时靠 sessionID
+/// 物化 runtime —— 只拿报告的话,不在内存里的历史条目点了没反应。
+nonisolated struct AgentRoundtableHistoryItem: Identifiable, Equatable, Sendable {
+    let sessionID: UUID
+    let report: AgentRoundtableReport
+
+    var id: UUID { report.id }
+}
+
+/// 圆桌历史读取的纯逻辑部分,无 AppState 依赖,可在后台跑、可单测。
+nonisolated enum AgentRoundtableHistoryLoader {
+    static func items(sessionID: UUID, messages: [AgentMessage]) -> [AgentRoundtableHistoryItem] {
+        messages.compactMap { message in
+            message.workflowReport?.roundtable.map {
+                AgentRoundtableHistoryItem(sessionID: sessionID, report: $0)
+            }
+        }
+    }
+
+    /// 只有圆桌作用域的会话才可能挂圆桌报告(见 startAgentRoundtable);已在内存
+    /// runtime 里的会话以内存为准,不再读盘。
+    static func storedCandidateIDs(catalog: [AgentSession], excluding residentIDs: Set<UUID>) -> [UUID] {
+        catalog
+            .filter { $0.presentationScope == .roundtable && !residentIDs.contains($0.id) }
+            .map(\.id)
+    }
+
+    static func loadStored(
+        candidateIDs: [UUID],
+        load: (UUID) -> AgentSession?
+    ) -> [AgentRoundtableHistoryItem] {
+        candidateIDs.flatMap { id -> [AgentRoundtableHistoryItem] in
+            guard let session = load(id) else { return [] }
+            return items(sessionID: session.id, messages: session.messages)
+        }
+    }
+
+    /// 按报告 id 去重(内存优先,状态最新),再按更新时间倒序。
+    static func merge(
+        resident: [AgentRoundtableHistoryItem],
+        stored: [AgentRoundtableHistoryItem]
+    ) -> [AgentRoundtableHistoryItem] {
         var seen = Set<UUID>()
-        var results: [AgentRoundtableReport] = []
-        // 内存中的活跃 runtime 优先(最新状态)。
-        for runtime in agentRuntimes.values {
-            for message in runtime.messages {
-                if let rt = message.workflowReport?.roundtable, seen.insert(rt.id).inserted {
-                    results.append(rt)
-                }
-            }
+        var results: [AgentRoundtableHistoryItem] = []
+        for item in resident + stored where seen.insert(item.report.id).inserted {
+            results.append(item)
         }
-        // 已落盘、未在内存的会话。
-        for session in AgentSessionStore.loadAll() {
-            for message in session.messages {
-                if let rt = message.workflowReport?.roundtable, seen.insert(rt.id).inserted {
-                    results.append(rt)
-                }
-            }
-        }
-        return results.sorted { $0.updatedAt > $1.updatedAt }
+        return results.sorted { $0.report.updatedAt > $1.report.updatedAt }
     }
 }

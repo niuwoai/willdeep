@@ -1376,19 +1376,27 @@ nonisolated enum AgentSessionStore {
     }
 
     static func load(id: UUID) -> AgentSession? {
+        guard let session = peekStoredSession(id: id) else { return nil }
+        metadataOnlySessions.remove(id)
+        return session
+    }
+
+    /// Reads a full session (pending write first, then disk) without
+    /// touching the metadata-only tracker. For read-only scans that never
+    /// hand the result to an AppState catalog — clearing the flag there
+    /// would tell legacy `isMetadataOnly` callers a skeleton is complete.
+    /// Safe off the main actor.
+    static func peekStoredSession(id: UUID) -> AgentSession? {
         // A snapshot still riding the async write pipeline is fresher
         // than whatever is on disk — e.g. a session evicted milliseconds
         // ago being re-materialized by a click. Serve it directly.
         if let pending = pendingWrites.peek(id) {
-            metadataOnlySessions.remove(id)
             return pending
         }
         let url = directory.appendingPathComponent("\(id.uuidString).json")
         guard let data = try? Data(contentsOf: url) else { return nil }
         do {
-            let session = try decoder.decode(AgentSession.self, from: data)
-            metadataOnlySessions.remove(id)
-            return session
+            return try decoder.decode(AgentSession.self, from: data)
         } catch {
             print("AgentSessionStore: failed to load session \(id): \(error)")
             return nil

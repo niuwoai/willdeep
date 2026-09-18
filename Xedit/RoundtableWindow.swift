@@ -68,6 +68,9 @@ struct RoundtableHomeView: View {
     @Binding var route: RoundtableRoute
     @State private var topic: String = ""
     @State private var history: [AgentRoundtableReport] = []
+    /// 报告 id → 承载会话 id。落盘历史不在内存 runtime 里,点开前据此物化。
+    @State private var historySessionIDs: [UUID: UUID] = [:]
+    @State private var isLoadingHistory = false
 
     var body: some View {
         ScrollView {
@@ -81,7 +84,7 @@ struct RoundtableHomeView: View {
             .frame(maxWidth: 720, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .onAppear(perform: reloadHistory)
+        .task { await reloadHistory() }
     }
 
     private var header: some View {
@@ -172,7 +175,11 @@ struct RoundtableHomeView: View {
             Text(L10n.Roundtable.historyTitle)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
-            if history.isEmpty {
+            if history.isEmpty, isLoadingHistory {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(.vertical, 8)
+            } else if history.isEmpty {
                 Text(L10n.Roundtable.emptyHistory)
                     .font(.system(size: 13))
                     .foregroundStyle(.tertiary)
@@ -192,6 +199,9 @@ struct RoundtableHomeView: View {
     }
 
     private func open(_ report: AgentRoundtableReport) {
+        if let sessionID = historySessionIDs[report.id] {
+            appState.runtime(for: sessionID)
+        }
         guard let (runtimeID, reportID) = locate(reportID: report.id) else { return }
         if report.phase == .completed, report.finalDocument != nil {
             route = .document(runtimeID: runtimeID, reportID: reportID)
@@ -202,8 +212,13 @@ struct RoundtableHomeView: View {
         }
     }
 
-    private func reloadHistory() {
-        history = appState.loadRoundtableHistory()
+    private func reloadHistory() async {
+        isLoadingHistory = true
+        let items = await appState.loadRoundtableHistory()
+        isLoadingHistory = false
+        guard !Task.isCancelled else { return }
+        history = items.map(\.report)
+        historySessionIDs = Dictionary(items.map { ($0.report.id, $0.sessionID) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// 找到刚建的圆桌 report id(runtime 内最新一条 roundtable workflow)。
@@ -885,6 +900,8 @@ struct RoundtableExpertProfileView: View {
     let fromReportID: UUID
 
     @State private var discussions: [AgentRoundtableReport] = []
+    /// 报告 id → 承载会话 id,落盘讨论点开前据此物化 runtime。
+    @State private var discussionSessionIDs: [UUID: UUID] = [:]
 
     private var accent: Color { RoundtableVisuals.accent(for: role) }
 
@@ -911,7 +928,7 @@ struct RoundtableExpertProfileView: View {
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear(perform: reload)
+        .task { await reload() }
     }
 
     private var chrome: some View {
@@ -1053,12 +1070,19 @@ struct RoundtableExpertProfileView: View {
         return discussions.isEmpty ? base : "\(base) · \(discussions.count)"
     }
 
-    private func reload() {
-        discussions = appState.loadRoundtableHistory().filter { $0.experts.contains(role) }
+    private func reload() async {
+        let items = await appState.loadRoundtableHistory()
+            .filter { $0.report.experts.contains(role) }
+        guard !Task.isCancelled else { return }
+        discussions = items.map(\.report)
+        discussionSessionIDs = Dictionary(items.map { ($0.report.id, $0.sessionID) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// 与主页 open(_:) 同款相位路由:完成态进文档,会前态进准备,其余进讨论。
     private func open(_ report: AgentRoundtableReport) {
+        if let sessionID = discussionSessionIDs[report.id] {
+            appState.runtime(for: sessionID)
+        }
         guard let (runtimeID, reportID) = locate(reportID: report.id) else { return }
         if report.phase == .completed, report.finalDocument != nil {
             route = .document(runtimeID: runtimeID, reportID: reportID)
@@ -1069,7 +1093,7 @@ struct RoundtableExpertProfileView: View {
         }
     }
 
-    /// 从历史 report id 反查它所在的 runtime + workflow report id(仅在内存 runtime 里找)。
+    /// 从历史 report id 反查它所在的 runtime + workflow report id(落盘会话已在 open 里先物化)。
     private func locate(reportID: UUID) -> (UUID, UUID)? {
         for (rid, runtime) in appState.agentRuntimes {
             for message in runtime.messages {
