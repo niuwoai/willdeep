@@ -20,7 +20,7 @@ struct AgentDiagnosticsSettingsView: View {
     @State private var scope: Scope = .session
     @State private var selectedProjectID: UUID?
     @State private var selectedSessionID: AgentSession.ID?
-    @State private var level: AgentDiagnosticsBundle.Level = .timingOnly
+    @State private var level: AgentDiagnosticsBundle.Level = .full
     @State private var isExporting = false
     @State private var exportedURL: URL?
     @State private var errorMessage: String?
@@ -105,6 +105,7 @@ struct AgentDiagnosticsSettingsView: View {
                     Button(isExporting ? L10n.Diagnostics.exporting : L10n.Diagnostics.exportButton) {
                         export()
                     }
+                    .buttonStyle(DiagnosticsExportButtonStyle())
                     .disabled(isExporting || selectedSessionRefs.isEmpty)
                     if let exportedURL {
                         Button(L10n.Diagnostics.revealButton) {
@@ -247,5 +248,24 @@ nonisolated enum AgentDiagnosticsExport {
             throw Failure(reason: text.isEmpty ? "ditto exited \(process.terminationStatus)" : text)
         }
         return destination
+    }
+}
+
+/// The export is the one action on this page, so it reads as the primary
+/// button: label-colored fill with inverted text (black on white in light mode).
+private struct DiagnosticsExportButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Color(nsColor: .textBackgroundColor))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color(nsColor: .labelColor).opacity(configuration.isPressed ? 0.78 : 1))
+            )
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
