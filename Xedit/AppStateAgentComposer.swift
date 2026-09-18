@@ -152,6 +152,7 @@ extension AppState {
             skills: skills,
             files: files,
             includeWorkspaceOverview: includeWorkspaceOverview,
+            workspaceRootPath: runtime.workspaceLocation?.localPath,
             documentTaskMode: runtime.documentTaskMode,
             redactSensitiveContent: runtime.redactSensitiveAttachmentContent,
             imagePaths: AgentDesignToCode.sourcePaths(from: images),
@@ -1940,6 +1941,7 @@ extension AppState {
         skills: [AgentSkillEntry],
         files: [AgentFileAttachment],
         includeWorkspaceOverview: Bool,
+        workspaceRootPath: String? = nil,
         documentTaskMode: AgentDocumentTaskMode = .automatic,
         redactSensitiveContent: Bool = true,
         imagePaths: [String] = [],
@@ -1952,7 +1954,7 @@ extension AppState {
         blocks.append(AgentAttachedPromptProtocol.preludeHeader)
 
         if includeWorkspaceOverview {
-            blocks.append(workspaceOverviewBlock())
+            blocks.append(workspaceOverviewBlock(rootPath: workspaceRootPath))
         }
 
         for skill in skills {
@@ -2159,28 +2161,54 @@ extension AppState {
         return "```\n\(body)\n```"
     }
 
-    func workspaceOverviewBlock() -> String {
-        guard let root = rootDirectory else {
-            return "### Workspace\n(no folder is currently open)"
+    /// `@workspace` 附带的工作区概览：根目录 + 前若干个文件的相对路径。
+    ///
+    /// 取的是**会话**的工作区，不是编辑器打开的文件夹。两者刻意各自独立，
+    /// 此前这里读 `rootDirectory` / `quickOpenFiles`（编辑器的），编辑器开着
+    /// 别的项目时，附给模型的是另一个项目的文件清单。
+    func workspaceOverviewBlock(rootPath: String?) -> String {
+        guard let rootPath, !rootPath.isEmpty else {
+            return Self.workspaceOverviewText(rootPath: nil, relativePaths: [], hasMore: false)
         }
-        let rootPath = root.standardizedFileURL.path
-        let entries = quickOpenFiles
-            .prefix(120)
-            .map { url -> String in
-                let path = url.standardizedFileURL.path
-                guard path.hasPrefix(rootPath) else { return url.lastPathComponent }
-                let rel = String(path.dropFirst(rootPath.count))
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                return rel.isEmpty ? url.lastPathComponent : rel
-            }
-        let extraCount = max(0, quickOpenFiles.count - 120)
-        let extraLine = extraCount > 0 ? "\n…and \(extraCount) more files" : ""
+        let root = URL(fileURLWithPath: rootPath).standardizedFileURL
+        let limit = Self.workspaceOverviewFileLimit
+        // 编辑器恰好开着同一个目录时复用它已扫好的列表；否则现扫，多取一个
+        // 用来判断是否还有更多。
+        let urls: [URL]
+        if rootDirectory?.standardizedFileURL.path == root.path {
+            urls = Array(quickOpenFiles.prefix(limit + 1))
+        } else {
+            urls = AgentWorkspaceFileSearch.search(root: root, query: "", limit: limit + 1)
+        }
+        let relativePaths = urls.prefix(limit).map { url -> String in
+            let path = url.standardizedFileURL.path
+            guard path.hasPrefix(root.path + "/") else { return url.lastPathComponent }
+            return String(path.dropFirst(root.path.count + 1))
+        }
+        return Self.workspaceOverviewText(
+            rootPath: root.path,
+            relativePaths: relativePaths,
+            hasMore: urls.count > limit
+        )
+    }
+
+    static let workspaceOverviewFileLimit = 120
+
+    nonisolated static func workspaceOverviewText(
+        rootPath: String?,
+        relativePaths: [String],
+        hasMore: Bool
+    ) -> String {
+        guard let rootPath else {
+            return "### Workspace\n(no workspace is selected for this session)"
+        }
+        let extraLine = hasMore ? "\n…more files not listed" : ""
         return """
         ### Workspace
         Root: \(rootPath)
-        Files (first \(entries.count)):
+        Files (first \(relativePaths.count)):
         ```
-        \(entries.joined(separator: "\n"))\(extraLine)
+        \(relativePaths.joined(separator: "\n"))\(extraLine)
         ```
         """
     }

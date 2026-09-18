@@ -546,6 +546,10 @@ struct AgentComposerAttachmentStrip: View {
     }
 }
 
+/// 引用菜单是从哪里打开的：输入框里打 `@`，还是点 `+` 按钮。两者共用同一份
+/// 候选源，只在条目取舍与分组顺序上不同。
+enum AtMenuSource { case mention, plusButton }
+
 /// One row in the `@` popover. Project files and the special `workspace`
 /// shortcut are unified so the user can fuzzy-match across attachable
 /// context references without mixing them with `$` skills.
@@ -583,6 +587,16 @@ enum AtPickerEntry: Identifiable, Equatable {
             case .sessionSettings: return L10n.ComposerMenuGroups.session
             }
         }
+    }
+
+    /// 按组排好。`@` 的主用途是点名工种，工种组排在前；`+` 主要是附加东西
+    /// 和改会话设置，工种组排到最后。组内保持原有顺序（Swift 的 sort 不稳定，
+    /// 不能直接按组 sort）。
+    static func grouped(_ entries: [AtPickerEntry], source: AtMenuSource) -> [AtPickerEntry] {
+        let order: [Group] = source == .plusButton
+            ? [.attachThisTurn, .sessionSettings, .approachThisTurn]
+            : [.attachThisTurn, .approachThisTurn, .sessionSettings]
+        return order.flatMap { group in entries.filter { $0.group == group } }
     }
 
     var group: Group {
