@@ -163,6 +163,29 @@ nonisolated struct AtPickerEntryGroupingTests {
         #expect(AtPickerEntry.sessionSetting(.goalMode).group == .sessionSettings)
     }
 
+    /// `@` 以点名工种为主，工种在前；`+` 以附加和会话设置为主，工种排最后。
+    /// 组内保持原顺序。
+    @Test("分组顺序随入口不同")
+    func groupOrderDependsOnSource() {
+        let entries: [AtPickerEntry] = [
+            .worker(id: "scout", name: "调查", purpose: ""),
+            .panelState(kind: .terminal, detail: "a"),
+            .worker(id: "generalist", name: "通用", purpose: ""),
+            .sessionSetting(.goalMode),
+            .panelState(kind: .browser, detail: "b"),
+        ]
+        #expect(AtPickerEntry.grouped(entries, source: .plusButton).map(\.id) == [
+            AtPickerEntry.panelState(kind: .terminal, detail: "").id,
+            AtPickerEntry.panelState(kind: .browser, detail: "").id,
+            AtPickerEntry.sessionSetting(.goalMode).id,
+            AtPickerEntry.worker(id: "scout", name: "", purpose: "").id,
+            AtPickerEntry.worker(id: "generalist", name: "", purpose: "").id,
+        ])
+        #expect(AtPickerEntry.grouped(entries, source: .mention).map(\.group) == [
+            .attachThisTurn, .attachThisTurn, .approachThisTurn, .approachThisTurn, .sessionSettings,
+        ])
+    }
+
     /// 排序必须让同组相邻，否则组标题（只在组首插一次）会重复出现。
     @Test("分组有序且可比较")
     func groupsAreOrdered() {
@@ -207,5 +230,31 @@ nonisolated struct AtPickerEntryGroupingTests {
             AtPickerEntry.panelState(kind: .browser, detail: "https://some.im/admin").subtitle
                 == "https://some.im/admin"
         )
+    }
+}
+
+@Suite("工作区概览")
+struct AgentWorkspaceOverviewTests {
+    @Test("概览写的是传入的会话工作区")
+    func overviewUsesSessionWorkspace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-overview-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("src"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "x".write(to: root.appendingPathComponent("src/main.swift"), atomically: true, encoding: .utf8)
+
+        let block = AppState().workspaceOverviewBlock(rootPath: root.path)
+
+        #expect(block.contains("Root: \(root.standardizedFileURL.path)"))
+        #expect(block.contains("src/main.swift"))
+    }
+
+    @Test("会话没选工作区时如实说明，截断时注明还有更多")
+    func overviewTextEdgeCases() {
+        #expect(AppState.workspaceOverviewText(rootPath: nil, relativePaths: [], hasMore: false)
+            .contains("no workspace is selected"))
+        let text = AppState.workspaceOverviewText(rootPath: "/w", relativePaths: ["a", "b"], hasMore: true)
+        #expect(text.contains("Files (first 2):"))
+        #expect(text.contains("…more files not listed"))
     }
 }

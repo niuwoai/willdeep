@@ -711,7 +711,6 @@ private struct ComposerCard: View {
     /// 菜单是谁打开的。两者候选源相同，但善后不同：`@` 触发时缓冲区里有一个
     /// `@token` 需要在选中后抹掉，而 `+` 触发时**没有** token——照抹会删掉
     /// 用户正在写的字。
-    enum AtMenuSource { case mention, plusButton }
     @State private var atMenuSource: AtMenuSource = .mention
     @State private var atMenuVisible: Bool = false
     @State private var atMenuSelection: Int = 0
@@ -759,8 +758,10 @@ private struct ComposerCard: View {
         var entries: [AtPickerEntry] = []
 
         // Workspace shortcut — only shows when a folder is open, and
-        // either the query is empty or matches "workspace".
-        if appState.activeRuntime?.workspaceLocation?.localPath != nil,
+        // either the query is empty or matches "workspace". `+` 不给：
+        // Agent 自己会列目录，一份静态文件清单在菜单里只占位置。
+        if atMenuSource == .mention,
+           appState.activeRuntime?.workspaceLocation?.localPath != nil,
            q.isEmpty || "workspace".contains(q) {
             entries.append(.workspace)
         }
@@ -814,7 +815,7 @@ private struct ComposerCard: View {
         if atMenuSource == .plusButton {
             ordered += sessionSettingEntries(matching: q)
         }
-        return ordered.sorted { $0.group < $1.group }
+        return AtPickerEntry.grouped(ordered, source: atMenuSource)
     }
 
     /// 会话设置候选。首版只有目标模式（已是目标模式时不重复出现）。
