@@ -36,6 +36,24 @@ struct AgentMobileGatewayBridgeTests {
         #expect(first["is_active"]?.boolValue == true)
     }
 
+    /// The desktop peer only keeps its snapshot tick alive while phone commands
+    /// keep arriving; a command the router accepts but the presence list omits
+    /// would let an active phone go stale.
+    @Test @MainActor
+    func everyPhonePresenceCommandIsARouterCommand() {
+        let session = AgentSession(title: "Phone task", workspaceRootPath: "/tmp/project")
+        for type in AgentMobileGatewayPhonePresence.phoneCommandTypes.sorted() {
+            let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
+            let response = AgentMobileGatewayCommandRouter.handle(
+                AgentMobileGatewayEnvelope(id: "cmd-\(type)", type: type),
+                controller: controller,
+                now: fixedDate
+            )
+            let message = response.payload["message"]?.stringValue ?? ""
+            #expect(!message.contains("Unsupported mobile command"), "\(type) is not routed")
+        }
+    }
+
     @Test @MainActor
     func messageSendRoutesTextToSelectedSession() {
         let session = AgentSession(title: "Existing")
