@@ -32,6 +32,18 @@ extension AppState {
         agentRuntimes[sessionID]
     }
 
+    /// 性能报告里的界面标识：只有粗粒度的位置，不含会话标题或任何内容。
+    var performanceReportSurface: String {
+        switch appMode {
+        case .editor:
+            return "editor"
+        case .agent:
+            guard let runtime = activeRuntime else { return "agent.new_session" }
+            if runtime.isResponding { return "agent.responding" }
+            return runtime.messages.isEmpty ? "agent.new_session" : "agent.session"
+        }
+    }
+
     var agentMessages: [AgentMessage] {
         get { activeRuntime?.messages ?? [] }
         set { activeRuntime?.messages = newValue }

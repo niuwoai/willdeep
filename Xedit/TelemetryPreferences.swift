@@ -22,6 +22,9 @@ struct TelemetryPreferences: @unchecked Sendable {
     static let installIDKey = "telemetry.install-id"
     /// 用户是否已经看过采集说明（首次启动时在设置里高亮一次）。
     static let noticeAcknowledgedKey = "telemetry.notice-acknowledged"
+    /// 性能报告开关（CPU 持续高负载时自动上报调用栈，见 PerformanceWatchdog）。
+    /// 与产品遥测开关相互独立，默认开启。
+    static let performanceReportsEnabledKey = "telemetry.perf-reports.enabled"
 
     private let defaults: UserDefaults
 
@@ -37,6 +40,17 @@ struct TelemetryPreferences: @unchecked Sendable {
         }
         nonmutating set {
             defaults.set(newValue, forKey: Self.enabledKey)
+        }
+    }
+
+    /// 是否上报性能报告。默认 true——没有显式写过就当开启。
+    var isPerformanceReportingEnabled: Bool {
+        get {
+            guard defaults.object(forKey: Self.performanceReportsEnabledKey) != nil else { return true }
+            return defaults.bool(forKey: Self.performanceReportsEnabledKey)
+        }
+        nonmutating set {
+            defaults.set(newValue, forKey: Self.performanceReportsEnabledKey)
         }
     }
 

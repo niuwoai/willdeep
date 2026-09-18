@@ -44,6 +44,8 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             // 不入队也不落盘（见 TelemetryReporter）。
             AgentTelemetry.recordAppSessionStarted()
         }
+        // CPU 看门狗：持续高负载时自动抓栈上报（设置 → 隐私 → 性能报告）。
+        PerformanceWatchdog.shared.start()
     }
 
     /// A single Dock click keeps its stock behavior (activate, restore

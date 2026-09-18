@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.388.0-rc1 - 2026-09-18
+
+### Added
+
+- **CPU 占用高时自动发性能报告（配合 some.im 服务端 perf-reports 接口）。** 本进程 CPU 连续 3 秒超过 30%，
+  就用 `/usr/bin/sample` 抓 2 秒全线程调用栈，gzip 后上报到 `og.niuwoai.com/api/v1/public/telemetry/perf-reports`，只在后台可见。
+  - 每秒读一次 `getrusage`，判定在后台队列，不碰主线程；抓栈期间的读数不参与判定。
+  - 冷却 10 分钟，24 小时最多 30 份，与服务端限流一致；启动后前 20 秒不判，冷启动本来就忙。
+  - 报告带版本、build、架构、当时所在界面（`editor` / `agent.new_session` / `agent.session` / `agent.responding`）、
+    峰值和均值 CPU、完整调用栈；Binary Images 的 UUID 原样保留，方便后台配 dSYM 符号化。
+  - 调用栈里的主目录换成 `~`，其他 `/Users/<名字>` 换成 `/Users/_`；超过 6 MiB 截断并注明。
+  - 报告先落盘（`~/Library/Application Support/WillDeep/perf-reports/`，最多积压 5 份）再上传；网络失败下次补发，4xx 丢弃。
+  - 设置 → 隐私新增「性能报告」开关，默认开启，与产品遥测开关相互独立；关掉会清空积压。
+
+### Fixed
+
+- **切到「新会话」CPU 涨得快。** 新会话页展示的是用量统计面板，查下来有两处白干活：
+  - 用量快照全盘扫描跑完后，如果面板已经切走，结果会被丢掉，下次进来重扫一遍。现在扫完的结果照收。
+  - 面板观察整个 AppState，任何无关发布（git 轮询、后台会话流式输出）都会重建 224 格热力图，并重新格式化每格的 tooltip。
+    格子区拆成 `Equatable` 子视图，输入没变就跳过。
+
 ## 1.387.0-rc2 - 2026-09-18
 
 ### Fixed

@@ -90,5 +90,18 @@ extension L10n {
             localized: "settings.privacy.disabled-notice",
             defaultValue: "Analytics is off. Nothing is collected, and the local queue has been cleared."
         )
+
+        static let performanceSection = String(
+            localized: "settings.privacy.perf-reports-section",
+            defaultValue: "Performance Reports"
+        )
+        static let performanceToggle = String(
+            localized: "settings.privacy.perf-reports-toggle",
+            defaultValue: "Send a report when WillDeep is using too much CPU"
+        )
+        static let performanceHelp = String(
+            localized: "settings.privacy.perf-reports-help",
+            defaultValue: "When WillDeep stays above 30% CPU for 3 seconds, it records its own call stacks for 2 seconds and sends them, along with the app version, the screen you were on (for example “new session”), and the CPU readings. The report contains function names and the paths of loaded libraries, with your home folder name removed — never your conversations, files, or commands. At most one report every 10 minutes. Only the WillDeep team can see these reports."
+        )
     }
 }

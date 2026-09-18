@@ -1094,6 +1094,11 @@ final class AppState: ObservableObject {
                 self.isApplyingExternalTerminalSettings = false
             }
         guard loadSessionCatalog else { return }
+        // 性能报告触发时读一次「当前在哪个界面」。只有带会话目录的主实例注册，
+        // 设置窗口、桌宠那几个辅助 AppState 不抢这个位置。
+        PerformanceWatchdog.surfaceProvider = { [weak self] in
+            self?.performanceReportSurface ?? "unknown"
+        }
         startAgentSidePanelResourceReaper()
         Task { @MainActor [weak self] in
             let loaded = await Task.detached(priority: .utility) {
