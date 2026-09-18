@@ -209,9 +209,6 @@ bridge_source = File.read(File.join(repo_root, "Xedit/AgentPluginAIBridge.swift"
 image_generation_source = File.read(
   File.join(repo_root, "Xedit/AgentPluginImageGeneration.swift"), encoding: "UTF-8"
 )
-video_studio_app = File.read(
-  File.join(repo_root, "PluginExamples/video-studio/ui/src/App.tsx"), encoding: "UTF-8"
-)
 
 add_check.call(
   "reference image paths are clamped to the plugin's own media root",
@@ -229,16 +226,25 @@ add_check.call(
   "The 9-image cap must be enforced in the plugin validator and in the some.im client."
 )
 
+# 0.26 起出图的参考图由插件服务端按 target 解析（页面只传 target，不再自己拼
+# referenceImagePaths），所以这两条约束改盯服务端的 image_generation.rb。
+video_studio_image_generation = File.read(
+  File.join(repo_root, "PluginExamples/video-studio/server/lib/image_generation.rb"), encoding: "UTF-8"
+)
+video_studio_character_plan = video_studio_image_generation[/def character_plan\b.*?\n  end\n/m].to_s
+
 add_check.call(
   "video-studio sends reference images by filePath, not mediaURL",
-  video_studio_app.include?("entry.portrait.filePath") &&
-    !video_studio_app.match?(/referenceImagePaths[^\n]*mediaURL/),
+  video_studio_image_generation.include?('references = compiled["slots"].map { |slot| slot["filePath"] }') &&
+    video_studio_image_generation.include?('reference_paths: plan["references"]') &&
+    !video_studio_image_generation.match?(/references\s*(<<|=)[^\n]*mediaURL/),
   "mediaURL is a willdeep-plugin:// URL the host cannot upload; the reference argument needs filePath."
 )
 
 add_check.call(
   "character portrait generation stays text-only",
-  video_studio_app.include?("drawImages(character.visualPrompt, candidateCount, [])"),
+  !video_studio_character_plan.empty? &&
+    video_studio_character_plan.include?("plan(prompt, [], [], [], [])"),
   "Generating a character's own portrait must not attach that character as its own reference."
 )
 
