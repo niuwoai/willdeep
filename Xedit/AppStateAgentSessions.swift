@@ -1671,7 +1671,9 @@ extension AppState {
         let persisted = await Task.detached(priority: .userInitiated) {
             await AgentSessionStore.loadUsageSnapshotsConcurrently()
         }.value
-        guard !Task.isCancelled else { return }
+        // 刻意不看 `Task.isCancelled`：扫描跑在 detached 任务里，面板消失也会
+        // 跑完。以前在这里丢掉结果，用户切走再切回「新会话」就把全盘扫描
+        // 重做一遍——这正是切到新会话 CPU 就涨的来源之一。算完的就收下。
 
         var snapshotsByID = Dictionary(uniqueKeysWithValues: persisted.map { ($0.id, $0) })
         for snapshot in agentUsageSnapshots {

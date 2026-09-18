@@ -14,6 +14,7 @@ struct TelemetrySettingsView: View {
     @State private var isEnabled = TelemetryPreferences().isEnabled
     @State private var installID = TelemetryPreferences().existingInstallID()
     @State private var statusMessage: String?
+    @State private var isPerformanceReportingEnabled = TelemetryPreferences().isPerformanceReportingEnabled
 
     private let preferences = TelemetryPreferences()
 
@@ -39,6 +40,17 @@ struct TelemetrySettingsView: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
+            }
+
+            Section(L10n.Telemetry.performanceSection) {
+                Toggle(L10n.Telemetry.performanceToggle, isOn: $isPerformanceReportingEnabled)
+                    .onChange(of: isPerformanceReportingEnabled) { newValue in
+                        PerformanceWatchdog.setEnabled(newValue)
+                    }
+                Text(L10n.Telemetry.performanceHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section(L10n.Telemetry.collectedTitle) {
@@ -99,6 +111,7 @@ struct TelemetrySettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             isEnabled = preferences.isEnabled
+            isPerformanceReportingEnabled = preferences.isPerformanceReportingEnabled
             installID = preferences.existingInstallID()
             preferences.hasAcknowledgedNotice = true
         }

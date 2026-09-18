@@ -672,35 +672,29 @@ struct AgentStatsDashboard: View {
                 let maxCount = displayCounts.flatMap { $0 }.max() ?? 0
 
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: metrics.columnSpacing) {
-                        ForEach(Array(cells.enumerated()), id: \.offset) { columnIndex, column in
-                            VStack(spacing: AgentStatsDashboardLayout.heatmapCellSpacing) {
-                                ForEach(Array(column.enumerated()), id: \.element.id) { rowIndex, cell in
-                                    // One tooltip string per cell per pass, via
-                                    // the cached formatter. The previous code
-                                    // formatted the tooltip twice per cell with
-                                    // a freshly allocated DateFormatter each
-                                    // time — ~700 formatter allocations for the
-                                    // 53-week grid on every body evaluation,
-                                    // which showed up as periodic main-thread
-                                    // stutter whenever AppState published.
-                                    let tooltip = L10n.HeatmapCell.tooltip(
-                                        cellDateLabel(cell.date),
-                                        formatInteger(cell.requestCount),
-                                        formatTokenCount(cell.tokenCount)
-                                    )
-                                    AgentTokenActivityHeatmapCell(
-                                        fillColor: color(
-                                            for: displayCounts[columnIndex][rowIndex],
-                                            peak: maxCount
-                                        ),
-                                        size: metrics.cellSize,
-                                        tooltip: tooltip
-                                    )
-                                }
-                            }
+                    // 格子单独成一个 Equatable 视图：面板观察整个 AppState，
+                    // 任何无关发布（git 轮询、后台会话流式）都会重算 body；
+                    // 输入没变时 SwiftUI 直接跳过这 224 格的重建和 tooltip 格式化。
+                    AgentTokenActivityHeatmapGrid(
+                        columns: cells,
+                        displayCounts: displayCounts,
+                        maxCount: maxCount,
+                        cellSize: metrics.cellSize,
+                        columnSpacing: metrics.columnSpacing,
+                        accent: dashboardAccent,
+                        inactive: dashboardHeatmapInactive,
+                        tooltip: { cell in
+                            // One tooltip string per cell per pass, via the
+                            // cached formatter (a fresh DateFormatter per cell
+                            // used to stutter the main thread).
+                            L10n.HeatmapCell.tooltip(
+                                cellDateLabel(cell.date),
+                                formatInteger(cell.requestCount),
+                                formatTokenCount(cell.tokenCount)
+                            )
                         }
-                    }
+                    )
+                    .equatable()
                     .frame(width: metrics.width, alignment: .leading)
 
                     monthLabels
@@ -1938,11 +1932,6 @@ struct AgentStatsDashboard: View {
         }
     }
 
-    private func color(for count: Int, peak: Int) -> Color {
-        guard count > 0, peak > 0 else { return dashboardHeatmapInactive }
-        let intensity = min(1.0, Double(count) / Double(peak))
-        return dashboardAccent.opacity(0.28 + 0.68 * intensity)
-    }
 
     /// Shared, lazily built formatter — DateFormatter construction costs
     /// milliseconds, and the heatmap calls this for every one of ~371
@@ -2168,6 +2157,56 @@ struct AgentStatsDashboard: View {
             return nil
         }
         return url
+    }
+}
+
+/// 热力图格子区。只吃值类型输入，配合 `.equatable()` 让父视图的高频重算
+/// 在输入不变时不下沉到每一格。`tooltip` 只依赖区域设置，不参与比较。
+private struct AgentTokenActivityHeatmapGrid: View, Equatable {
+    let columns: [[AgentHeatmapCell]]
+    let displayCounts: [[Int]]
+    let maxCount: Int
+    let cellSize: CGFloat
+    let columnSpacing: CGFloat
+    let accent: Color
+    let inactive: Color
+    let tooltip: (AgentHeatmapCell) -> String
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.columns == rhs.columns
+            && lhs.displayCounts == rhs.displayCounts
+            && lhs.maxCount == rhs.maxCount
+            && lhs.cellSize == rhs.cellSize
+            && lhs.columnSpacing == rhs.columnSpacing
+            && lhs.accent == rhs.accent
+            && lhs.inactive == rhs.inactive
+    }
+
+    static func fill(count: Int, peak: Int, accent: Color, inactive: Color) -> Color {
+        guard count > 0, peak > 0 else { return inactive }
+        let intensity = min(1.0, Double(count) / Double(peak))
+        return accent.opacity(0.28 + 0.68 * intensity)
+    }
+
+    var body: some View {
+        HStack(spacing: columnSpacing) {
+            ForEach(Array(columns.enumerated()), id: \.offset) { columnIndex, column in
+                VStack(spacing: AgentStatsDashboardLayout.heatmapCellSpacing) {
+                    ForEach(Array(column.enumerated()), id: \.element.id) { rowIndex, cell in
+                        AgentTokenActivityHeatmapCell(
+                            fillColor: Self.fill(
+                                count: displayCounts[columnIndex][rowIndex],
+                                peak: maxCount,
+                                accent: accent,
+                                inactive: inactive
+                            ),
+                            size: cellSize,
+                            tooltip: tooltip(cell)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
