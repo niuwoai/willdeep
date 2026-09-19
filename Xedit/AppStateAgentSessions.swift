@@ -1571,7 +1571,9 @@ extension AppState {
     }
 
     private func stageQueuedMessage(_ message: AgentQueuedMessage, in runtime: AgentRuntime) {
-        runtime.input = message.text
+        // Queued text is the composed prompt; the prelude is rebuilt on send
+        // from the restored pendingSkills.
+        runtime.input = AgentAttachedPromptDisplay.composerText(of: message.text)
         runtime.pendingImages = message.images
         runtime.pendingTextAttachments = message.textAttachments
         runtime.pendingSkills = message.attachedSkills

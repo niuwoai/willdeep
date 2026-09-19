@@ -1006,7 +1006,14 @@ extension AppState: AgentMobileGatewayControlling {
 
     private static func mobileGatewayMessageContentPreview(_ message: AgentMessage) -> String {
         var blocks: [String] = []
-        let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // User turns are stored as the model-facing prompt: skill routing
+        // candidates, skill bodies and file envelopes spliced in front of what
+        // the operator typed. The phone must see the same thing the desktop
+        // bubble does, never the protocol header and prelude.
+        let displayContent = message.role == .user
+            ? AgentAttachedPromptDisplay.transform(message.content).visibleContent
+            : message.content
+        let trimmed = displayContent.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             blocks.append(trimmed)
         }

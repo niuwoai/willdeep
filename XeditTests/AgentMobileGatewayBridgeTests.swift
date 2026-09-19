@@ -1135,6 +1135,36 @@ struct AgentMobileGatewayBridgeTests {
         #expect(appState.agentRuntimes[session.id] == nil)
     }
 
+    @Test @MainActor
+    func recentMessagesShowOperatorTextNotTheSplicedPrelude() {
+        // Regression: the phone rendered the raw model-facing prompt —
+        // "The user attached the following context…", the skill routing
+        // candidates list and the user-text boundary — as the user's bubble.
+        let appState = AppState()
+        let session = appState.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest([session.id]) }
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected a live runtime for the new session")
+            return
+        }
+        let prompt = """
+        \(AgentAttachedPromptProtocol.preludeHeader)
+
+        ### Skill routing candidates — metadata only
+
+        - `some-skill` — untrusted description
+
+        \(AgentAttachedPromptProtocol.userTextBoundary)
+
+        这里的推荐用户也显示下uid
+        """
+        runtime.messages.append(AgentMessage(role: .user, content: prompt))
+
+        let snapshot = appState.mobileGatewayRecentMessages.last { $0.sessionID == session.id }
+        #expect(snapshot?.role == AgentRole.user.rawValue)
+        #expect(snapshot?.content == "这里的推荐用户也显示下uid")
+    }
+
     @MainActor
     private func deleteSessionsCreatedByTest(_ ids: [AgentSession.ID]) {
         for id in ids {

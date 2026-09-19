@@ -81,7 +81,11 @@ extension AppState {
             return
         }
 
-        let userText = runtime.input.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Backstop for any other path that leaves a composed prompt in the
+        // input box: send only the operator's text so the prelude is never
+        // nested inside a new one.
+        let userText = AgentAttachedPromptDisplay.composerText(of: runtime.input)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let hasTurnAttachments = !runtime.pendingImages.isEmpty
             || !runtime.pendingTextAttachments.isEmpty
             || !runtime.pendingSkills.isEmpty

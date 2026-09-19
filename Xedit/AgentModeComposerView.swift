@@ -1081,7 +1081,7 @@ private struct ComposerCard: View {
                     onDropAttachments: { handleDroppedPasteboard($0) },
                     historyProvider: { appState.agentMessages
                         .filter(\.isOperatorInput)
-                        .map(\.content)
+                        .map { AgentAttachedPromptDisplay.composerText(of: $0.content) }
                         .filter { !$0.isEmpty }
                     },
                     slashMenuVisible: $slashMenuVisible,
