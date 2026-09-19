@@ -82,35 +82,83 @@ struct AgentStreamIdleGuardTests {
     }
 
     /// 判据是两条同时成立：每一段间隔都短于空转上限（所以时钟被续上），而
-    /// 整条流的总时长超过空转上限（所以「没续命也能过」被排除）。
+    /// 整条流的总时长远超空转上限（所以「没续命也能过」被排除）。
     ///
-    /// 余量刻意拉到十倍。原本是 4 个 payload × 150ms 对 0.4s 上限，余量 2.7
-    /// 倍，满载时一次 `Task.sleep` 被拖过线就误报 streamStalled——满载跑全量
-    /// 时它就是这么红的。现在 20 × 100ms 对 1.0s：间隔要被拖慢十倍才会误报，
-    /// 而总时长 2s 仍是上限的两倍，判据没有被削弱。
-    @Test("payload arriving in time keeps the stream alive")
+    /// 用手动时钟，不用墙钟。墙钟版本（producer 真 sleep 100ms、上限 1s）
+    /// 余量已放到十倍，仍在满载全量下被协作线程池饥饿击穿：一次跑了 17s，
+    /// 某个间隔被拖过 1s 就误报 streamStalled。时间现在只由 producer 推进，
+    /// 且锁步：推进 0.6 个上限 → 等看门狗真实检查一次 → 才发 payload →
+    /// 等消费方收到。调度再慢也只会让测试变慢，不会误报；若 payload 不续命，
+    /// 第二个间隔的检查就会看到 1.2 个上限而当场报 stall。
+    @Test("payload arriving in time keeps the stream alive", .timeLimit(.minutes(1)))
     func payloadResetsTheClock() async throws {
         let payloadCount = 20
+        let idleTimeout: TimeInterval = 60
+        let clock = ManualIdleClock()
+        let (acks, ackContinuation) = AsyncStream<Void>.makeStream()
         let source = AsyncStream<String> { continuation in
             let producer = Task {
+                var ackIterator = acks.makeAsyncIterator()
                 for index in 0..<payloadCount {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    clock.advance(by: idleTimeout * 0.6)
+                    // 推进之后，消费方已在等下一行，此刻读时钟的只有看门狗。
+                    await clock.waitForRead()
                     continuation.yield("data: \(index)")
+                    guard await ackIterator.next() != nil else { break }
                 }
                 continuation.finish()
             }
             continuation.onTermination = { _ in producer.cancel() }
         }
         var count = 0
-        for try await _ in AgentStreamIdleGuard.lines(source, idleTimeout: 1.0) {
+        defer { ackContinuation.finish() }
+        for try await _ in AgentStreamIdleGuard.lines(
+            source,
+            idleTimeout: idleTimeout,
+            pollInterval: 0.005,
+            now: { clock.now() }
+        ) {
             count += 1
+            ackContinuation.yield(())
         }
         #expect(count == payloadCount)
+        #expect(clock.elapsed >= idleTimeout * 10)
     }
 
     @Test("the stall error names the idle limit")
     func stallErrorShape() {
         let error = AgentClientError.streamStalled(idleSeconds: 180)
         #expect(error.errorDescription?.contains("180") == true)
+    }
+}
+
+/// 只由测试推进的时钟；记录被读次数，用来确认看门狗在两次推进之间真的检查过。
+private nonisolated final class ManualIdleClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private let origin = Date(timeIntervalSinceReferenceDate: 0)
+    private var offset: TimeInterval = 0
+    private var reads = 0
+
+    func now() -> Date {
+        lock.withLock {
+            reads += 1
+            return origin.addingTimeInterval(offset)
+        }
+    }
+
+    func advance(by seconds: TimeInterval) {
+        lock.withLock { offset += seconds }
+    }
+
+    var elapsed: TimeInterval {
+        lock.withLock { offset }
+    }
+
+    /// 等到下一次有人读时钟。
+    func waitForRead() async {
+        let seen = lock.withLock { reads }
+        while lock.withLock({ reads }) == seen, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
     }
 }

@@ -32,13 +32,20 @@ nonisolated enum AgentStreamIdleGuard {
 
     /// Yield `lines` unchanged, failing with `streamStalled` if no payload
     /// line arrives within `idleTimeout`.
+    ///
+    /// `pollInterval` and `now` exist for tests: a wall-clock test of this
+    /// guard misfires whenever the cooperative pool is starved under a full
+    /// parallel suite, so tests drive a manual clock instead. Production
+    /// callers leave both at their defaults.
     static func lines<Lines: AsyncSequence & Sendable>(
         _ lines: Lines,
-        idleTimeout: TimeInterval = streamIdleTimeout
+        idleTimeout: TimeInterval = streamIdleTimeout,
+        pollInterval: TimeInterval? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) -> AsyncThrowingStream<String, Error> where Lines.Element == String {
         AsyncThrowingStream { continuation in
             let task = Task {
-                let lastPayloadAt = IdleClock()
+                let lastPayloadAt = IdleClock(now: now)
                 await lastPayloadAt.touch()
                 do {
                     try await withThrowingTaskGroup(of: Void.self) { group in
@@ -54,7 +61,7 @@ nonisolated enum AgentStreamIdleGuard {
                         // unstructured watchdog.value does not cancel that
                         // watchdog when the reader ends or Stop is pressed.
                         group.addTask {
-                            let interval = UInt64(min(idleTimeout, 5) * 1_000_000_000)
+                            let interval = UInt64((pollInterval ?? min(idleTimeout, 5)) * 1_000_000_000)
                             while !Task.isCancelled {
                                 try await Task.sleep(nanoseconds: interval)
                                 if await lastPayloadAt.idleSeconds() >= idleTimeout {
@@ -76,8 +83,15 @@ nonisolated enum AgentStreamIdleGuard {
     }
 
     private actor IdleClock {
-        private var last = Date()
-        func touch() { last = Date() }
-        func idleSeconds() -> TimeInterval { Date().timeIntervalSince(last) }
+        private let now: @Sendable () -> Date
+        private var last: Date
+
+        init(now: @escaping @Sendable () -> Date) {
+            self.now = now
+            last = now()
+        }
+
+        func touch() { last = now() }
+        func idleSeconds() -> TimeInterval { now().timeIntervalSince(last) }
     }
 }
