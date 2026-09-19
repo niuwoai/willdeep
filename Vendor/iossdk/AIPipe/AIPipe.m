@@ -33,6 +33,8 @@ static void AIPipeUncaughtExceptionHandler(NSException *exception);
 @property (nonatomic, assign) BOOL isInitialized;
 // 仅在 self.queue 上读写：标记本节流窗口内已有一次落盘被排期。
 @property (nonatomic, assign) BOOL queueSaveScheduled;
+// 落盘目标；nil 表示 standardUserDefaults。仅测试会替换。
+@property (atomic, strong, nullable) NSUserDefaults *persistenceDefaultsOverride;
 
 static void AIPipeSignalHandler(int signal);
 
@@ -392,6 +394,10 @@ static void AIPipeSignalHandler(int sig) {
 
 static NSUInteger AIPipeQueueSaveCount = 0;
 
+- (NSUserDefaults *)persistenceDefaults {
+    return self.persistenceDefaultsOverride ?: [NSUserDefaults standardUserDefaults];
+}
+
 - (void)saveQueueToUserDefaults {
     AIPipeQueueSaveCount += 1;
     NSMutableArray *queueData = [NSMutableArray array];
@@ -402,12 +408,12 @@ static NSUInteger AIPipeQueueSaveCount = 0;
         }
     }
 
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSUserDefaults *defaults = [self persistenceDefaults];
     [defaults setObject:queueData forKey:kUserDefaultsKeyQueue];
 }
 
 - (void)loadQueueFromUserDefaults {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSUserDefaults *defaults = [self persistenceDefaults];
     NSArray *queueData = [defaults arrayForKey:kUserDefaultsKeyQueue];
 
     // 落盘数据可能来自未设上限的旧版本：只取最新 kMaxQueueSize 条。
@@ -430,7 +436,7 @@ static NSUInteger AIPipeQueueSaveCount = 0;
 }
 
 - (void)saveConfigToUserDefaults {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSUserDefaults *defaults = [self persistenceDefaults];
     NSDictionary *configDict = @{
         @"apiKey": self.config.apiKey ?: @"",
         @"endpoint": self.config.endpoint ?: @"",
@@ -484,7 +490,16 @@ static NSUInteger AIPipeQueueSaveCount = 0;
     dispatch_sync(instance.queue, ^{
         [instance.logQueue removeAllObjects];
         AIPipeQueueSaveCount = 0;
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kUserDefaultsKeyQueue];
+        [[instance persistenceDefaults] removeObjectForKey:kUserDefaultsKeyQueue];
+    });
+}
+
++ (void)setPersistenceDefaultsForTesting:(nullable NSUserDefaults *)defaults {
+    AIPipe *instance = [self sharedInstance];
+    // 在串行队列上切换，已排期的节流落盘要么落到旧目标、要么落到新目标，
+    // 不会半途读到另一个。
+    dispatch_sync(instance.queue, ^{
+        instance.persistenceDefaultsOverride = defaults;
     });
 }
 

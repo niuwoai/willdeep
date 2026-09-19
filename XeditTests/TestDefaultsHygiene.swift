@@ -23,6 +23,7 @@ enum TestDefaultsHygiene {
         "CollaborationConnectorSettingsTests.",
         "com.willdeep.agent.test.defaults.",
         "com.willdeep.mcp.test.",
+        "com.willdeep.tests.aipipe-queue.",
         "com.willdeep.tests.font-smoothing.",
         "com.willdeep.tests.learningReview.",
         "test.workspace.identity.",

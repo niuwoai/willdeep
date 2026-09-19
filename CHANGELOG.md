@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.390.0-rc5 - 2026-09-19
+
+### Fixed
+
+- **修掉全量测试里偶发的 `saveThrottleCoalescesWrites` 落盘数为 0。** 起初怀疑是别的测试并行调用 `AIPipe.resetQueueForTesting()`，查下来不是：4 处调用都在同一个 `.serialized` 的 `AIPipeQueueSafetyTests` 里，App 在 XCTest 下也不初始化 AIPipe。真正共享状态的是**别的进程**。测试宿主的 bundle id 就是 `com.willdeep.app`，和本机正在运行的 WillDeep、其它 worktree 里并发跑的测试共用同一个偏好域。它们刷新、清空 `AIPipeLogQueue` 时会把测试刚落盘的 200 条覆盖掉。现场取证时这个键的值是 `()`，而测试收尾只会删除这个键，不会写入空数组。
+  - AIPipe SDK 新增 `+setPersistenceDefaultsForTesting:`：队列和配置的落盘目标可以替换，传 nil 就恢复 `standardUserDefaults`。切换在 SDK 的串行队列上进行。线上行为不变。
+  - `AIPipeQueueSafetyTests` 的 4 个用例都改用一次性 suite（`com.willdeep.tests.aipipe-queue.<UUID>`），收尾时走 `TestDefaultsHygiene.cleanup`，前缀已登记。这样测试也不会再把测试配置和空队列写进用户真实 App 的偏好域。
+  - 落盘断言改为读注入的 suite，另外断言标准域里没有这 200 条。
+- 已反向验证：后台循环执行 `defaults write com.willdeep.app AIPipeLogQueue -array` 施压，旧测试复现出同样的 `(persistedCount → 0) == 200`，新测试 10/10 通过。
+
+### Known issues
+
+- 本机全量 `run_tests_fast.rb --force` 连跑 4 轮，AIPipe 用例每轮都通过；第 1、4 轮全绿，第 2、3 轮各有一条和本次改动无关的满载计时用例变红，每轮红的不是同一条，单独跑都通过：
+  - `AgentGoalMainLoopTests`「真实 HTTP 请求挂起时截止取消，并自动生成一次交接回复」（`requests → 1 == 2`）；
+  - `AgentExecutorProcessRegistryTests`「Structured process consumes a large prompt through stdin」（状态为 `.timedOut`）。
+
 ## 1.390.0-rc4 - 2026-09-19
 
 ### Fixed

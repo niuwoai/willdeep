@@ -101,6 +101,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// 清空内存队列、落盘队列与落盘计数
 + (void)resetQueueForTesting;
 
+/// 替换队列与配置的落盘目标；传 nil 恢复 standardUserDefaults。测试宿主与
+/// 正在运行的 App 共用同一个偏好域，不隔离就会互相覆盖落盘队列。
++ (void)setPersistenceDefaultsForTesting:(nullable NSUserDefaults *)defaults;
+
 @end
 
 NS_ASSUME_NONNULL_END
