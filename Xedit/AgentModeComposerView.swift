@@ -806,24 +806,15 @@ private struct ComposerCard: View {
             .worker(id: $0.id, name: $0.localizedDisplayName, purpose: $0.localizedPurpose)
         }
 
-        var ordered = AtPickerEntry.workersFirst(
+        let ordered = AtPickerEntry.workersFirst(
             panelStateEntries(matching: q) + entries,
             workers: workerEntries
+        ) + AtPickerEntry.sessionSettingEntries(
+            matching: q,
+            localizedGoalTitle: L10n.InteractionMode.goal,
+            currentMode: appState.agentInteractionMode
         )
-        // 会话设置只给 `+`：`@` 的语义是「这一轮」，而设置作用于整个会话，
-        // 混进 `@` 会让人以为它也是一次性的。
-        if atMenuSource == .plusButton {
-            ordered += sessionSettingEntries(matching: q)
-        }
         return AtPickerEntry.grouped(ordered, source: atMenuSource)
-    }
-
-    /// 会话设置候选。首版只有目标模式（已是目标模式时不重复出现）。
-    private func sessionSettingEntries(matching q: String) -> [AtPickerEntry] {
-        guard appState.agentInteractionMode != .goal else { return [] }
-        let title = L10n.InteractionMode.goal.lowercased()
-        guard q.isEmpty || title.contains(q) || "goal".contains(q) else { return [] }
-        return [.sessionSetting(.goalMode)]
     }
 
     /// 面板现状候选：把「终端此刻连在哪台机器 / 浏览器此刻停在哪个页面」

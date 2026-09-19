@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.392.0-rc1 - 2026-09-20
+
+### Changed
+
+- **在输入框里打 `@` 也能选「目标模式」了。** 之前它只出现在 `+` 菜单的「会话设置」组里，理由是 `@` 表示只作用于这一轮，而目标模式作用于整个会话。但用户习惯在 `@` 里找它，找不到就以为功能被删了。现在 `@` 菜单里它排在最后一组，组标题写着「会话设置」，能和附加文件、终端这类只作用于这一轮的项目区分开。
+  - 打 `@goal` 或 `@目标` 都能命中，不用先切输入法。已经是目标模式时不会出现。
+  - 选中后切换的状态和输入框下方的模式按钮是同一份；从 `@` 选中时照旧会把输入的 `@…` 文字抹掉。
+  - 筛选逻辑移到 `AtPickerEntry.sessionSettingEntries(matching:localizedGoalTitle:currentMode:)`，可以单独测试。设计文档 `docs/PANEL_STATE_MENTION_DESIGN.md` 已同步更新。
+- 更正：1.386.0-rc2 的条目写着「`@` 的工种排在会话设置之前」，但当时 `@` 菜单里并没有会话设置这一组，那句只是在描述分组顺序。从这个版本起 `@` 才真正有这一组。
+- 新增测试：`sessionSettingEntriesMatchIdAndLocalizedTitle`、`sessionSettingsComeLastInMentionMenu`。
+
 ## 1.391.0-rc1 - 2026-09-19
 
 ### Added

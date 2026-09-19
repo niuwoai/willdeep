@@ -252,4 +252,5 @@ return profile.id.lowercased().contains(q)
 
 - **面板条目不再依赖面板已打开**（rc2）：终端没开、浏览器没打开页面时照样列出，副标题写「还没打开」；发送时 prompt 如实写 `no terminal tab is open` / `no page is open`。上文 §6 第 1 条「仅在对应面板可用时出现」作废。附件条补上 `@terminal` / `@browser` 标签——此前选中后状态已记下但没有任何可见反馈。
 - **`+` 不再列 `workspace`，分组顺序随入口不同**（1.386.0-rc2）：`+` 为 附加 → 会话设置 → 工种，`@` 仍为 附加 → 工种 → 会话设置。排序走 `AtPickerEntry.grouped(_:source:)`，组内保持原顺序（不再用不稳定的 `sorted`）。上文第 2 点的差异因此扩大为「会话设置组只在 `+`，workspace 只在 `@`」。
+- **`@` 也列出「目标模式」**（1.392.0-rc1）：会话设置组不再只给 `+`。用户习惯在输入框里打 `@` 找目标模式，找不到就以为功能没了；`@` 菜单里它排在最后一组、组标题写明「会话设置」，足以与一次性的附加项区分。候选逻辑移到 `AtPickerEntry.sessionSettingEntries(matching:localizedGoalTitle:currentMode:)`，`@goal` / `@目标` 都能命中。上文第 2 点的差异因此收窄为「workspace 只在 `@`」，两个入口其余候选一致；选中后状态仍与下排 `AgentModePickerPill` 同一份，`@` 触发时照旧抹掉 `@token`。
 - **`@workspace` 概览改取会话工作区**（1.386.0-rc2）：此前读编辑器的 `rootDirectory` / `quickOpenFiles`，编辑器开着别的项目时附错清单。
