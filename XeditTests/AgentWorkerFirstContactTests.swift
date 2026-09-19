@@ -8,28 +8,33 @@ import Testing
 /// delegate-first fence is lifted.
 @Suite
 struct AgentWorkerFirstContactTests {
-    @Test("no contact by the deadline fails with the first-contact error")
+    /// 判据是「超时路径走通、没有去等那个操作」，不看墙钟。
+    ///
+    /// 之前用 `< 10s` 的墙钟窗口证明「没等」：从 2 秒放宽到 10 秒后，满载
+    /// 全量下仍被调度饥饿击穿（实测 11.2s），两次挡住发布测试关
+    /// （1.390.0-rc5、1.392.0-rc1）。现在操作睡一小时、只在被取消时提前醒：
+    /// race 能返回，就只能是超时抛错 + 取消了操作；若超时路径坏了，它会一直
+    /// 等下去，由 timeLimit 判红。负载只会让它变慢，不会误报。
+    @Test("no contact by the deadline fails with the first-contact error", .timeLimit(.minutes(1)))
     func timesOutWithoutContact() async {
-        let started = Date()
+        let operationCancelled = ContactFlag()
         await #expect(throws: AgentSubagentError.self) {
             try await AgentWorkerFirstContact.race(
                 timeout: 0.2,
                 hasMadeContact: { false },
                 operation: { () async throws -> Int in
-                    // 六十秒而不是五秒：证据窗口和它的差距越大，判定越不受
-                    // 机器负载影响。race 会在 0.2s 的超时上返回，并不真等它。
-                    try await Task.sleep(nanoseconds: 60_000_000_000)
+                    do {
+                        try await Task.sleep(nanoseconds: 3_600_000_000_000)
+                    } catch {
+                        await operationCancelled.set()
+                        throw error
+                    }
                     return 1
                 }
             )
         }
-        // 没有去等那个六十秒的操作。
-        //
-        // 窗口从 2 秒放宽到 10 秒：原来的 2 秒在满载时被调度饥饿击穿过（实测
-        // 3.6 秒），而放宽窗口不削弱判据——操作本身要六十秒，十秒内返回同样
-        // 只能是超时路径走通了。要卡住的是「有没有去等那个操作」，不是「返回
-        // 得有多快」。
-        #expect(Date().timeIntervalSince(started) < 10)
+        // race 返回前会等被取消的操作退出，所以这里读到的一定是最终状态。
+        #expect(await operationCancelled.value)
     }
 
     @Test("the error names the deadline and is not a cancellation")
