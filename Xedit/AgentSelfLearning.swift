@@ -1043,10 +1043,11 @@ enum AgentSelfLearning {
     /// Host-composed prompt chrome that must never be mistaken for the
     /// operator's own words. `preludeHeader` opens every composer attachment
     /// splice; `userTextBoundary` is the marker separating it from typed
-    /// text. Internal (not private) so regression tests can pin the gate.
+    /// text; `<system-reminder>` opens the hidden per-turn context that
+    /// builds before 1.238.1 mined via `modelContent`. Internal (not private)
+    /// so regression tests can pin the gate.
     static func containsHostComposedTemplate(_ text: String) -> Bool {
-        text.contains(AgentAttachedPromptProtocol.preludeHeader)
-            || text.contains(AgentAttachedPromptProtocol.userTextBoundary)
+        AgentAttachedPromptProtocol.containsHostChrome(text)
     }
 
     private static func containsReusableWorkflowSignal(_ text: String) -> Bool {

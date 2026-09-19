@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.390.0-rc3 - 2026-09-19
+
+### Fixed
+
+- **被污染的旧自动技能不再进入技能路由。** 用户报障时，每回合的技能候选里都有一条 `auto-前端frontend目录-…`，描述末尾带着 `<system-reminder> The ...`。这是 1.238.1 之前自动学习留下的：当时技能候选读的是 `modelContent`，也就是正文加上每回合的隐藏上下文（`modelContext`），隐藏上下文就这样被当成用户原话写进了技能。现在的代码已经不会再生成这种技能，但老文件还在用户磁盘上，每回合都会被列为候选，也可能被自动挂载，把当年的隐藏指令当成技能说明重新交给模型。
+  - 路由前先过滤：`auto-` 开头、描述里带宿主注入标记（附件前导头、用户文本边界、`<system-reminder>`）的技能，不进候选、也不自动挂载（`AgentSkillAutoActivation.isContaminatedAutoCapturedSkill`）。文件不删，删不删由用户决定。手写技能不受影响。
+  - 自动技能生成的门禁补上 `<system-reminder>`：宿主注入标记统一收进 `AgentAttachedPromptProtocol.containsHostChrome`，`containsHostComposedTemplate` 改为调用它。
+- 新增回归测试：`contaminatedAutoCapturedSkillsAreNeverRouted`（已反向验证：去掉过滤后变红）、`contaminationFilterOnlyAppliesToAutoCapturedSkills`；另在现有门禁用例里补了 `<system-reminder>` 的断言。
+
 ## 1.390.0-rc2 - 2026-09-19
 
 ### Fixed

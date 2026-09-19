@@ -54,7 +54,8 @@ nonisolated enum AgentSkillAutoActivation {
             figmaSwiftUIIdentifier,
             designToCodeIdentifier,
         ])
-        let catalog = availableSkills ?? AgentSkillDirectory.list(includeDisabled: false)
+        let catalog = (availableSkills ?? AgentSkillDirectory.list(includeDisabled: false))
+            .filter { !isContaminatedAutoCapturedSkill($0) }
         let generic = AgentSkillRouter.route(
             userText: userText,
             availableSkills: catalog,
@@ -72,6 +73,17 @@ nonisolated enum AgentSkillAutoActivation {
             attachedSkills: attached,
             candidateSkills: candidates
         )
+    }
+
+    /// Self-learning skills captured before 1.238.1 / 1.287.0-rc6 mined host
+    /// chrome (the per-turn `<system-reminder>` context, the attachment
+    /// prelude) as if the operator had typed it. The files stay on disk —
+    /// deleting user skills is the operator's call — but they must not be
+    /// offered as routing candidates or auto-attached, which would replay
+    /// stale host instructions to the model as skill guidance.
+    static func isContaminatedAutoCapturedSkill(_ skill: AgentSkillEntry) -> Bool {
+        skill.identifier.hasPrefix("auto-")
+            && AgentAttachedPromptProtocol.containsHostChrome(skill.description)
     }
 
     static func mergedSkills(
