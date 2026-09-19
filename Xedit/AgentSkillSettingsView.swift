@@ -575,7 +575,8 @@ struct AgentSkillSettingsView: View {
                                 tier: existing.tier,
                                 url: existing.url,
                                 source: existing.source,
-                                isEnabled: enabled
+                                isEnabled: enabled,
+                                containsHostChrome: existing.containsHostChrome
                             )
                         }
                         statusMessage = L10n.Settings.allChangesSaved
