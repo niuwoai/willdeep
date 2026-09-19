@@ -599,6 +599,28 @@ enum AtPickerEntry: Identifiable, Equatable {
         return order.flatMap { group in entries.filter { $0.group == group } }
     }
 
+    /// 会话设置候选。首版只有目标模式，已是目标模式时不重复出现。
+    ///
+    /// `@` 与 `+` 都给（1.392.0-rc1 起）。原先只给 `+`，理由是 `@` 的语义是
+    /// 「这一轮」、设置作用于整个会话；但用户习惯在输入框里打 `@` 找目标模式，
+    /// 找不到就以为功能没了。`@` 菜单里它排在最后一组、组标题写明「会话设置」，
+    /// 足以和一次性的附加项区分开。
+    ///
+    /// 英文 id 与本地化名双路匹配，和 `@worker` 同一做法：打 `@goal` 或
+    /// `@目标` 都能命中，不必先切输入法。
+    static func sessionSettingEntries(
+        matching query: String,
+        localizedGoalTitle: String,
+        currentMode: AgentInteractionMode
+    ) -> [AtPickerEntry] {
+        guard currentMode != .goal else { return [] }
+        let q = query.lowercased()
+        guard q.isEmpty
+            || localizedGoalTitle.lowercased().contains(q)
+            || "goal".contains(q) else { return [] }
+        return [.sessionSetting(.goalMode)]
+    }
+
     var group: Group {
         switch self {
         case .workspace, .file, .panelState: return .attachThisTurn

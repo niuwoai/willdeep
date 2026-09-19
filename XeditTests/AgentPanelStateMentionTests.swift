@@ -186,6 +186,30 @@ nonisolated struct AtPickerEntryGroupingTests {
         ])
     }
 
+    /// `@` 也能直接找到目标模式（1.392.0-rc1 起）：英文 id 与本地化名都能
+    /// 命中，已是目标模式时不重复出现，与附加项无关的查询不冒出来。
+    @Test("会话设置候选：@goal / @目标 都能命中，已是目标模式时不出现")
+    func sessionSettingEntriesMatchIdAndLocalizedTitle() {
+        func entries(_ q: String, _ mode: AgentInteractionMode = .normal) -> [AtPickerEntry] {
+            AtPickerEntry.sessionSettingEntries(matching: q, localizedGoalTitle: "目标模式", currentMode: mode)
+        }
+        #expect(entries("") == [.sessionSetting(.goalMode)])
+        #expect(entries("goal") == [.sessionSetting(.goalMode)])
+        #expect(entries("GO") == [.sessionSetting(.goalMode)])
+        #expect(entries("目标") == [.sessionSetting(.goalMode)])
+        #expect(entries("term").isEmpty)
+        #expect(entries("", .goal).isEmpty)
+        #expect(entries("goal", .goal).isEmpty)
+    }
+
+    /// 放进 `@` 之后，它在 `@` 菜单里排在最后一组，不挤到附加项与工种前面。
+    @Test("@ 菜单里会话设置排在最后")
+    func sessionSettingsComeLastInMentionMenu() {
+        let entries: [AtPickerEntry] = [.sessionSetting(.goalMode)]
+            + [.worker(id: "scout", name: "调查", purpose: ""), .panelState(kind: .terminal, detail: "a")]
+        #expect(AtPickerEntry.grouped(entries, source: .mention).last == .sessionSetting(.goalMode))
+    }
+
     /// 排序必须让同组相邻，否则组标题（只在组首插一次）会重复出现。
     @Test("分组有序且可比较")
     func groupsAreOrdered() {
