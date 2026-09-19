@@ -204,6 +204,11 @@ nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
     let url: URL
     let source: AgentSkillSource
     let isEnabled: Bool
+    /// Whether the full SKILL.md (frontmatter and body) carries host prompt
+    /// chrome — see `AgentAttachedPromptProtocol.containsHostChrome`. Computed
+    /// once during discovery, which already reads the whole file, so routing
+    /// can reject contaminated self-learning captures without touching disk.
+    let containsHostChrome: Bool
 
     init(
         identifier: String,
@@ -213,7 +218,8 @@ nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
         effects: AgentSkillEffects? = nil,
         url: URL,
         source: AgentSkillSource,
-        isEnabled: Bool
+        isEnabled: Bool,
+        containsHostChrome: Bool = false
     ) {
         self.identifier = identifier
         self.name = name
@@ -223,6 +229,7 @@ nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
         self.url = url
         self.source = source
         self.isEnabled = isEnabled
+        self.containsHostChrome = containsHostChrome
     }
 
     var id: String { identifier }
@@ -317,7 +324,8 @@ nonisolated enum AgentSkillDirectory {
                 tier: record.tier,
                 url: record.url,
                 source: record.source,
-                isEnabled: isEnabled
+                isEnabled: isEnabled,
+                containsHostChrome: record.containsHostChrome
             )
         }
     }
@@ -399,7 +407,8 @@ nonisolated enum AgentSkillDirectory {
                 effects: metadata.effects,
                 url: url,
                 source: .bundled,
-                isEnabled: isEnabled
+                isEnabled: isEnabled,
+                containsHostChrome: AgentAttachedPromptProtocol.containsHostChrome(text)
             )
         }
         return nil
@@ -448,6 +457,12 @@ nonisolated enum AgentSkillDirectory {
         return roots
     }
 
+    /// Runs discovery over one directory so tests can use a temporary root
+    /// instead of the operator's real skill folders.
+    static func discoverForTesting(in url: URL, source: AgentSkillSource) -> [AgentSkillEntry] {
+        discover(in: SkillRoot(url: url, source: source))
+    }
+
     private static func discover(in root: SkillRoot) -> [AgentSkillEntry] {
         guard FileManager.default.fileExists(atPath: root.url.path),
               let enumerator = FileManager.default.enumerator(
@@ -479,7 +494,8 @@ nonisolated enum AgentSkillDirectory {
                 effects: metadata.effects,
                 url: url,
                 source: root.source,
-                isEnabled: true
+                isEnabled: true,
+                containsHostChrome: AgentAttachedPromptProtocol.containsHostChrome(text)
             ))
 
             if records.count >= 300 { break }

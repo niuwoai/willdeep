@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.390.0-rc4 - 2026-09-19
+
+### Fixed
+
+- **只在正文里被污染的旧自动技能，也不再进入技能路由。** rc3 的过滤只看技能描述。可自动技能的描述只截取了捕获原文的前 160 个字，注入内容要是落在更后面，就只会出现在正文里，过滤拦不住。
+  - 现在 `AgentSkillEntry` 多了一个 `containsHostChrome` 标记，在扫描技能目录时就算好。扫描本来就要读完整的 SKILL.md，结果也进了现有的目录缓存，所以发送消息时不会多读任何文件。
+  - `isContaminatedAutoCapturedSkill` 同时看这个标记和描述。
+  - 设置页开关技能、`list()` 叠加启用状态这两处会重新构造 entry，都把这个标记带了过去。
+  - 新增测试入口 `AgentSkillDirectory.discoverForTesting`，可以对临时目录做扫描。
+- 新增回归测试 `autoCapturedSkillContaminatedOnlyInBodyIsNeverRouted`：用两个描述完全相同的技能，只有一个的正文里带 `<system-reminder>`。已反向验证：去掉正文判断后测试变红。
+
 ## 1.390.0-rc3 - 2026-09-19
 
 ### Fixed

@@ -80,10 +80,13 @@ nonisolated enum AgentSkillAutoActivation {
     /// prelude) as if the operator had typed it. The files stay on disk —
     /// deleting user skills is the operator's call — but they must not be
     /// offered as routing candidates or auto-attached, which would replay
-    /// stale host instructions to the model as skill guidance.
+    /// stale host instructions to the model as skill guidance. The body is
+    /// checked too (via the discovery-time flag): the description keeps only
+    /// the first 160 characters of the captured text.
     static func isContaminatedAutoCapturedSkill(_ skill: AgentSkillEntry) -> Bool {
         skill.identifier.hasPrefix("auto-")
-            && AgentAttachedPromptProtocol.containsHostChrome(skill.description)
+            && (skill.containsHostChrome
+                || AgentAttachedPromptProtocol.containsHostChrome(skill.description))
     }
 
     static func mergedSkills(
