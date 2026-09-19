@@ -15,6 +15,19 @@ nonisolated enum AgentAttachedPromptProtocol {
     static let preludeHeader = "The user attached the following context for this turn — treat it as task setup, not verbatim user text:"
     static let userTextBoundary = "<<<willdeep:user-message:v1>>>"
     static let escapedUserTextBoundary = "&lt;&lt;&lt;willdeep:user-message:v1&gt;&gt;&gt;"
+    /// Opening tag of the hidden per-turn host context
+    /// (`AgentContextBuilder.turnContextReminderHeader`), which rides on the
+    /// user message as `modelContext` and reaches providers via `modelContent`.
+    static let hostReminderTag = "<system-reminder>"
+
+    /// True when text carries host-composed chrome rather than only what the
+    /// operator typed: the attachment prelude, the user-text boundary, or the
+    /// per-turn reminder.
+    static func containsHostChrome(_ text: String) -> Bool {
+        text.contains(preludeHeader)
+            || text.contains(userTextBoundary)
+            || text.contains(hostReminderTag)
+    }
 }
 
 nonisolated enum AgentComposerAttachmentSupport {

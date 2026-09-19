@@ -584,6 +584,10 @@ struct AgentSelfLearningTests {
         #expect(AgentSelfLearning.containsHostComposedTemplate(
             "text\n\(AgentAttachedPromptProtocol.userTextBoundary)\nmore"
         ))
+        // 每回合隐藏上下文（modelContext）的开头标签同样算 host 拼接。
+        #expect(AgentSelfLearning.containsHostComposedTemplate(
+            "后端审核提现的功能有完成么。\n\n\(AgentContextBuilder.turnContextReminderHeader)"
+        ))
         #expect(!AgentSelfLearning.containsHostComposedTemplate("帮我清理磁盘,以后沉淀成技能"))
     }
 

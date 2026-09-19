@@ -253,6 +253,47 @@ struct AgentSkillAutoActivationTests {
         #expect(decision.candidateSkills.isEmpty)
     }
 
+    /// Field report: a self-learning skill captured before 1.238.1 mined the
+    /// per-turn `<system-reminder>` context along with the user's words, and
+    /// kept showing up in every turn's routing candidates.
+    @Test
+    func contaminatedAutoCapturedSkillsAreNeverRouted() {
+        let contaminated = skill(
+            "auto-前端frontend目录-提现请把提现方式",
+            description: "Use when repeating this workflow: 前端frontend目录，提现请把提现方式去掉，后端审核提现的功能有完成么。  <system-reminder> The host supplied this per-turn context."
+        )
+        let clean = skill(
+            "auto-前端frontend目录-提现审核",
+            description: "Use when repeating this workflow: 前端frontend目录，提现请把提现方式去掉，后端审核提现的功能有完成么。"
+        )
+        let decision = AgentSkillAutoActivation.routingDecision(
+            userText: "前端frontend目录，提现方式只保留银行卡，后端审核提现",
+            workspaceRootPath: nil,
+            manuallySelectedSkills: [],
+            availableSkills: [contaminated, clean]
+        )
+        let routed = decision.attachedSkills.map(\.identifier)
+            + decision.candidateSkills.map(\.skill.identifier)
+
+        #expect(!routed.contains(contaminated.identifier))
+        #expect(routed.contains(clean.identifier))
+    }
+
+    /// Only self-learning captures are filtered: a hand-written skill that
+    /// documents `<system-reminder>` tags is legitimate.
+    @Test
+    func contaminationFilterOnlyAppliesToAutoCapturedSkills() {
+        #expect(AgentSkillAutoActivation.isContaminatedAutoCapturedSkill(
+            skill("auto-x", description: "Use when repeating this workflow: hi <system-reminder> The host")
+        ))
+        #expect(!AgentSkillAutoActivation.isContaminatedAutoCapturedSkill(
+            skill("claude-hooks", description: "Explains how <system-reminder> blocks are injected.")
+        ))
+        #expect(!AgentSkillAutoActivation.isContaminatedAutoCapturedSkill(
+            skill("auto-clean", description: "Use when repeating this workflow: 清理磁盘")
+        ))
+    }
+
     @Test @MainActor
     func ambiguousCandidatesAddOnlyCompactReadSkillHint() {
         let browser = skill(
