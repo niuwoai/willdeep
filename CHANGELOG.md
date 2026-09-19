@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.390.0-rc2 - 2026-09-19
+
+### Fixed
+
+- **输入框里不再冒出「The user attached the following context for this turn…」。** 用户消息落盘存的是发给模型的完整 prompt：前面是技能路由候选、技能正文、附件信封，用 `<<<willdeep:user-message:v1>>>` 隔开，后面才是用户原话。气泡显示时会剥掉前面这段，但有两个地方把原文直接填回了输入框：
+  - 空输入框按 ↑ 翻历史；
+  - 编辑排队消息，以及把排队消息转到侧边新会话。
+
+  填回去之后如果直接发送，协议头还会再套一层。现在这两处都只填回用户原话（新增 `AgentAttachedPromptDisplay.composerText`），发送时也会先拆包兜底。用户文本边界改为取最后一个，之前已经套了两层的历史消息，气泡也能显示出最里层的原话。
+- **手机端的用户消息同样剥掉协议头。** 网关推送转录时用的也是原文，现在和桌面气泡一样先走 `transform`。1.288.0-rc5 只修了排队预览这一处。
+- 新增回归测试：`AgentComposerRecallPreludeTests`（5 条）、`recentMessagesShowOperatorTextNotTheSplicedPrelude`。
+
 ## 1.390.0-rc1 - 2026-09-18
 
 ### Added

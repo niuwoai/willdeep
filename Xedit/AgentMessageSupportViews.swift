@@ -243,6 +243,16 @@ nonisolated enum AgentAttachedPromptDisplay {
         return visible.isEmpty ? nil : visible
     }
 
+    /// Text to put back into the composer for a stored or queued prompt:
+    /// what the operator typed, never the model-facing prelude. History
+    /// recall (↑) and queue editing used the raw prompt, so the input box
+    /// showed "The user attached the following context…" and sending it
+    /// wrapped the prelude a second time.
+    static func composerText(of prompt: String) -> String {
+        let display = transform(prompt)
+        return display.isSplicedPrelude ? display.userAuthoredText : prompt
+    }
+
     struct Display {
         /// `true` when the content was actually a spliced prelude and we
         /// rewrote it into a compact form. False when this is plain text.
@@ -300,7 +310,11 @@ nonisolated enum AgentAttachedPromptDisplay {
         // 正文，导致附件尾部与 </untrusted-attachment> 泄漏到气泡。
         // 旧消息仍兼容 `---`，但有附件时只接受安全信封结束后的分隔线。
         var userText = ""
-        if let boundaryIndex = lines.firstIndex(of: AgentAttachedPromptProtocol.userTextBoundary) {
+        // lastIndex: prompts recalled into the composer before 1.390.0-rc2
+        // were wrapped twice; the operator's text follows the innermost
+        // boundary. Attachment and skill bodies escape the boundary, so
+        // only such nested wrapping can produce more than one.
+        if let boundaryIndex = lines.lastIndex(of: AgentAttachedPromptProtocol.userTextBoundary) {
             userText = lines[(boundaryIndex + 1)...]
                 .joined(separator: "\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
