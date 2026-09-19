@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.390.0-rc6 - 2026-09-19
+
+### Fixed
+
+- **修掉 `AgentStreamIdleGuardTests`「payload arriving in time keeps the stream alive」在满载时的误报。** 1.390.0-rc5 发布时，这条用例连续两轮挡住了测试关：正常 2 秒跑完的用例跑了 17 秒，协作线程池被饿住，一次 `Task.sleep(100ms)` 被拖过 1 秒的空转上限，报出 `streamStalled`。它以前就因为同样原因把余量放宽到 10 倍，这次还是被击穿了。所以没有继续放宽余量，而是改成不依赖墙钟：
+  - `AgentStreamIdleGuard.lines` 新增两个参数，时间来源 `now` 和看门狗轮询间隔 `pollInterval`，都带默认值。4 个 provider 调用点不用改，线上行为不变。
+  - 用例改用手动时钟，并且锁步推进：时钟前进 0.6 个上限 → 等看门狗真实检查一次 → 发下一个 payload → 等消费方收到。20 个 payload 累计 12 个上限。调度再慢也只会让测试变慢，不会误报。
+  - 已反向验证：去掉「payload 重置时钟」那一行，用例会稳定报 `streamStalled(idleSeconds: 60.0)`。
+
 ## 1.390.0-rc5 - 2026-09-19
 
 ### Fixed
