@@ -61,6 +61,7 @@ struct AgentWindowRootView: View {
         .focusedSceneValue(\.agentWindowActive, true)
         .background(AgentWindowConfigurator())
         .onAppear {
+            AppStartupTimingLog.record(.agentWindowAppeared)
             // 冷启动只开 agent 窗口、还没任何 editor 注册时,惰性建一个
             // headless AppState 顶上,保证「editor 没开 / 没选 workspace
             // 时 agent 窗口里就空了」这件事不再发生。

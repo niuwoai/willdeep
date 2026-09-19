@@ -1126,6 +1126,7 @@ final class AppState: ObservableObject {
             await self.restoreDaemonStartReceipts()
             self.releaseAdoptedDetachedJobCompletions()
             self.hasLoadedAgentSessionCatalog = true
+            AppStartupTimingLog.record(.sessionCatalogLoaded, count: self.agentSessions.count)
             CollaborationRelayEventPump.shared.attach(to: self)
             // Older builds promoted Dispatch task worktrees into named
             // projects. Remove those catalog rows before migration runs, or

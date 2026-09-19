@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.391.0-rc1 - 2026-09-19
+
+### Added
+
+- **冷启动耗时日志。** 2026-09-19 有用户反馈「刚装完，新聊天区要 30 秒才显示」，事后连测三次冷启动都在 4 秒内，没能复现。当时的统一日志全被脱敏，也分不出是哪个阶段在等。现在每次启动都会记下几个关键时刻，从内核启动进程的那一刻起算（取的是 `sysctl` 里的进程启动时间，所以 dyld 加载和静态初始化这段也算在内）：
+  - `didFinishLaunching`：进入 `applicationDidFinishLaunching`；
+  - `agentWindowAppeared`：Agent 窗口出现；
+  - `sessionCatalogLoaded`：会话列表从磁盘加载完成，附带会话数；
+  - `usageDashboardRequested` / `usageDashboardReady`：新聊天区的统计面板开始取数、取数完成。`Ready` 另外记录取数本身花了多久，和它在队列里排了多久分开看。
+- 每个时刻写两份：
+  - 一份是 `~/Library/Application Support/WillDeep/AgentAudit/startup-timing.jsonl`，一个时刻一行，超过 1MB 轮转一次；
+  - 一份是统一日志（subsystem `com.willdeep.app`，category `startup`），数字是明文，不会被脱敏。超过 10 秒的时刻记为 error 级别。
+- 每个时刻在一个进程里只记一次。不记录任何会话内容。测试进程写到临时目录，不会写进用户的 AgentAudit。
+- 查看方法：`/usr/bin/log show --last 1h --predicate 'subsystem == "com.willdeep.app" AND category == "startup"'`，或者直接 `tail` 上面那个 JSONL 文件。
+- `AgentWorkerTimingLogWriter` 的轮转文件名改成了初始化参数，默认值不变，启动日志和 worker-timing 共用这个写入器。
+- 新增测试 `AppStartupTimingLogTests`（5 条）：同一时刻只记一次、秒数从进程启动算起、JSONL 格式、落盘位置的测试隔离、按指定文件名轮转。
+
 ## 1.390.0-rc6 - 2026-09-19
 
 ### Fixed

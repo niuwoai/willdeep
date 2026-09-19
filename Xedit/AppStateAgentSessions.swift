@@ -1666,6 +1666,8 @@ extension AppState {
         guard !hasLoadedAgentUsageSnapshots, !isLoadingAgentUsageSnapshots else { return }
         isLoadingAgentUsageSnapshots = true
         defer { isLoadingAgentUsageSnapshots = false }
+        AppStartupTimingLog.record(.usageDashboardRequested)
+        let usageLoadStartedAt = Date()
 
         // `.userInitiated`, not `.utility`: nothing schedules this except a
         // user opening the stats panel, and until it lands the panel shows
@@ -1683,6 +1685,11 @@ extension AppState {
         }
         agentUsageSnapshots = snapshotsByID.values.sorted { $0.updatedAt > $1.updatedAt }
         hasLoadedAgentUsageSnapshots = true
+        AppStartupTimingLog.record(
+            .usageDashboardReady,
+            durationSeconds: Date().timeIntervalSince(usageLoadStartedAt),
+            count: agentUsageSnapshots.count
+        )
     }
 
     private func removeAgentUsageSnapshot(id: AgentSession.ID) {
