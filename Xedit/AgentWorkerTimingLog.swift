@@ -336,10 +336,16 @@ actor AgentWorkerTimingLogWriter {
     static let shared = AgentWorkerTimingLogWriter(url: AgentWorkerTimingLog.defaultURL())
 
     let url: URL
+    private let rotatedFileName: String
     private let rotationThresholdBytes: UInt64
 
-    init(url: URL, rotationThresholdBytes: UInt64 = AgentWorkerTimingLog.rotationThresholdBytes) {
+    init(
+        url: URL,
+        rotatedFileName: String = AgentWorkerTimingLog.rotatedFileName,
+        rotationThresholdBytes: UInt64 = AgentWorkerTimingLog.rotationThresholdBytes
+    ) {
         self.url = url
+        self.rotatedFileName = rotatedFileName
         self.rotationThresholdBytes = rotationThresholdBytes
     }
 
@@ -367,7 +373,7 @@ actor AgentWorkerTimingLogWriter {
               let size = attributes[.size] as? UInt64,
               size >= rotationThresholdBytes else { return }
         let rotated = url.deletingLastPathComponent()
-            .appendingPathComponent(AgentWorkerTimingLog.rotatedFileName)
+            .appendingPathComponent(rotatedFileName)
         try? fileManager.removeItem(at: rotated)
         try? fileManager.moveItem(at: url, to: rotated)
     }

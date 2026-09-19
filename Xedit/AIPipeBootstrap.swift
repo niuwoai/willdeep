@@ -15,6 +15,7 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
     private var isFlushingBeforeTermination = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppStartupTimingLog.record(.didFinishLaunching)
         // Wire the shared some.im login store before anything reads credentials:
         // sets the shared Keychain access group, migrates legacy per-app keys,
         // and starts forwarding cross-app login/logout changes.
