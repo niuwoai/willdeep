@@ -393,6 +393,7 @@ enum AgentMCPBridge {
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
             let inbox = MCPLineInbox(serverName: server.name, serverID: server.id)
+            inbox.setServerRequestHandler(serverRequestHandler(stdin: stdinPipe))
             let stderrCollector = MCPDataCollector(limit: 32_000)
             process.standardInput = stdinPipe
             process.standardOutput = stdoutPipe
@@ -668,6 +669,8 @@ enum AgentMCPBridge {
         process: Process,
         onServerRequest: (([String: Any]) -> Void)? = nil
     ) throws -> [String: Any] {
+        inbox.beginWaitingForResponse()
+        defer { inbox.endWaitingForResponse() }
         var deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             guard let line = inbox.nextLine(until: deadline) else { break }
@@ -766,14 +769,36 @@ enum AgentMCPBridge {
         private let condition = NSCondition()
         private var buffer = Data()
         private var lines: [String] = []
+        private var serverRequestHandler: (([String: Any]) -> Void)?
+        private var waitingForResponse = false
 
         init(serverName: String, serverID: String) {
             self.serverName = serverName
             self.serverID = serverID
         }
 
+        func setServerRequestHandler(_ handler: @escaping ([String: Any]) -> Void) {
+            condition.lock()
+            serverRequestHandler = handler
+            condition.unlock()
+        }
+
+        func beginWaitingForResponse() {
+            condition.lock()
+            waitingForResponse = true
+            condition.unlock()
+        }
+
+        func endWaitingForResponse() {
+            condition.lock()
+            waitingForResponse = false
+            condition.unlock()
+        }
+
         func append(_ data: Data) {
             guard !data.isEmpty else { return }
+            var serverRequests: [[String: Any]] = []
+            var handler: (([String: Any]) -> Void)?
             condition.lock()
             buffer.append(data)
             while let newlineIndex = buffer.firstIndex(of: 0x0A) {
@@ -781,12 +806,25 @@ enum AgentMCPBridge {
                 buffer.removeSubrange(buffer.startIndex...newlineIndex)
                 if let line = String(data: lineData, encoding: .utf8),
                    !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    lines.append(line)
-                    publishResourceNotificationIfNeeded(line)
+                    if let data = line.data(using: .utf8),
+                       let object = try? JSONSerialization.jsonObject(with: data),
+                       let dictionary = object as? [String: Any],
+                       AgentMCPHostRequests.isServerRequest(dictionary) {
+                        if waitingForResponse {
+                            lines.append(line)
+                        } else {
+                            serverRequests.append(dictionary)
+                        }
+                    } else {
+                        lines.append(line)
+                        publishResourceNotificationIfNeeded(line)
+                    }
                 }
             }
+            handler = serverRequestHandler
             condition.signal()
             condition.unlock()
+            serverRequests.forEach { handler?($0) }
         }
 
         func nextLine(until deadline: Date) -> String? {
