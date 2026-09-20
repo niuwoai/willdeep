@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-17 | Current version: v1.392.0-rc2
+> Last updated: 2026-09-17 | Current version: v1.392.0-rc3
 
 同一工作区的会话可以互相看见、互相递话（1.383.0-rc1）：`list_workspace_sessions` 显示每个会话的计划进度、当前步骤和最近请求，`send_session_message` 把一段不超过 4000 字符的协调说明投给另一个会话（限流、不能越权批准）；`/sessions` 让 Agent 汇总同伴在做什么。`/handoff` 把当前会话连同未提交改动推到一个 `willdeep/handoff/...` 分支，附带 willdeep-cli 会话文件和交接简报，本机分支与工作区不变，并给出在 Linux 上续跑的命令；两边各自需要 git 凭据。输入框里可以串写多个斜杠命令，如 `/no-sandbox /subagent 修一下登录`。设计见 [docs/SESSION_COLLABORATION_AND_HANDOFF.md](docs/SESSION_COLLABORATION_AND_HANDOFF.md)。
 

@@ -858,6 +858,40 @@ enum AgentSubagentRunner {
         risk != .read && !isStrictReadOnlyShellTrade
     }
 
+    /// 子代理 `run_command` 的沙箱档。
+    ///
+    /// 默认按命令自身的分类走，而不是死钉 `.readOnly`：查询类命令
+    /// （`kubectl get` / `gh run list`）分类为 `readOnlyNetwork`，钉 `.readOnly`
+    /// 会 deny network，把它们全逼进"假 DNS 失败"。被授权（精确单命令或
+    /// 裁判放行）的命令拿它分类应得的档。
+    ///
+    /// `ops_runner` 例外，地板是凭证档：它的活是 `ssh` / `kubectl` / `gh`
+    /// 这类拿用户钥匙出门的事，而 `readOnlyNetwork` 及以下的 seatbelt 会
+    /// **内核级**拒读 `~/.ssh` 并剥掉 `SSH_AUTH_SOCK`——`ssh host "journalctl …"`
+    /// 因远程命令只读被归到这一档，于是必然停在 `Host key verification
+    /// failed` / `Permission denied (publickey)`。父会话有"沙箱拒绝→无沙箱
+    /// 重跑"兜底，子代理没有，模型拿到裸报错只能去查本机权限，2026-09-20
+    /// 就是这样查到 `head -c 40 ~/.ssh/id_ed25519` 撞上凭据门禁的。凭证档
+    /// 保留真实 HOME 与 agent socket，本地写入仍限 workspace 与临时目录；
+    /// 该不该跑由前面的审批闸门决定，沙箱只负责别把已获准的命令跑废。
+    nonisolated static func runCommandSandboxMode(
+        profileID: String,
+        classifiedMode: AgentSandboxMode,
+        isCommandApproved: Bool
+    ) -> AgentSandboxMode {
+        var mode: AgentSandboxMode = .readOnly
+        if isCommandApproved {
+            mode = classifiedMode
+        } else if classifiedMode == .readOnlyNetwork {
+            mode = .readOnlyNetwork
+        }
+        if profileID == AgentSubagentProfileCatalog.opsRunnerID,
+           AgentSandboxPolicy.deniesCredentialReads(mode) {
+            mode = .workspaceWriteNetworkCredentialed
+        }
+        return mode
+    }
+
     /// The only tools a subagent may call. Deliberately excludes:
     /// `spawn_agent` (no nesting), `ask_user` (nobody to ask),
     /// MCP tools (server side effects unknowable) and background-job tools
@@ -2375,12 +2409,7 @@ enum AgentSubagentRunner {
         // The patch sink is handed down only for an approved editor trade,
         // so `apply_patch` remains unreachable for every other subagent —
         // the tool errors out without a sink even if it somehow got called.
-        // 子代理的 run_command 沙箱档按命令自身的分类走，而不是死钉
-        // .readOnly：查询类命令（kubectl get / gh run list）分类为
-        // readOnlyNetwork，钉 readOnly 会 deny network，把它们全逼进
-        // "假 DNS 失败"——ops_runner 上架即残废。被授权的单命令则拿它
-        // 分类应得的档（发布脚本通常是 workspaceWriteNetworkCredentialed，
-        // 正好接上凭证沙箱的 ~/.ssh）。
+        // 沙箱档的取舍见 `runCommandSandboxMode`（含 ops_runner 的凭证档地板）。
         var sandboxMode: AgentSandboxMode = .readOnly
         if call.toolName == "run_command",
            let command = argsDict["command"]?.stringValue() {
@@ -2389,11 +2418,11 @@ enum AgentSubagentRunner {
                 rootDirectory: workspaceURL,
                 additionalWorkspaceRoots: additionalWorkspaceRoots
             )
-            if isApprovedCommandInvocation || isJudgeApprovedCommand {
-                sandboxMode = decision.mode
-            } else if decision.mode == .readOnlyNetwork {
-                sandboxMode = .readOnlyNetwork
-            }
+            sandboxMode = Self.runCommandSandboxMode(
+                profileID: profile.id,
+                classifiedMode: decision.mode,
+                isCommandApproved: isApprovedCommandInvocation || isJudgeApprovedCommand
+            )
         }
 
         let context = AgentToolContext(

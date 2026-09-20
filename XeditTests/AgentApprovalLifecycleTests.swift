@@ -147,6 +147,39 @@ struct AgentApprovalLifecycleTests {
         ))
     }
 
+    @Test("运维 Worker 的 run_command 地板是凭证档，其它工种维持原判")
+    func opsRunnerCommandSandboxFloor() {
+        let ops = AgentSubagentProfileCatalog.opsRunnerID
+        let scout = AgentSubagentProfileCatalog.scoutID
+        // ssh host "journalctl …" 因远程命令只读被分到 readOnlyNetwork；
+        // 该档 seatbelt 拒读 ~/.ssh，ssh 必然认证失败，ops_runner 必须抬到凭证档。
+        #expect(AgentSubagentRunner.runCommandSandboxMode(
+            profileID: ops, classifiedMode: .readOnlyNetwork, isCommandApproved: false
+        ) == .workspaceWriteNetworkCredentialed)
+        #expect(AgentSubagentRunner.runCommandSandboxMode(
+            profileID: ops, classifiedMode: .readOnly, isCommandApproved: false
+        ) == .workspaceWriteNetworkCredentialed)
+        // 未获准的修改类命令不因工种而升档——它压根到不了执行这一步，
+        // 但这里仍不能让地板替审批做决定，保持与其它工种一致。
+        #expect(AgentSubagentRunner.runCommandSandboxMode(
+            profileID: ops, classifiedMode: .workspaceWrite, isCommandApproved: false
+        ) == .workspaceWriteNetworkCredentialed)
+        // 已获准且分类为 escalated 的命令不被地板压低。
+        #expect(AgentSubagentRunner.runCommandSandboxMode(
+            profileID: ops, classifiedMode: .escalated, isCommandApproved: true
+        ) == .escalated)
+        // 其它工种：原来的规则一字不变。
+        #expect(AgentSubagentRunner.runCommandSandboxMode(
+            profileID: scout, classifiedMode: .readOnlyNetwork, isCommandApproved: false
+        ) == .readOnlyNetwork)
+        #expect(AgentSubagentRunner.runCommandSandboxMode(
+            profileID: scout, classifiedMode: .workspaceWrite, isCommandApproved: false
+        ) == .readOnly)
+        #expect(AgentSubagentRunner.runCommandSandboxMode(
+            profileID: scout, classifiedMode: .workspaceWrite, isCommandApproved: true
+        ) == .workspaceWrite)
+    }
+
     @Test("完全访问自动批准原生 Worker 的普通高风险命令")
     func nativeWorkerFullAccessApprovesDangerWithoutPrompt() async throws {
         let app = AppState()

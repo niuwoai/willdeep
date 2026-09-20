@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.392.0-rc3 - 2026-09-20
+
+### Fixed
+
+- **运维 Worker（`ops_runner`）的 `run_command` 不再被关在拒读 `~/.ssh` 的沙箱档里。** 周期任务「免密 ssh 到 h1 巡检 systemd 日志」连续两天在第一条命令就死掉：`ssh root@h1 "journalctl …"` 因远程命令只读被分到 `readOnlyNetwork`，而这一档的 seatbelt 会内核级拒读 `~/.ssh` 并剥掉 `SSH_AUTH_SOCK`，于是 ssh 必然停在 `hostkeys_foreach failed … Operation not permitted` / `Permission denied (publickey)`。父会话遇到同样的失败有「沙箱拒绝→无沙箱重跑」兜底，Worker 没有，模型拿到的是一句裸报错，只能当成本机权限问题去查——2026-09-20 就这样查出了 `head -c 40 ~/.ssh/id_ed25519`，撞上凭据门禁弹了人工确认卡。
+  - 现在 `ops_runner` 的 `run_command` 地板是凭证档（`workspaceWriteNetworkCredentialed`）：真实 HOME、agent socket、网络都在，本地写入仍限 workspace 与临时目录。该不该跑仍由前面的审批闸门决定（只读直放、修改送裁判、精确单命令人工批），沙箱只负责别把已获准的命令跑废。
+  - 已获准且分类为 `escalated` 的命令不被地板压低；其它工种的沙箱规则一字未动。
+  - 取舍逻辑抽成 `AgentSubagentRunner.runCommandSandboxMode(profileID:classifiedMode:isCommandApproved:)`，新增测试 `opsRunnerCommandSandboxFloor`。
+  - 仍未做：Worker 侧的沙箱拒绝识别与无沙箱重跑、`sandboxedFailureNote` 提示。其它工种遇到 seatbelt 拒绝时模型看到的依旧是裸报错。
 ## 1.392.0-rc2 - 2026-09-20
 
 ### Fixed
