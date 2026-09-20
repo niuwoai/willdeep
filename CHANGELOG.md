@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.393.0-rc1 - 2026-09-21
+
+### Added
+
+- **内置「收藏夹」从 2.1.0 升到 2.2.1。** `PluginExamples/favorites` 子模块推进到插件仓库 `1c9af4f`。
+  - 新增独立备忘入口，支持只有文字、只有图片或文字加图片的备忘。
+  - 支持从剪贴板直接粘贴截图，支持拖入和选择 PNG、JPEG、WebP、GIF 图片。
+  - 图片按记录持久化到独立媒体目录，按需读取预览，列表加载时不再传输全部原图。
+  - 2.2.0 在宿主侧过不了 `plugin_command_contract_test.rb`：页面调用的 `favorites.read_image` 没有在清单 `contributes.commands` 里声明。2.2.1 补上声明与中英标题后守卫 32/32 通过。
+  - 宿主这边没有代码改动：打包时复制的目录清单不变（清单、`mcp.json`、`server`、`ui/index.html`）。插件仓库自测：`server/*.rb` 语法检查与清单 JSON 校验通过。
+  - 其余 10 个内置插件核对过上游，均已是最新提交；「短剧工坊」停在 0.29.0-rc2（`cb8bd36`，`fix/streamable-http-stability` 分支），比 `main` 上的 0.28.0-rc5 新。
+
 ## 1.392.0-rc3 - 2026-09-20
 
 ### Fixed
