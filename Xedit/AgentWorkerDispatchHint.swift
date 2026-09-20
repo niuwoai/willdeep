@@ -114,6 +114,11 @@ nonisolated enum AgentWorkerDispatchHint {
         // 而部署的正确出路是 ops_runner 的单命令授权，不是 build_fixer
         // 改代码。
         if releaseMarkers.contains(where: { head.contains($0) }) { return .opsRunner }
+        // `deploy` / `publish` 只按整个 token 认：`make deploy`、`./deploy.sh`、
+        // `npm run deploy` 是发布；`make deploy-dev`、`npm run build:publish-docs`
+        // 失败的是构建。裸子串曾把后者判成运维，而运维不许自动派发，于是
+        // build_fixer 也没接——活掉在地上。
+        if releaseTokenMarkers.contains(where: { containsToken(head, $0) }) { return .opsRunner }
         if buildMarkers.contains(where: { head.contains($0) }) { return .buildFixer }
         return nil
     }
@@ -254,12 +259,29 @@ nonisolated enum AgentWorkerDispatchHint {
     /// 穷举——漏判只是少一条提示，误判则会把构建失败指去发布通道。
     private static let releaseMarkers: [String] = [
         "release.rb", "release.sh", "release_mac_app", "scripts/release",
-        "deploy", "publish", "fastlane",
+        "fastlane",
         "helm upgrade", "helm install", "kubectl apply", "kubectl rollout",
         "kubectl set image",
         "terraform apply", "ansible-playbook",
         "gh release create", "npm publish", "cargo publish", "gem push",
     ]
+
+    /// 发布动词，只按整 token 匹配（见 `containsToken`）。
+    private static let releaseTokenMarkers: [String] = ["deploy", "publish"]
+
+    /// `needle` 作为一个独立 token 出现：`deploy`、`./deploy.sh`、
+    /// `scripts/deploy`、`deploy.rb` 都算；`deploy-dev`、`build:publish-docs`、
+    /// `deployment` 不算。token 以空白切分，去掉引号。
+    static func containsToken(_ head: String, _ needle: String) -> Bool {
+        head.split(whereSeparator: \.isWhitespace).contains { raw in
+            let token = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+            let base = token.split(separator: "/", omittingEmptySubsequences: false).last.map(String.init) ?? token
+            if base == needle { return true }
+            guard base.hasPrefix(needle + ".") else { return false }
+            let ext = base.dropFirst(needle.count + 1)
+            return !ext.isEmpty && ext.allSatisfy { $0.isLetter || $0.isNumber }
+        }
+    }
 
     private static let buildMarkers: [String] = [
         "swift build", "xcodebuild", "make", "cmake",

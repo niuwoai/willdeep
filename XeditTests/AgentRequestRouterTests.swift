@@ -253,6 +253,70 @@ struct AgentRequestRouterTests {
         #expect(AgentRequestRouter.namedSourceFiles("改 a.swift 和 b.swift 再改 a.swift").count == 2)
     }
 
+    @Test("a deployment script named as an edit target is an edit, not a rollout")
+    func deploymentNounPhraseAndNamedScriptStayEdits() {
+        // CJK has no word boundary; "部署脚本" is a noun phrase and must not
+        // trip the operations table.
+        let phrase = AgentRequestRouter.classify("把部署脚本里的超时改成 60s")
+        #expect(phrase.profileID != "ops_runner")
+        #expect(!phrase.enforcesDelegatedExecution(for: .automatic))
+        // Naming the file makes it an edit even though "deploy" stands alone.
+        let named = AgentRequestRouter.classify("修一下 deploy.sh 里的超时")
+        #expect(named.profileID == "editor")
+        #expect(!named.enforcesDelegatedExecution(for: .automatic))
+        // The genuine rollout still routes to operations.
+        #expect(AgentRequestRouter.classify("按部署流程把新版本部署到生产环境").profileID == "ops_runner")
+    }
+
+    @Test("fix only counts as a mutating verb when it stands alone")
+    func fixNeedsAWordBoundary() {
+        // "prefix" is not a repair request; it used to skip every read-only
+        // branch because "fix" matched as a bare substring.
+        #expect(AgentRequestRouter.classify("解释一下这个 prefix 的含义").profileID == "reader")
+        #expect(AgentRequestRouter.classify("explain what this test fixture does").profileID == "reader")
+        // The inflections the marker exists for still count.
+        #expect(AgentRequestRouter.classify("fixing the failing test").profileID == "test_fixer")
+        #expect(AgentRequestRouter.classify("fix the compile error").profileID == "build_fixer")
+    }
+
+    @Test("reaching a remote host is an operations hint without forced delegation")
+    func remoteAccessRoutesToOperationsAsAHint() {
+        let decision = AgentRequestRouter.classify("ssh 上去重跑一下 pipeline")
+        #expect(decision.profileID == "ops_runner")
+        #expect(!decision.autoDispatchEligible)
+        #expect(!decision.enforcesDelegatedExecution(for: .automatic))
+        // A word boundary keeps "sshd" and "scp" inside a path out of it.
+        #expect(AgentRequestRouter.classify("解释一下 sshd_config 的含义").profileID == "reader")
+        // Naming a file to edit wins over the remote-access hint.
+        #expect(AgentRequestRouter.classify("改一下 ssh_helper.rb 里的超时").profileID == "editor")
+    }
+
+    @Test("inspecting a live system routes to ops without the forced-delegation lock")
+    func readOnlyOperationsAreNotLocked() {
+        // Only ops_runner holds the credentials, so the trade stays; but a
+        // status check is not a rollout, and must not block direct execution.
+        let status = AgentRequestRouter.classify("看一下生产环境的服务状态")
+        #expect(status.profileID == "ops_runner")
+        #expect(status.autoDispatchEligible)
+        #expect(!status.enforcesDelegatedExecution(for: .automatic))
+        // Without `requiresDelegatedExecution` even a required policy has
+        // nothing to enforce here — that policy governs writes, not looks.
+        #expect(!status.enforcesDelegatedExecution(for: .required))
+        // A change to the live system keeps the lock regardless of policy.
+        let rollout = AgentRequestRouter.classify("重启服务然后看服务状态")
+        #expect(rollout.profileID == "ops_runner")
+        #expect(rollout.enforcesDelegatedExecution(for: .automatic))
+    }
+
+    @Test("a mutating request that mentions the terminal is not terminal inspection")
+    func mutatingRequestSkipsTheTerminalOperator() {
+        // terminal_operator has no write tools, so it can never own an edit.
+        let decision = AgentRequestRouter.classify("改一下终端里那个脚本的报错")
+        #expect(decision.profileID != "terminal_operator")
+        // Pure inspection still goes there.
+        #expect(AgentRequestRouter.classify("看看终端里现在跑到哪了").profileID == "terminal_operator")
+    }
+
     @Test("only the head of a long paste is classified")
     func longPasteDoesNotVoteWithItsBody() {
         // A pasted stack trace at the end of an implementation request must

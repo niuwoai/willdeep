@@ -122,8 +122,30 @@ nonisolated enum AgentRequestRouter {
         "修复", "修改", "实现", "新增", "删除", "重构", "改成", "改为", "补上", "加上",
         "开发", "编码", "写代码", "修一下", "改一下", "优化", "适配", "接入", "添加",
         "补测试", "写测试",
-        "fix", "implement", "add ", "change", "edit", "refactor", "rewrite", "create",
+        "implement", "add ", "change", "edit", "refactor", "rewrite", "create",
     ]
+
+    /// Mutating words that must stand alone. "fix" as a bare substring lives
+    /// inside "prefix", "suffix" and "fixture", so "解释一下这个 prefix" used
+    /// to skip every read-only branch and land on `implementer`. The
+    /// inflections are listed because a word boundary would otherwise drop
+    /// "fixing the test" — the phrase the marker exists for.
+    private static let mutatingWordMarkers = ["fix", "fixes", "fixed", "fixing"]
+
+    /// CJK phrases where "部署" names a thing rather than an action. CJK has
+    /// no word boundary to test, so these are removed before the operations
+    /// table votes: "把部署脚本里的超时改成 60s" edits a file, it does not
+    /// roll anything out.
+    private static let operationsNounPhrases = [
+        "部署脚本", "部署文档", "部署说明", "部署配置", "部署流程",
+    ]
+
+    /// Reaching another machine is operations work even when nothing is
+    /// deployed: the worker with the user's keys is `ops_runner`, and every
+    /// other trade's shell cannot read `~/.ssh`. A hint only — no forced
+    /// delegation, no preflight — because "ssh 上去看看" carries none of the
+    /// production weight the operations table enforces.
+    private static let remoteAccessMarkers = ["ssh", "scp"]
 
     private static let testFailureMarkers = [
         "测试失败", "测试不通过", "断言失败", "跑不过",
@@ -178,11 +200,28 @@ nonisolated enum AgentRequestRouter {
         "inspect terminal", "check terminal", "terminal environment", "terminal pane", "terminal window",
     ]
 
-    private static let operationsMarkers = [
-        "部署", "发布到", "生产环境", "线上环境", "重启服务", "服务状态", "回滚发布",
-        "deploy", "release to", "production cluster", "restart service", "service status",
-        "systemctl", "kubectl rollout", "helm upgrade",
+    /// Operations that change a live system. These enforce delegated
+    /// execution: the parent may not run them directly, and the worker only
+    /// gets the one exact command the operator confirms.
+    private static let mutatingOperationsMarkers = [
+        "部署", "发布到", "重启服务", "回滚发布",
+        "deploy", "release to", "restart service",
+        "kubectl rollout", "helm upgrade",
     ]
+
+    /// Operations vocabulary that is usually a look, not a change. Still
+    /// `ops_runner` — it is the only trade holding the user's keys, and a
+    /// read-only trade's shell cannot reach `~/.ssh` — but without the
+    /// forced-delegation lock: a status check on a production box carries
+    /// none of a rollout's weight, and the read-only preflight already runs.
+    private static let readOnlyOperationsMarkers = [
+        "生产环境", "线上环境", "服务状态",
+        "production cluster", "service status", "systemctl",
+    ]
+
+    private static var operationsMarkers: [String] {
+        mutatingOperationsMarkers + readOnlyOperationsMarkers
+    }
 
     /// Classify a request. Pure and cheap — no I/O, no model call.
     ///
@@ -203,9 +242,17 @@ nonisolated enum AgentRequestRouter {
         // reuse its parser so only text authored by the operator gets a vote.
         let operatorText = AgentAttachedPromptDisplay.transform(request).userAuthoredText
         let sample = String(operatorText.prefix(classifiedPrefixLength)).lowercased()
-        let mutating = contains(sample, mutatingMarkers)
+        let mutating = contains(sample, mutatingMarkers) || containsWord(sample, mutatingWordMarkers)
+        // A change that names a file is an edit, whatever else the sentence
+        // says. "修一下 deploy.sh" and "改一下终端里那个脚本" used to reach the
+        // privileged branches first and hand the edit to a trade with no
+        // write tools (terminal_operator) or a forced-delegation lock
+        // (ops_runner) that the edit could never satisfy.
+        let editsNamedFile = mutating && !namedSourceFiles(sample).isEmpty
 
-        if !skippingPrivilegedBranches, contains(sample, terminalMarkers) {
+        // The terminal operator has no write tools; a mutating request is
+        // never its job even when it mentions the terminal.
+        if !skippingPrivilegedBranches, !mutating, contains(sample, terminalMarkers) {
             return worker(
                 "terminal_operator",
                 94,
@@ -218,13 +265,30 @@ nonisolated enum AgentRequestRouter {
         // does not merely mislabel the Worker — it blocks the edit. "deploy"
         // as a bare substring fires on "deployment", turning "把 deployment
         // 里的注解改一下" (editing a manifest) into a production rollout.
-        if !skippingPrivilegedBranches, containsWord(sample, operationsMarkers) {
+        let operationsSample = stripping(sample, operationsNounPhrases)
+        if !skippingPrivilegedBranches, !editsNamedFile, containsWord(operationsSample, mutatingOperationsMarkers) {
             return worker(
                 "ops_runner",
                 94,
                 autoDispatch: true,
                 requiresDelegatedExecution: true,
                 reason: "production operations need a read-only preflight and exact-command execution"
+            )
+        }
+        if !skippingPrivilegedBranches, !editsNamedFile, containsWord(operationsSample, readOnlyOperationsMarkers) {
+            return worker(
+                "ops_runner",
+                94,
+                autoDispatch: true,
+                reason: "inspecting a live system needs the operations worker's credentials, not a lock on direct execution"
+            )
+        }
+        if !skippingPrivilegedBranches, !editsNamedFile, containsWord(sample, remoteAccessMarkers) {
+            return worker(
+                "ops_runner",
+                88,
+                autoDispatch: false,
+                reason: "reaching a remote host needs the operations worker's credentials"
             )
         }
 
@@ -372,6 +436,13 @@ nonisolated enum AgentRequestRouter {
         needles.contains { haystack.contains($0) }
     }
 
+    /// Remove every occurrence of the phrases so the remaining text can be
+    /// matched without them. Used for CJK noun phrases that contain an
+    /// operations verb.
+    private static func stripping(_ haystack: String, _ phrases: [String]) -> String {
+        phrases.reduce(haystack) { $0.replacingOccurrences(of: $1, with: " ") }
+    }
+
     /// Which privileged marker this request tripped, if any.
     ///
     /// Attribution for `route-veto.jsonl`: the resulting profile alone cannot
@@ -382,7 +453,9 @@ nonisolated enum AgentRequestRouter {
         let operatorText = AgentAttachedPromptDisplay.transform(request).userAuthoredText
         let sample = String(operatorText.prefix(classifiedPrefixLength)).lowercased()
         if let hit = terminalMarkers.first(where: { sample.contains($0) }) { return hit }
-        return operationsMarkers.first { containsWord(sample, $0) }
+        let operationsSample = stripping(sample, operationsNounPhrases)
+        if let hit = operationsMarkers.first(where: { containsWord(operationsSample, $0) }) { return hit }
+        return remoteAccessMarkers.first { containsWord(sample, $0) }
     }
 
     /// Like `contains`, but an ASCII needle must not sit inside a longer ASCII

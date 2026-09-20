@@ -68,7 +68,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v38 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v39 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -81,8 +81,22 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v38")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v39")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
+    }
+
+    @Test("delegation guidance draws the scout / ops_runner line at the machine boundary")
+    func testDelegationGuidanceSeparatesWorkspaceFromRemote() {
+        // "Use scout for investigation even when it needs a shell" read as
+        // "scout for anything read-only"; a remote status check sent to scout
+        // dies on a shell that cannot reach ~/.ssh.
+        for profile in [AgentSystemPromptProfile.standard, .extended] {
+            let prompt = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true, promptProfile: profile)
+            #expect(prompt.contains("`scout` investigates the workspace read-only"))
+            #expect(prompt.contains("Use scout for investigation inside the workspace"))
+            #expect(prompt.contains("Anything on another machine"))
+            #expect(prompt.contains("is `ops_runner` even when it only reads"))
+        }
     }
 
     @Test("stable prompt keeps background work productive and verification sound")
@@ -130,7 +144,7 @@ struct AgentContextBuilderPromptTests {
     func testDelegationResponsibilityContract() {
         for profile in [AgentSystemPromptProfile.standard, .extended] {
             let prompt = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true, promptProfile: profile)
-            #expect(prompt.contains("`scout` investigates read-only"))
+            #expect(prompt.contains("`scout` investigates the workspace read-only"))
             #expect(prompt.contains("`generalist` handles bounded fallback work"))
             #expect(!prompt.contains("`generalist` investigates"))
             #expect(prompt.contains("`implementer` edits"))
@@ -142,7 +156,8 @@ struct AgentContextBuilderPromptTests {
             #expect(!prompt.contains("deployable 32K/48K/64K/256K"))
         }
         let extended = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true, promptProfile: .extended)
-        #expect(extended.contains("scout (read-only investigation)"))
+        #expect(extended.contains("scout (read-only investigation inside the workspace)"))
+        #expect(extended.contains("ops_runner (anything on another machine, even read-only)"))
         #expect(extended.contains("generalist (bounded fallback)"))
         #expect(extended.contains("standard / advanced / expert"))
         #expect(extended.contains("tier changes never widen tools or file access"))

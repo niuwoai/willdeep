@@ -9,6 +9,17 @@
   - 已获准且分类为 `escalated` 的命令不被地板压低；其它工种的沙箱规则一字未动。
   - 取舍逻辑抽成 `AgentSubagentRunner.runCommandSandboxMode(profileID:classifiedMode:isCommandApproved:)`，新增测试 `opsRunnerCommandSandboxFloor`。
   - 仍未做：Worker 侧的沙箱拒绝识别与无沙箱重跑、`sandboxedFailureNote` 提示。其它工种遇到 seatbelt 拒绝时模型看到的依旧是裸报错。
+- **Worker 分工路由的四处裸子串误判。** 审计近一个月 96 次派发：09-09 之后 11 次全部派对，8 月底那批把 `ls`/`git log` 洗成运维请求的问题已由 1.305.0-rc1 修掉；但规则层还留着几条会把编程活派成运维活、或把只读活派成编程活的缝，这次一起补上（`AgentRequestRouter` / `AgentWorkerDispatchHint`）：
+  - `fix` 作为裸子串命中 `prefix` / `suffix` / `fixture`，「解释一下这个 prefix」跳过所有只读分支直接落 `implementer`。现在 `fix` / `fixes` / `fixed` / `fixing` 按词边界匹配。
+  - 中文「部署」没有词边界，「把部署脚本里的超时改成 60s」被判成生产运维并强制委派，父模型想直接改文件会被 RouteGuard 挡住。现在「部署脚本 / 部署文档 / 部署说明 / 部署配置 / 部署流程」这几个名词短语先剔除再投票；修改类请求只要点名了源文件（含 `.sh`），一律按编辑处理，不进运维和终端分支。
+  - 修改类请求提到终端会被派给 `terminal_operator`——一个没有任何写工具的工种。现在终端分支只接非修改类请求。
+  - `ssh` / `scp` 不在任何运维判据里，「ssh 上去重跑一下 pipeline」落到 `generalist`，而它的 shell 读不到 `~/.ssh`。现在按词边界命中即提示 `ops_runner`（88 分，不自动预跑、不强制委派），`sshd_config` 这类不算。
+  - 失败派发提示里 `deploy` / `publish` 是裸子串，`make deploy-dev`、`npm run build:publish-docs` 编译失败被判成发布；发布不允许自动派发，于是 `build_fixer` 也不接，活掉在地上。现在这两个词只按整 token 认（`make deploy`、`./deploy.sh`、`scripts/deploy`、`npm run publish` 仍是发布）。
+  - 运维判据拆成两组：「部署 / 发布到 / 重启服务 / 回滚发布 / deploy / release to / restart service / kubectl rollout / helm upgrade」改变线上系统，仍强制委派；「生产环境 / 线上环境 / 服务状态 / production cluster / service status / systemctl」通常只是看一眼，仍派 `ops_runner`（只有它拿着钥匙）并照旧只读预跑，但不再锁住父模型的直接执行。
+  - 刻意没改：只读运维诊断仍派 `ops_runner` 而不是 `scout`——`scout` 的 shell 是严格只读档，seatbelt 拒读 `~/.ssh`，派过去 ssh 必然失败。scout 管的是「本机仓库」，不是「一切只读」。
+  - 系统提示词把这条边界写明（`willdeep-agent-system-v38 → v39`，三档快照哈希重录）：原句「Use scout for investigation even when it needs a shell」没说"本地"，父模型顺理成章把远程只读诊断派给 scout。现在写成「inside the workspace」，并补一句「Anything on another machine — ssh, kubectl, a remote log — is `ops_runner` even when it only reads」；extended 档的 Delegation 行同步。
+  - 新增测试：`deploymentNounPhraseAndNamedScriptStayEdits`、`fixNeedsAWordBoundary`、`remoteAccessRoutesToOperationsAsAHint`、`readOnlyOperationsAreNotLocked`、`mutatingRequestSkipsTheTerminalOperator`、`releaseVerbsNeedAWholeToken`、`testDelegationGuidanceSeparatesWorkspaceFromRemote`。
+
 ## 1.392.0-rc2 - 2026-09-20
 
 ### Fixed

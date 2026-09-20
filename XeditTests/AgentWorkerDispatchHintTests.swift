@@ -163,4 +163,19 @@ struct AgentWorkerDispatchHintTests {
         // Release detection still wins over the build wrapper.
         #expect(AgentWorkerDispatchHint.classify(command: "ruby scripts/release.rb") == .opsRunner)
     }
+
+    @Test("deploy and publish only count as whole tokens")
+    func releaseVerbsNeedAWholeToken() {
+        // A bare substring sent these to ops_runner, which is never
+        // auto-dispatched — so build_fixer did not get them either.
+        #expect(AgentWorkerDispatchHint.classify(command: "make deploy-dev") == .buildFixer)
+        #expect(AgentWorkerDispatchHint.classify(command: "npm run build:publish-docs") == .buildFixer)
+        #expect(AgentWorkerDispatchHint.classify(command: "go build ./cmd/deployment") == .buildFixer)
+        // Whole tokens, script names and paths still read as a release.
+        #expect(AgentWorkerDispatchHint.classify(command: "make deploy") == .opsRunner)
+        #expect(AgentWorkerDispatchHint.classify(command: "./deploy.sh prod") == .opsRunner)
+        #expect(AgentWorkerDispatchHint.classify(command: "ruby scripts/deploy") == .opsRunner)
+        #expect(AgentWorkerDispatchHint.classify(command: "npm run publish") == .opsRunner)
+        #expect(AgentWorkerDispatchHint.classify(command: "npm publish --access public") == .opsRunner)
+    }
 }
