@@ -250,6 +250,10 @@ final class AppState: ObservableObject {
     /// but changed arguments or task intent receive a fresh verdict. Denials
     /// are never cached, and danger-tier commands never reach the judge.
     var cachedJudgeAllowedVerdicts: [String: Date] = [:]
+    /// Commands the safety judge could not settle (unconfigured or
+    /// unreachable), so the approval explanation can say why the user is
+    /// being asked instead of guessing. Never consulted for approval.
+    var safetyJudgeMisses = AgentSafetyJudgeMissLedger()
     /// User-tunable base font size (in points) for the Agent chat
     /// transcript body — applies to user/assistant message prose and
     /// rendered Markdown blocks. Supporting chat chrome (tool summaries,

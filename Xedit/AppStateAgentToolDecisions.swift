@@ -1243,30 +1243,48 @@ extension AppState {
             // rather than silently degrading forever.
             noteSafetyJudgeUnconfigured()
         }
+        var retryNotes: [String] = []
         for candidate in candidates {
             effectiveConfiguration = candidate
-            do {
-                result = try await AgentClient(configuration: candidate, session: safetyJudgeInferenceEnvironment?.session,
-                    someIMContext: taskRuntime.flatMap { Self.goalPlanningSomeIMContext(configuration: candidate, runtime: $0) },
-                    requestLedger: budget?.requestLedger).budgetedSafetyJudge(
-                    command: judgeCommand,
-                    historyContext: kind == .maliciousIntent ? "" : safetyJudgeHistoryContext(),
-                    toolName: toolName,
-                    taskContext: judgeTaskContext,
-                    environmentTrust: trustPayload,
-                    kind: kind, executionBudget: budget
-                )
-            } catch {
+            for attempt in 1...2 {
+                let attemptStartedAt = Date()
+                do {
+                    result = try await AgentClient(configuration: candidate, session: safetyJudgeInferenceEnvironment?.session,
+                        someIMContext: taskRuntime.flatMap { Self.goalPlanningSomeIMContext(configuration: candidate, runtime: $0) },
+                        requestLedger: budget?.requestLedger).budgetedSafetyJudge(
+                        command: judgeCommand,
+                        historyContext: kind == .maliciousIntent ? "" : safetyJudgeHistoryContext(),
+                        toolName: toolName,
+                        taskContext: judgeTaskContext,
+                        environmentTrust: trustPayload,
+                        kind: kind, executionBudget: budget
+                    )
+                } catch {
+                    try Task.checkCancellation()
+                    guard taskRuntime?.goalAuthorizationRevision == scope else { throw CancellationError() }
+                    throw error
+                }
                 try Task.checkCancellation()
                 guard taskRuntime?.goalAuthorizationRevision == scope else { throw CancellationError() }
-                throw error
+                // 同一台裁判的瞬时失败（5xx / 429 / 快速网络错误）先原地重试
+                // 一次，再换候选、再落人工：一次网关抖动不该把整条命令推给人。
+                guard attempt == 1,
+                      case .unavailable(let reason) = result,
+                      AgentSafetyJudgeRetry.shouldRetry(
+                          reason: reason,
+                          attemptDuration: Date().timeIntervalSince(attemptStartedAt)
+                      ) else { break }
+                retryNotes.append("retried after \(reason)")
+                try await Task.sleep(for: AgentSafetyJudgeRetry.delay)
+                try budget?.check()
             }
-            try Task.checkCancellation()
-            guard taskRuntime?.goalAuthorizationRevision == scope else { throw CancellationError() }
             guard case .unavailable(let reason) = result else { break }
             if fallbackDetail.isEmpty {
                 fallbackDetail = "fallback after \(reason)"
             }
+        }
+        if !retryNotes.isEmpty {
+            fallbackDetail = (retryNotes + [fallbackDetail]).filter { !$0.isEmpty }.joined(separator: "; ")
         }
         let verdict: String
         let detail: String
@@ -1288,6 +1306,14 @@ extension AppState {
             if case .unavailable = result { return true }
             return false
         }()
+        if case .unavailable = result, !allowedWithoutVerdict {
+            safetyJudgeMisses.record(
+                candidates.isEmpty ? .unconfigured : .unreachable,
+                toolName: toolName, command: command
+            )
+        } else {
+            safetyJudgeMisses.clear(toolName: toolName, command: command)
+        }
         AgentSandboxAuditLog.recordJudge(
             toolName: toolName,
             command: command,

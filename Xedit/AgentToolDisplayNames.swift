@@ -125,6 +125,16 @@ nonisolated enum AgentToolDisplay {
     static func approvalArgumentsLines(
         for arguments: [String: AgentJSONValue]
     ) -> String {
+        approvalArguments(for: arguments)
+            .map { "\($0.label)：\(approvalValueSummary($0.value))" }
+            .joined(separator: "\n")
+    }
+
+    /// 审批卡与审批解释共用的参数顺序和中文名。卡片要摘要，解释模型要
+    /// 原文——两边只在「值怎么写」上分叉，筛选和排序必须是同一份。
+    static func approvalArguments(
+        for arguments: [String: AgentJSONValue]
+    ) -> [(label: String, value: AgentJSONValue)] {
         arguments
             .filter { !$0.key.hasPrefix("_") }
             .sorted {
@@ -132,15 +142,14 @@ nonisolated enum AgentToolDisplay {
                 let right = argumentOrder[$1.key] ?? Int.max
                 return left == right ? $0.key < $1.key : left < right
             }
-            .map { "\(argumentName(for: $0.key))：\(approvalValueSummary($0.value))" }
-            .joined(separator: "\n")
+            .map { (label: argumentName(for: $0.key), value: $0.value) }
     }
 
     private static func argumentName(for key: String) -> String {
         argumentNames[key] ?? key
     }
 
-    private static func approvalValueSummary(_ value: AgentJSONValue) -> String {
+    static func approvalValueSummary(_ value: AgentJSONValue) -> String {
         switch value {
         case .bool(let enabled): return enabled ? "是" : "否"
         case .null: return "空"
