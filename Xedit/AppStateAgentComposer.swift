@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import WillDeepCore
 
 nonisolated enum AgentComposerLocalPanelTrigger {
     enum Kind: Equatable, Sendable {
@@ -2709,21 +2710,32 @@ extension AppState {
         sendAgentMessage()
     }
 
-    /// 「开新会话继续」。新会话绑定当前会话的 workspace —— 接力提示词
-    /// 通篇是分支、文件、符号、命令这类工作区事实(交接提示词明确要求
-    /// 它指向可续的落盘状态),换一个根目录它一句都对不上。
+    /// 「开新会话继续」。参数是整份交接(footer 图标上挂的就是它),包成
+    /// `relaySessionPrompt` 再发:新会话没有原对话,只带 NEXT PROMPT 一句
+    /// 的话 DONE / ANCHORS / REMAINING 全丢。
+    ///
+    /// 新会话照原会话的工作区、模型、审批档位等设置开(见
+    /// `makeContextRunwayRelaySession`) —— 交接通篇是分支、文件、命令这类
+    /// 工作区事实,换一个根目录它一句都对不上。远程工作区接不了完整继承,
+    /// 退回只绑本地路径的老做法。
     ///
     /// 同样直接发送。新会话的输入框必然是空的,没有草稿要顾。
-    func startAgentSessionWithHandoffRelayPrompt(_ prompt: String) {
-        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    func startAgentSessionWithHandoffRelayPrompt(_ handover: String) {
+        let trimmed = handover.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let workspacePath = activeRuntime?.session.workspaceRootPath
-        let session = startNewAgentSession(inWorkspaceAt: workspacePath)
+        let source = activeRuntime
+        let relay = source.flatMap { makeContextRunwayRelaySession(from: $0, makeActive: true) }
+            ?? agentRuntimes[startNewAgentSession(inWorkspaceAt: source?.session.workspaceRootPath).id]
         // `sendAgentMessage()` 打的是 `activeRuntime`。新会话没能接管
         // 活跃位时宁可把提示词停在它自己的输入框里,也不能把这一句发
         // 进上一个会话 —— 那是把接力发回给刚说自己跑不动了的那一边。
-        guard let runtime = agentRuntimes[session.id] else { return }
-        runtime.input = trimmed
+        guard let runtime = relay else { return }
+        let session = runtime.session
+        runtime.input = AgentContextRunwayPolicy.relaySessionPrompt(
+            handover: trimmed,
+            sourceSessionTitle: source?.session.title ?? "",
+            reason: .operatorRequested
+        )
         isAgentPanelVisible = true
         guard activeAgentSessionID == session.id else {
             agentComposerFocusRevision += 1

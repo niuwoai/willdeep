@@ -160,4 +160,41 @@ nonisolated struct AgentContextRunwayPolicyTests {
         #expect(AgentContextRunwayPolicy.maximumHandoverRetries >= 1)
         #expect(AgentContextRunwayPolicy.maximumHandoverRetries <= 3)
     }
+
+    /// 以前开新会话只带 NEXT PROMPT 一句，DONE / ANCHORS / REMAINING 全丢。
+    @Test("开新会话接力带上完整交接并说明没有旧对话")
+    func relaySessionPromptCarriesWholeHandover() {
+        let handover = """
+        PAUSE: context runway
+        DONE: parser rewritten, `swift test` 12/12
+        ANCHORS: branch feat/x, Sources/Parser.swift
+        REMAINING: wire CLI flag
+        NEXT PROMPT: Add the --strict flag in Sources/CLI.swift
+        """
+        let prompt = AgentContextRunwayPolicy.relaySessionPrompt(
+            handover: handover,
+            sourceSessionTitle: "解析器重写",
+            reason: .compressionFailed
+        )
+
+        #expect(prompt.contains("ANCHORS: branch feat/x, Sources/Parser.swift"))
+        #expect(prompt.contains("DONE: parser rewritten"))
+        #expect(prompt.contains("NEXT PROMPT: Add the --strict flag"))
+        #expect(prompt.contains("could not be compressed"))
+        #expect(prompt.contains("does not contain the transcript"))
+        #expect(prompt.contains("\"解析器重写\""))
+    }
+
+    @Test("手动接力与无标题来源的措辞")
+    func relaySessionPromptOperatorWording() {
+        let prompt = AgentContextRunwayPolicy.relaySessionPrompt(
+            handover: "NEXT PROMPT: go",
+            sourceSessionTitle: "  ",
+            reason: .operatorRequested
+        )
+
+        #expect(prompt.contains("operator chose"))
+        #expect(!prompt.contains("could not be compressed"))
+        #expect(prompt.contains("transcript of the previous session;"))
+    }
 }

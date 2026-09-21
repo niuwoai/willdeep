@@ -138,6 +138,49 @@ public nonisolated enum AgentContextRunwayPolicy {
         """
     }
 
+    /// Why a handover is being carried into a brand-new session.
+    public enum RelayReason: Equatable, Sendable {
+        /// Compression could not reclaim the window, so resuming in place
+        /// would only hit the same ordered stop again.
+        case compressionFailed
+        /// The operator pressed "continue in a new session".
+        case operatorRequested
+    }
+
+    /// First message of a session that continues a runway handover.
+    ///
+    /// Until this existed the relay carried only the NEXT PROMPT sentence.
+    /// That sentence is written for a resume *inside* the old conversation,
+    /// where DONE / ANCHORS / REMAINING are still on screen; in a fresh
+    /// session they were simply gone — the branch, the modified files, the
+    /// test results the handover prompt had insisted be written down. So the
+    /// whole handover travels, and the new session is told plainly that it
+    /// does not have the old transcript.
+    public static func relaySessionPrompt(
+        handover: String,
+        sourceSessionTitle: String,
+        reason: RelayReason
+    ) -> String {
+        let why: String
+        switch reason {
+        case .compressionFailed:
+            why = "The previous session's context window filled up and could not be compressed, so the host moved the work here automatically."
+        case .operatorRequested:
+            why = "The operator chose to continue the previous session's work in a new session."
+        }
+        let title = sourceSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = title.isEmpty ? "the previous session" : "the previous session (\"\(title)\")"
+        return """
+        === CONTEXT RUNWAY RELAY ===
+        \(why) This session does not contain the transcript of \(source); the handover below, written by that session just before it stopped, is everything that carried over.
+
+        \(handover.trimmingCharacters(in: .whitespacesAndNewlines))
+
+        === END OF HANDOVER ===
+        Continue the work: start with the NEXT PROMPT above, then the REMAINING items in order. ANCHORS describe the last observed state, not a guarantee — re-check files, branches and external resources before relying on them. Reuse DONE evidence only when its inputs are unchanged. Do not restart the original task from scratch and do not restate the handover.
+        """
+    }
+
     /// Instruction handed back to the model after compression has reclaimed
     /// the window. The handover the model just wrote survives compression as
     /// part of the kept tail, so this only has to point at it rather than

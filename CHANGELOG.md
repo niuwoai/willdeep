@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.394.0-rc1 - 2026-09-21
+
+### Added
+
+- **跑道交接后压缩失败，自动带着整份交接开新会话接力。** 过去上下文到 90% 时模型会写好交接（PAUSE / DONE / ANCHORS / REMAINING / NEXT PROMPT），压缩成功就原地续跑；压缩失败会话就停住，只剩一条「Context compression failed」报错，没人值守的任务就这样卡死。现在压缩失败时（`runContextCompression` 的失败分支）改为调用 `relayContextRunwayAfterCompressionFailure`：
+  - 新会话的第一条消息是 `AgentContextRunwayPolicy.relaySessionPrompt`：整份交接加一段说明，告诉模型这里没有原对话、ANCHORS 要先核对再用、不要从头重来。
+  - 继承原会话的工作区、项目归属、模型与供应商（含省心托管状态）、审批档位、执行器、专家、沙箱与子 Agent 偏好、知识库设置。标题为「接力：原标题」。
+  - 续跑次数接着原会话往下数（`contextRunwayResumeCount + 1`），避免「压缩失败 → 新会话 → 又满 → 又失败」一直转到额度用光。
+  - 用户正看着原会话才切过去，在看别的会话就不抢焦点。原会话留一行「上下文压缩失败，已带着交接转到新会话继续：…」。这一行复用 `.responseStopped` 事件，没有新增枚举值：旧版本对会话消息是严格解码，遇到不认识的事件值整个会话都读不出来，回滚后会从侧边栏消失。
+  - 三种情况不接力，照旧停住：Goal（目标、验收、预算挂在原会话上，新会话接不住）、远程工作区（新会话只能按本地路径创建）、最后一条回复不是交接。用户在压缩期间发了新消息时，也以用户的消息为准。
+- **页脚「开新会话继续」改为带上完整交接。** 以前只带 NEXT PROMPT 一句，DONE / ANCHORS / REMAINING 在新会话里全丢；现在点击后发出的是同一份 `relaySessionPrompt`（措辞标明是操作员主动接力），新会话同样继承原会话设置。远程工作区退回只绑定本地路径的老做法。
+- 新增测试：`AgentContextRunwayRelayTests`（5 项，覆盖继承、计数、留痕、焦点、三种拒绝、交接提取）；`AgentContextRunwayPolicyTests` 新增 `relaySessionPromptCarriesWholeHandover`、`relaySessionPromptOperatorWording`。
+- 新增本地化 key `context-runway-handoff.relay-session-title`、`context-runway-handoff.relayed-notice`（en / zh-Hans / ja / es / fr）。
+
 ## 1.393.0-rc2 - 2026-09-21
 
 ### Fixed

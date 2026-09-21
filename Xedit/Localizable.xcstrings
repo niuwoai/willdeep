@@ -32396,6 +32396,8 @@
         }
       }
     },
+    "context-runway-handoff.relay-session-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Continued: %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Continuación: %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Suite : %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "続き：%@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "接力：%@" } } } },
+    "context-runway-handoff.relayed-notice" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Context compression failed, so the work continued in a new session with the handover: %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "La compresión del contexto falló, así que el trabajo continuó en una sesión nueva con el relevo: %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "La compression du contexte a échoué ; le travail continue dans une nouvelle session avec le relais : %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "コンテキストの圧縮に失敗したため、引き継ぎ内容とともに新しいセッションで作業を続けています：%@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上下文压缩失败，已带着交接转到新会话继续：%@" } } } },
     "context-runway-handoff.resume-tooltip" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {

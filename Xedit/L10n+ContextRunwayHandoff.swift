@@ -24,5 +24,22 @@ extension L10n {
             localized: "context-runway-handoff.new-session-tooltip",
             defaultValue: "Continue in a new session with the handover prompt"
         )
+        /// Sidebar title of the session a handover was carried into.
+        static func relaySessionTitle(_ sourceTitle: String) -> String {
+            let template = String(
+                localized: "context-runway-handoff.relay-session-title",
+                defaultValue: "Continued: %@"
+            )
+            return String(format: template, sourceTitle)
+        }
+        /// Line left in the original session after compression failed and
+        /// the work moved on.
+        static func relayedNotice(_ relayTitle: String) -> String {
+            let template = String(
+                localized: "context-runway-handoff.relayed-notice",
+                defaultValue: "Context compression failed, so the work continued in a new session with the handover: %@"
+            )
+            return String(format: template, relayTitle)
+        }
     }
 }

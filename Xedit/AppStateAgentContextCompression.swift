@@ -184,10 +184,12 @@ extension AppState {
                 resumeAfterContextRunwayStopIfNeeded(for: runtime)
             } else if runtime.pendingContextRunwayResume {
                 // Compression failed, so the window is still at 90%. Resuming
-                // would burn a request to hit the same ordered stop again.
-                // Park instead: the error banner already explains why, and
-                // the user can retry compression or start a fresh session.
+                // here would burn a request to hit the same ordered stop
+                // again — carry the handover into a new session instead. When
+                // that is refused (Goal, remote workspace, no handover) the
+                // session parks and the error banner explains why.
                 runtime.pendingContextRunwayResume = false
+                relayContextRunwayAfterCompressionFailure(for: runtime)
             }
             // A background job/media task/subagent finishing while
             // `isCompressingContext` was set had its auto-resume guarded

@@ -609,9 +609,13 @@ enum AgentChatHistoryRenderer {
                 // 上下文跑道交接里的 `NEXT PROMPT:` 段是给宿主看的接力
                 // 指令,不是给人读的段落 —— 宿主本来就会压缩后自动拿它
                 // 续跑。正文里去掉,改成 footer 上两个接力图标。
+                //
+                // 「开新会话继续」带走的是整份交接,不是 NEXT PROMPT 一句:
+                // 新会话没有这段对话,DONE / ANCHORS / REMAINING 不带过去
+                // 就丢了。
                 let handoff = AgentContextRunwayHandoffDisplay.extract(from: extraction.visibleContent)
                 body = handoff.visibleContent
-                handoffRelayPrompt = handoff.relayPrompt
+                handoffRelayPrompt = handoff.isHandoff ? extraction.visibleContent : nil
                 progressPresentation = message.id == latestProgressCardMessageID
                     ? extraction.presentation
                     : nil
