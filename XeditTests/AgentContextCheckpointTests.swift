@@ -327,4 +327,101 @@ struct AgentContextCheckpointTests {
         }
         #expect(f.runtime.contextCheckpoint == nil)
     }
+
+    /// 真实会话里攒到过 9966 条写集路径（几乎全是 `.tmp/gocache` 之类的构建
+    /// 缓存），检查点 842KB，压缩每次都报「必需任务状态超出检查点上限」。
+    @Test("构建缓存灌满写集时检查点仍在上限内，源码路径优先保留")
+    func oversizedEditedPathsStayWithinCheckpointLimit() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let cachePaths = (0..<10_000).map { ".tmp/gocache/\(String(format: "%02x", $0 % 256))/\(UUID().uuidString)-d" }
+        let sourcePaths = ["internal/gateway/handler.go", "web/package.json", "internal/version/version.go"]
+        f.runtime.agentEditedPaths = Set(cachePaths + sourcePaths)
+        var requests = 0
+        f.app.contextCompressionSummaryOperation = { _, _ in requests += 1; return "摘要" }
+        f.runtime.isCompressingContext = true
+        await f.app.runContextCompression(for: f.runtime, head: Array(f.runtime.messages.prefix(2)),
+            tail: Array(f.runtime.messages.suffix(1)), configurations: [.default])
+        #expect(requests == 1)
+        #expect(f.runtime.errorMessage == nil)
+        let checkpoint = try #require(f.runtime.contextCheckpoint)
+        #expect(checkpoint.attributedPaths.count == AgentContextCheckpoint.attributedPathLimit)
+        #expect(checkpoint.omittedAttributedPathCount == 10_003 - AgentContextCheckpoint.attributedPathLimit)
+        #expect(Set(sourcePaths).isSubset(of: Set(checkpoint.attributedPaths)))
+        #expect(try checkpoint.encoded().count <= AgentContextCheckpoint.maximumEncodedBytes)
+        // 写集本身不截：worktree 卡片和后续归因仍要看全量。
+        #expect(f.runtime.agentEditedPaths.count == 10_003)
+    }
+
+    /// 现场：151 条用户输入 183KB，其中 117KB 是每轮注入的技能路由候选、
+    /// 29KB 是附件全文，用户亲手打的只有 20KB；上下文才 75% 压缩就失败。
+    @Test("宿主拼进用户消息的本轮上下文不进检查点，只留用户原话和附件名")
+    func hostSplicedTurnContextStaysOutOfCheckpoint() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let routing = (0..<40).map { "- `skill-\($0)` — " + String(repeating: "描述", count: 50) }.joined(separator: "\n")
+        func spliced(_ typed: String) -> String {
+            """
+            \(AgentAttachedPromptProtocol.preludeHeader)
+
+            ### File: 语音方案.docx
+
+            <untrusted-attachment path="语音方案.docx">
+            \(String(repeating: "附件正文", count: 600))
+            </untrusted-attachment>
+
+            ### Skill routing candidates — metadata only
+
+            \(routing)
+
+            \(AgentAttachedPromptProtocol.userTextBoundary)
+
+            \(typed)
+            """
+        }
+        let turns = (0..<60).map { AgentMessage(role: .user, content: spliced("第 \($0) 轮：不要发布，只改文档")) }
+        #expect(turns.reduce(0) { $0 + $1.content.utf8.count } > AgentContextCheckpoint.maximumEncodedBytes)
+        f.runtime.messages = turns + f.runtime.messages
+        var requests = 0
+        f.app.contextCompressionSummaryOperation = { _, _ in requests += 1; return "摘要" }
+        f.runtime.isCompressingContext = true
+        await f.app.runContextCompression(for: f.runtime, head: Array(f.runtime.messages.prefix(62)),
+            tail: Array(f.runtime.messages.suffix(1)), configurations: [.default])
+        #expect(requests == 1)
+        #expect(f.runtime.errorMessage == nil)
+        let checkpoint = try #require(f.runtime.contextCheckpoint)
+        let first = try #require(checkpoint.userInputs.first)
+        #expect(first.text == "第 0 轮：不要发布，只改文档")
+        #expect(first.attachedFiles == ["语音方案.docx"])
+        #expect(checkpoint.userInputs.contains { $0.text == "不要改无关文件；必须实际验证。" })
+        let json = String(decoding: try checkpoint.encoded(), as: UTF8.self)
+        #expect(!json.contains("Skill routing candidates"))
+        #expect(!json.contains("附件正文"))
+    }
+
+    @Test("写集截短：未超限原样保留，超限先源码后生成物，同档浅路径优先")
+    func boundedAttributedPathsRanking() {
+        let small = AgentContextCheckpoint.boundedAttributedPaths(["b.swift", "a.swift"])
+        #expect(small.kept == ["a.swift", "b.swift"])
+        #expect(small.omitted == 0)
+
+        let limit = AgentContextCheckpoint.attributedPathLimit
+        let generated = (0..<limit).map { "node_modules/pkg\($0)/index.js" }
+        let deepSource = (0..<limit).map { "src/a/b/c/file\($0).swift" }
+        let bounded = AgentContextCheckpoint.boundedAttributedPaths(generated + deepSource + ["README.md", "~/Sites/x/notes.md"])
+        #expect(bounded.kept.count == limit)
+        #expect(bounded.omitted == limit + 2)
+        #expect(bounded.kept.contains("README.md"))
+        #expect(bounded.kept.contains("~/Sites/x/notes.md"))
+        #expect(!bounded.kept.contains { $0.hasPrefix("node_modules/") })
+        #expect(bounded.kept == bounded.kept.sorted())
+    }
+
+    @Test("旧检查点没有截短计数字段也能解码")
+    func legacyCheckpointDecodesWithoutOmittedPathCount() throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let checkpoint = try f.ticket().checkpoint
+        #expect(checkpoint.omittedAttributedPathCount == nil)
+        let json = String(decoding: try checkpoint.encoded(), as: UTF8.self)
+        #expect(!json.contains("omittedAttributedPathCount"))
+        #expect(try JSONDecoder().decode(AgentContextCheckpoint.self, from: Data(json.utf8)) == checkpoint)
+    }
 }

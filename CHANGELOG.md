@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.393.0-rc2 - 2026-09-21
+
+### Fixed
+
+- **长会话在上下文才用到 75% 时就压缩失败，之后永远压不下去。** 横幅报「Context compression failed: 必需任务状态超出检查点上限」，每次重试都同样失败。75% 是自动压缩的触发线；失败跟窗口满不满无关，是压缩前生成的「必需任务状态检查点」超过了 128KB 硬上限。检查点里有两处东西被原样全量照抄，这次都改了：
+  - **用户输入把宿主拼进去的本轮上下文一起抄了进去（用户现场的根因）。** 发消息时宿主会把附件全文、技能正文、技能路由候选、工作区概览拼到 `content` 里，用 `<<<willdeep:user-message:v1>>>` 跟用户原话隔开。检查点原来存整段 `content`。用户现场（1.393.0-rc1，一个 3213 条消息的会话）有 151 条用户输入、共 183KB：其中 117KB 是 102 份每轮重新生成的「Skill routing candidates」列表，29KB 是一份 docx 附件全文，用户亲手打的字只有 20KB。现在 `UserInput.text` 改用 `AgentMessage.userAuthoredText`，即只存用户打的字；附件和技能只记名字（`attachedFiles` / `attachedSkills`），要原文用 `read_context_message` 按 `messageID` 取。用户原话本身仍然一字不截。
+  - **会话写集被构建缓存撑爆。** 写集（`agentEditedPaths`）来自 `git status -uall` 快照比对，工作区里没被 gitignore 的构建缓存会一个文件记一条。本机 303 个会话里有 7 个因此超过上限，最大的一个有 9966 条路径、842KB，其中 9500 多条是 `.tmp/gocache`、`.buildtmp/cache`、`.tmp/go-cache-vet` 下的 Go 缓存。
+  - 检查点里的 `attributedPaths` 现在最多保留 256 条（`AgentContextCheckpoint.attributedPathLimit`），挤掉的只记数量（`omittedAttributedPathCount`）。优先保留源码路径；隐藏目录和 `node_modules` / `build` / `dist` / `target` / `DerivedData` / `__pycache__` 下的排在后面；同档里浅路径优先。它只是一份索引，跟工具回执的 32 条上限是同一个道理；用户输入、Goal、计划照旧不截。
+  - 截的只是检查点里的副本。会话自己的写集、worktree 卡片和后续归因仍按全量。
+  - 已经卡住的会话不用迁移：检查点每次压缩都会从会话重新生成，下次压缩就能过。新字段都是可选的，旧检查点照常解码。
+  - 新增测试：`hostSplicedTurnContextStaysOutOfCheckpoint`、`oversizedEditedPathsStayWithinCheckpointLimit`、`boundedAttributedPathsRanking`、`legacyCheckpointDecodesWithoutOmittedPathCount`。
+  - 仍未做：用户亲手打的字按设计不截，超长会话理论上仍可能单靠它超过 128KB（现场 20KB，本机最大 45KB，离上限还远）。写集本身也还是会被未忽略的构建缓存撑大，worktree 卡片会把这些缓存算成 Agent 的改动；要治本得在归因时跳过生成物目录。
+
 ## 1.393.0-rc1 - 2026-09-21
 
 ### Added

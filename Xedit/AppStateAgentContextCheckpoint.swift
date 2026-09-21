@@ -24,10 +24,8 @@ extension AppState {
     func makeContextCheckpoint(for runtime: AgentRuntime, through id: UUID) throws -> AgentContextCheckpoint {
         guard let index = runtime.messages.firstIndex(where: { $0.id == id }) else { throw AgentContextCheckpoint.Failure.stale }
         let prefix = Array(runtime.messages.prefix(index + 1))
-        let inputs = prefix.filter { $0.role == .user && ($0.source == nil || $0.source == .operatorInput) }.map {
-            AgentContextCheckpoint.UserInput(messageID: $0.id, text: $0.content,
-                imageIDs: $0.images.map(\.id), textAttachmentIDs: $0.textAttachments.map(\.id))
-        }
+        let inputs = prefix.filter { $0.role == .user && ($0.source == nil || $0.source == .operatorInput) }
+            .map(AgentContextCheckpoint.UserInput.from)
         let goal = runtime.currentGoal.map {
             AgentContextCheckpoint.Goal(contractDigest: AgentGoalVerification.contractDigest($0), statement: $0.statement,
                 checklist: $0.checklist, budget: $0.continuationBudget, verificationPhase: $0.verification?.phase,
@@ -42,13 +40,14 @@ extension AppState {
         }
         let task = agentDispatchCoordinator.goals.first { $0.id == runtime.session.dispatchParentProjectID }?
             .tasks.first { $0.id == runtime.session.dispatchTaskID && $0.runtimeSessionID == runtime.id }
+        let paths = AgentContextCheckpoint.boundedAttributedPaths(runtime.agentEditedPaths)
         return AgentContextCheckpoint(version: AgentContextCheckpoint.schemaVersion, sessionID: runtime.id,
             throughMessageID: id, prefixDigest: try AgentGoalTaskAuthorization.digest(prefix),
             workspace: runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) },
             executionAgent: runtime.executionAgent, userInputs: inputs, goal: goal, plan: runtime.currentPlan,
-            attributedPaths: runtime.agentEditedPaths.sorted(), recentToolReceipts: receipts,
+            attributedPaths: paths.kept, recentToolReceipts: receipts,
             omittedToolReceiptCount: max(0, calls.count - receipts.count), pendingDecisionIDs: task?.pendingDecisionIDs ?? [],
-            roadmap: runtime.goalRoadmap)
+            roadmap: runtime.goalRoadmap, omittedAttributedPathCount: paths.omitted > 0 ? paths.omitted : nil)
     }
 
     func prepareContextCompression(for runtime: AgentRuntime, through id: UUID, sourceTokens: Int) throws -> ContextCompressionTicket {
