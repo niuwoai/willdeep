@@ -710,22 +710,26 @@ struct AgentStatsDashboard: View {
                     cellSize: AgentStatsDashboardLayout.maximumHeatmapCellSize
                 ) + 28
             )
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            selectedTab = .calendar
-        }
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint(L10n.StatsDashboard.usageCalendarOpenHelp)
-        .accessibilityIdentifier("stats-token-activity")
-        .accessibilityAction {
-            selectedTab = .calendar
+            // 只有格子区可点进日历。以前整块（含标题行）都是一个按钮，
+            // 标题行里的「全部 / 桌面 / CLI」「每日 / 每周 / 累计」在无障碍
+            // 树里被整块吞掉，点下去进的是日历而不是切换。
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedTab = .calendar
+            }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(L10n.StatsDashboard.usageCalendarOpenHelp)
+            .accessibilityIdentifier("stats-token-activity")
+            .accessibilityAction {
+                selectedTab = .calendar
+            }
         }
     }
 
     private var usageCalendar: some View {
         let usage = AgentUsageStats.dailyUsage(
-            for: appState.agentUsageSnapshots,
+            for: appState.agentUsageFilteredSnapshots,
+            cliRecords: appState.agentUsageFilteredCLIRecords,
             in: displayedMonth
         )
         return VStack(alignment: .leading, spacing: 14) {
@@ -909,9 +913,12 @@ struct AgentStatsDashboard: View {
         guard let interval = Calendar.current.dateInterval(of: .month, for: displayedMonth) else {
             return 0
         }
-        return appState.agentUsageSnapshots.count { session in
+        let cliSessions = Set(appState.agentUsageFilteredCLIRecords
+            .filter { interval.contains($0.timestamp) }
+            .map { $0.sessionID ?? $0.id.uuidString })
+        return appState.agentUsageFilteredSnapshots.count { session in
             session.messages.contains { interval.contains($0.createdAt) }
-        }
+        } + cliSessions.count
     }
 
     private func calendarDayFooter(_ usage: AgentDailyUsage?) -> String {
@@ -960,7 +967,8 @@ struct AgentStatsDashboard: View {
 
     private var selectedDailyDetail: AgentDailyUsageDetail {
         AgentUsageStats.dailyDetail(
-            for: appState.agentUsageSnapshots,
+            for: appState.agentUsageFilteredSnapshots,
+            cliRecords: appState.agentUsageFilteredCLIRecords,
             on: selectedDay
         )
     }
@@ -1248,11 +1256,13 @@ struct AgentStatsDashboard: View {
     private func renderShareImage() -> NSImage? {
         let detail = selectedDailyDetail
         let streak = AgentUsageStats.overview(
-            for: appState.agentUsageSnapshots,
+            for: appState.agentUsageFilteredSnapshots,
+            cliRecords: appState.agentUsageFilteredCLIRecords,
             now: selectedDay
         ).currentStreak
         let activity = AgentUsageStats.heatmap(
-            for: appState.agentUsageSnapshots,
+            for: appState.agentUsageFilteredSnapshots,
+            cliRecords: appState.agentUsageFilteredCLIRecords,
             weekCount: 1,
             now: selectedDay
         ).first ?? []

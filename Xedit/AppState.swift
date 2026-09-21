@@ -472,9 +472,8 @@ final class AppState: ObservableObject {
         // The newest request wins; the ones it laps were going to produce
         // superseded numbers anyway.
         agentUsageDashboardTask?.cancel()
-        let filter = agentUsageSourceFilter
-        let snapshots = filter.includes(.desktop) ? agentUsageSnapshots : []
-        let cliRecords = filter.includes(.cli) ? agentCLIUsageRecords : []
+        let snapshots = agentUsageFilteredSnapshots
+        let cliRecords = agentUsageFilteredCLIRecords
         agentUsageDashboardTask = Task { [weak self] in
             let model = await Task.detached(priority: .userInitiated) {
                 AgentUsageStats.dashboardModel(

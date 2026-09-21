@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.395.0-rc2 - 2026-09-21
+
+### Fixed
+
+- **用量日历与单日详情也合并 CLI，并跟随「全部 / 桌面 / CLI」切换。** 1.395.0-rc1 装到本机后实测：总览的「API 请求 · 近 7 天」已从 471 变成 2,045，但点进用量日历，9 月 21 日仍是桌面的 324.8k、9 月合计仍是纯桌面的 198.44M。日历按月汇总（`dailyUsage`）、当月会话数、单日详情（`dailyDetail`）和分享卡片都直接读桌面快照，漏接了 CLI 账本。现在它们和热力图一样，都读 `AppState.agentUsageFilteredSnapshots` / `agentUsageFilteredCLIRecords`：CLI 的 Token、会话、按同一张价目表估的费用、模型行、最大上下文都算进去。
+- **热力图标题行的切换按钮不再被「点进日历」吞掉。** 以前整个 Token 活动区块（含标题行）是一个按钮，点「CLI」在无障碍路径上触发的是进日历，筛选没切过去。现在只有格子区可点进日历，标题行的「全部 / 桌面 / CLI」「每日 / 每周 / 累计」各自独立。
+- 新增测试：`dailyUsageMergesCLI`、`dailyDetailMergesCLI`。
+
 ## 1.395.0-rc1 - 2026-09-21
 
 ### Added

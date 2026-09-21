@@ -917,6 +917,7 @@ nonisolated enum AgentUsageStats {
     /// usage days so the presentation layer can render a stable month grid.
     static func dailyUsage(
         for sessions: [AgentUsageSessionSnapshot],
+        cliRecords: [AgentCLIUsageRecord] = [],
         in month: Date,
         calendar sourceCalendar: Calendar = .current
     ) -> [AgentDailyUsage] {
@@ -928,7 +929,7 @@ nonisolated enum AgentUsageStats {
         }
 
         var tokenCountByDay: [Date: Int] = [:]
-        var sessionIDsByDay: [Date: Set<UUID>] = [:]
+        var sessionIDsByDay: [Date: Set<String>] = [:]
         var costByDay: [Date: Double] = [:]
 
         for session in sessions {
@@ -937,7 +938,7 @@ nonisolated enum AgentUsageStats {
                 let tokens = message.usageTokens.flatMap { $0 > 0 ? $0 : nil }
                     ?? estimateTokens(for: message)
                 tokenCountByDay[day, default: 0] += tokens
-                sessionIDsByDay[day, default: []].insert(session.id)
+                sessionIDsByDay[day, default: []].insert(session.id.uuidString)
 
                 guard message.role == .assistant, message.origin != .hostGenerated else { continue }
                 // Unpriced messages (no price row / delegated CLI) count as
@@ -946,6 +947,19 @@ nonisolated enum AgentUsageStats {
                     costByDay[day, default: 0] += cost
                 }
             }
+        }
+
+        // CLI 账本：Token 取账本报的数，费用按同一张价目表算（未定价的记 0）。
+        let cliByDay = Dictionary(grouping: cliRecords.filter { monthInterval.contains($0.timestamp) }) {
+            calendar.startOfDay(for: $0.timestamp)
+        }
+        for (day, records) in cliByDay {
+            tokenCountByDay[day, default: 0] += records.reduce(0) { $0 + $1.countedTokens }
+            for record in records {
+                sessionIDsByDay[day, default: []].insert("cli:" + (record.sessionID ?? record.id.uuidString))
+            }
+            costByDay[day, default: 0] += modelUsage(for: [], cliRecords: records)
+                .reduce(0) { $0 + ($1.estimatedCostUSD ?? 0) }
         }
 
         return dayRange.compactMap { dayNumber in
@@ -968,11 +982,14 @@ nonisolated enum AgentUsageStats {
 
     static func dailyDetail(
         for sessionSnapshots: [AgentUsageSessionSnapshot],
+        cliRecords: [AgentCLIUsageRecord] = [],
         on day: Date,
         calendar sourceCalendar: Calendar = .current
     ) -> AgentDailyUsageDetail {
         let dailySessions = sessions(on: day, from: sessionSnapshots, calendar: sourceCalendar)
-        let rows = modelUsage(for: dailySessions)
+        let dayInterval = sourceCalendar.dateInterval(of: .day, for: day)
+        let dailyRecords = cliRecords.filter { dayInterval?.contains($0.timestamp) == true }
+        let rows = modelUsage(for: dailySessions, cliRecords: dailyRecords)
         let promptTokens = rows.reduce(0) { $0 + $1.promptTokens }
         let cachedPromptTokens = rows.reduce(0) { $0 + $1.cachedPromptTokens }
         let maximumContextTokens = dailySessions
@@ -985,16 +1002,19 @@ nonisolated enum AgentUsageStats {
                 return max(0, message.usageTokens ?? 0)
             }
             .max() ?? 0
+        let maximumCLIContextTokens = dailyRecords
+            .map { max(0, $0.inputTokens ?? 0) + max(0, $0.outputTokens ?? 0) }
+            .max() ?? 0
 
         return AgentDailyUsageDetail(
             date: sourceCalendar.startOfDay(for: day),
-            overview: overview(for: dailySessions, now: day),
+            overview: overview(for: dailySessions, cliRecords: dailyRecords, now: day),
             modelUsage: rows,
             capabilityUsage: capabilityUsage(for: dailySessions),
             cacheHitRate: promptTokens > 0
                 ? Double(cachedPromptTokens) / Double(promptTokens)
                 : 0,
-            maximumContextTokens: maximumContextTokens
+            maximumContextTokens: max(maximumContextTokens, maximumCLIContextTokens)
         )
     }
 

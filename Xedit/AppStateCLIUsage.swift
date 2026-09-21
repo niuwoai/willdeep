@@ -19,6 +19,17 @@ extension AppState {
         !agentCLIUsageRecords.isEmpty
     }
 
+    /// Desktop snapshots under the current 全部 / 桌面 / CLI switch. Every
+    /// dashboard page reads through these two, so the calendar and day
+    /// detail can't drift from the heatmap again.
+    var agentUsageFilteredSnapshots: [AgentUsageSessionSnapshot] {
+        agentUsageSourceFilter.includes(.desktop) ? agentUsageSnapshots : []
+    }
+
+    var agentUsageFilteredCLIRecords: [AgentCLIUsageRecord] {
+        agentUsageSourceFilter.includes(.cli) ? agentCLIUsageRecords : []
+    }
+
     /// Parses whatever the CLI appended since the last pass, off the main
     /// thread. The reader is a value type carrying its per-file cursors, so it
     /// travels to the background task and back instead of being shared.

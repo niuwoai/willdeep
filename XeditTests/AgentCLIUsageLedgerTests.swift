@@ -287,6 +287,45 @@ struct AgentCLIUsageLedgerTests {
         #expect(snapshot.localAllTime.requestCount == 1)
     }
 
+    /// 1.395.0-rc1 上线后发现：热力图合并了 CLI，点进用量日历，21 日还是
+    /// 桌面的 324.8k——日历与单日详情直接读桌面快照。
+    @Test("用量日历按月汇总合并 CLI：Token、会话数、费用")
+    func dailyUsageMergesCLI() throws {
+        let now = Date()
+        let cli = [
+            Self.record(at: now, session: "a"),
+            Self.record(at: now, session: "a"),
+            Self.record(at: now, session: "b"),
+        ]
+        let desktopOnly = AgentUsageStats.dailyUsage(for: [], in: now)
+        let merged = AgentUsageStats.dailyUsage(for: [], cliRecords: cli, in: now)
+        let day = Calendar.current.startOfDay(for: now)
+        let before = try #require(desktopOnly.first { $0.date == day })
+        let after = try #require(merged.first { $0.date == day })
+        #expect(before.tokenCount == 0)
+        #expect(after.tokenCount == 3_300)
+        #expect(after.sessionCount == 2)
+    }
+
+    @Test("单日详情合并 CLI：总览、模型行、最大上下文")
+    func dailyDetailMergesCLI() throws {
+        let now = Date()
+        let yesterday = now.addingTimeInterval(-86_400)
+        let detail = AgentUsageStats.dailyDetail(
+            for: [],
+            cliRecords: [
+                Self.record(at: now, input: 50_000, cached: 40_000, output: 2_000),
+                Self.record(at: yesterday),
+            ],
+            on: now
+        )
+        #expect(detail.overview.totalTokens == 52_000)
+        #expect(detail.modelUsage.count == 1)
+        #expect(detail.modelUsage.first?.sources == [.cli])
+        #expect(detail.maximumContextTokens == 52_000)
+        #expect(abs(detail.cacheHitRate - 0.8) < 0.0001)
+    }
+
     @Test("没有 CLI 记录时模型拆分与原实现逐项相同")
     func desktopOnlyModelUsageIsUnchanged() {
         let now = Date()
