@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-21 | Current version: v1.395.0-rc4
+> Last updated: 2026-09-22 | Current version: v1.396.0-rc1
+
+内置配置管理插件 willdeep-config（1.396.0-rc1）：在 App 里查看、编辑、校验和备份 WillDeep 的 TOML 配置，随安装包提供，无需另装。
 
 Agent 用内置浏览器时，侧栏浏览器会在工具执行前自动打开（1.395.0-rc4），后台会话不抢当前侧栏；`embedded_browser_navigate` 等页面加载完再返回。内置浏览器的 UA 带上 Safari 标记，百度等站点不再在 http 与 https 之间来回跳。
 

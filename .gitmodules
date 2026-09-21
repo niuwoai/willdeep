@@ -31,3 +31,6 @@
 [submodule "PluginExamples/history-recall"]
 	path = PluginExamples/history-recall
 	url = git@github.com:niuwoai/willdeep-history-recall.git
+[submodule "PluginExamples/config"]
+	path = PluginExamples/config
+	url = git@github.com:niuwoai/willdeep-config.git

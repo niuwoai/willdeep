@@ -784,8 +784,9 @@ struct AgentPluginSystemTests {
         for name in [
             "project-overview", "issue-panel", "tetris", "arcade",
             "session-vitality", "favorites", "todo", "history-recall",
-            "video-studio", "hive-defense",
+            "video-studio", "hive-defense", "config/plugin",
         ] {
+            // willdeep-config 的插件本体在子模块的 plugin/ 目录里。
             let packageURL = name == "arcade"
                 ? arcadeRuntimePackage
                 : repositoryRoot.appendingPathComponent("PluginExamples/\(name)")

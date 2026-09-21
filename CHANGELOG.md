@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.396.0-rc1 - 2026-09-22
+
+### Added
+
+- **内置 willdeep-config 配置管理插件（0.2.0）。** 以子模块 `PluginExamples/config`（`niuwoai/willdeep-config`，锁在 `v0.2.0`）接入，随 App 打进 `BundledPlugins/config`：`.codex-plugin`、`.willdeep-plugin`、`mcp.json`、Ruby stdio 服务端 `server/` 与页面 `ui/index.html`。它的插件本体在仓库的 `plugin/` 子目录，打包脚本新增 `bundle_plugin_from <id> <源目录>`，原有 `bundle_plugin` 改为调用它，其它插件的打包结果不变。
+- 短剧插件（video-studio）已是最新提交 `cb8bd36`（v0.28.0-rc5 之上的 streamable-http 两个修复），本版未变。
+- 测试：`repositoryExamplesPassTheProductionLoader` 加入 `config/plugin`，用生产加载器校验清单。
+
 ## 1.395.0-rc4 - 2026-09-21
 
 ### Fixed
