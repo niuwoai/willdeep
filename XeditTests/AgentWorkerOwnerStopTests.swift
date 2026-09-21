@@ -7,10 +7,15 @@ import Testing
 /// 20 秒会在桩还没被调度时先到点，断言于是拿到 firstContactTimeout 而不是它
 /// 要验的那个错误。拉开的是测试的证据窗口，产品默认值一个字没动。
 /// 45 秒仍在 suite 的 .timeLimit 之内，也仍低于 workerRequestTimeout。
+///
+/// suite 时限从 1 分钟放到 3 分钟：`workerPropagatesRealApprovalFailure` 在满载
+/// 时先等首轮联系（最长 45 秒），再等一轮同样要 MainActor 调度的裁判请求，两段
+/// 叠起来会越过 1 分钟——2026-09-21 在 Xcode 27 上的发版全量里连红两次，单跑
+/// 1.5 秒全过。时限只是防挂死的兜底，断言验的是抛出哪种错误，放宽不削弱判据。
 private let testFirstContactTimeout: TimeInterval = 45
 
 @MainActor
-@Suite("Worker 宿主停止传播", .serialized, .timeLimit(.minutes(1)))
+@Suite("Worker 宿主停止传播", .serialized, .timeLimit(.minutes(3)))
 struct AgentWorkerOwnerStopTests {
     @MainActor private struct Fixture {
         let app: AppState

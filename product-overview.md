@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-21 | Current version: v1.394.0-rc4
+> Last updated: 2026-09-21 | Current version: v1.394.0-rc5
 
 上下文跑道交接后压缩失败，会自动带着整份交接开新会话接着跑（1.394.0-rc1）。新会话继承原会话的工作区、模型与供应商、审批档位、执行器和沙箱设置，续跑次数接着原会话往下数；原会话留一行「已转到新会话」。Goal、远程工作区、找不到交接消息这三种情况不接力，照旧停住。页脚「开新会话继续」也改为带上完整交接（PAUSE / DONE / ANCHORS / REMAINING / NEXT PROMPT），不再只带 NEXT PROMPT 一句。
 

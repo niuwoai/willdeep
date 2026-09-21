@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.394.0-rc5 - 2026-09-21
+
+### Fixed
+
+- **两个用桩的 Worker 套件在满载全量里撞 1 分钟时限。** 本机升到 Xcode 27 后第一次发版，全量测试里 `AgentWorkerOwnerStopTests.workerPropagatesRealApprovalFailure` 连续两次「超过 1 分钟执行时限」，单独跑 1.5 秒全过；今天更早一次发版里 `AgentPlanningBudgetTransportTests.structuredRunnerUsesActualLedger` 也这样红过一次（单跑 0.135 秒）。和 2026-09-12 `3273071a` 修的是同一类：这些套件全是 `@MainActor`，Swift Testing 跨套件并行时抢同一个主执行器，满载时一次等待就可能耗满为测试放宽过的 45 秒首轮联系，再叠一轮裁判请求就越过 1 分钟。
+  - 两个套件的 `.timeLimit` 从 1 分钟放到 3 分钟。时限只是防挂死的兜底，断言验的是抛出哪种错误，放宽不削弱判据；产品超时一个字没动。
+  - 同一轮全量里 `AgentPluginAuditLogTests` 的两条「等文件落盘」也红过一次，重跑即过、单跑全过，未改动，继续观察。
+- 本机开发环境备忘：升到 Xcode 27 后要先 `sudo xcodebuild -license accept`、`sudo xcodebuild -runFirstLaunch`，再 `xcodebuild -downloadComponent MetalToolchain`（`Shaders.metal` 需要，Xcode 26 起 Metal 工具链不再随 Xcode 自带），否则 git 与构建都会被拦。
+
 ## 1.394.0-rc4 - 2026-09-21
 
 ### Fixed

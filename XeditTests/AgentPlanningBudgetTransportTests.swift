@@ -7,10 +7,14 @@ import Testing
 /// 20 秒会在桩还没被调度时先到点，断言于是拿到 firstContactTimeout 而不是它
 /// 要验的那个错误。拉开的是测试的证据窗口，产品默认值一个字没动。
 /// 45 秒仍在 suite 的 .timeLimit 之内，也仍低于 workerRequestTimeout。
+///
+/// suite 时限从 1 分钟放到 3 分钟：`structuredRunnerUsesActualLedger` 带两个参数
+/// 串行跑，满载时每个都可能等满首轮联系，叠起来越过 1 分钟——2026-09-21 发版
+/// 全量里红过一次，单跑 0.135 秒全过。时限只是防挂死的兜底，放宽不削弱判据。
 private let testFirstContactTimeout: TimeInterval = 45
 
 @MainActor
-@Suite("规划实际 streaming 账本", .serialized, .timeLimit(.minutes(1)))
+@Suite("规划实际 streaming 账本", .serialized, .timeLimit(.minutes(3)))
 struct AgentPlanningBudgetTransportTests {
     @Test("结构化结果及无效结构重试都受真实请求账本限制", arguments: [true, false])
     func structuredRunnerUsesActualLedger(_ valid: Bool) async throws {
