@@ -40,6 +40,9 @@ nonisolated enum AgentInputSuggestion {
     - One line, at most 60 characters. No quotes, no prefixes like "User:", no explanation.
     - If the assistant asked a yes/no question, answer it the way the user most likely would.
     - Never write in the assistant's voice (no "好的，我来…", "Sure, I will…").
+    - Finished work usually still has a next step (commit, open a PR, deploy, test more): suggest it.
+    - Output NONE only when the work is fully wrapped up (already committed, merged or released)
+      or the conversation is ending. Never fill the gap with thanks, greetings or goodbyes.
     - If there is no obvious next step, output exactly NONE.
     """
 
@@ -64,8 +67,12 @@ nonisolated enum AgentInputSuggestion {
     private static let labelPrefixes = [
         "user:", "user：", "用户:", "用户：", "next:", "next：", "下一句:", "下一句：", "建议:", "建议：", "suggestion:"
     ]
+    /// 日文只收助手才会接的开头。光秃秃的「はい、」「では、」不能收：日文用户答「是」、
+    /// 说「那就…」也这么开口（「はい、コミットして」「では、PR を作って」）——
+    /// rs 版（willdeep-rs 0.78.0-rc30）实弹评测里它把日文样本全部误杀。
     private static let assistantVoicePrefixes = [
-        "好的，我", "好的,我", "我来", "我会", "我将", "sure, i", "sure i", "okay, i", "ok, i", "i will", "i'll", "let me"
+        "好的，我", "好的,我", "我来", "我会", "我将", "sure, i", "sure i", "okay, i", "ok, i", "i will", "i'll", "let me",
+        "承知しました", "かしこまりました", "了解しました", "はい、承知", "はい、かしこまり"
     ]
     private static let wrappingCharacters = CharacterSet(charactersIn: "\"'`“”‘’「」『』*")
 

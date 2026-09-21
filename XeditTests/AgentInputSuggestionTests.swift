@@ -53,5 +53,19 @@ struct AgentInputSuggestionTests {
         #expect(Suggestion.sanitize(String(repeating: "长", count: Suggestion.maxCharacters + 1)) == nil)
         #expect(Suggestion.sanitize("好的，我来帮你提交") == nil)
         #expect(Suggestion.sanitize("Sure, I will run the tests") == nil)
+        #expect(Suggestion.sanitize("承知しました。修正します") == nil)
+        #expect(Suggestion.sanitize("はい、承知しました") == nil)
+    }
+
+    @Test("a Japanese yes or 'then' is the user answering, not the assistant speaking")
+    func japaneseUserAnswersSurvive() {
+        #expect(Suggestion.sanitize("はい、そのままコミットして") == "はい、そのままコミットして")
+        #expect(Suggestion.sanitize("では、PRを作って") == "では、PRを作って")
+    }
+
+    @Test("prompt keeps suggesting after finished-but-open work and forbids pleasantries")
+    func promptSeparatesOpenWorkFromWrappedUp() {
+        #expect(Suggestion.systemPrompt.contains("Finished work usually still has a next step"))
+        #expect(Suggestion.systemPrompt.contains("Never fill the gap with thanks"))
     }
 }
