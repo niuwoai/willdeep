@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.395.0-rc4 - 2026-09-21
+
+### Fixed
+
+- **内置浏览器访问百度时在 http 与 https 之间无限来回跳。** WKWebView 默认 UA 只有 `AppleWebKit/605.1.15 (KHTML, like Gecko)`，没有 Safari 标记。百度对这种 UA 返回的 https 页面只有一段 `location.replace(... "http://")` 脚本；而 macOS 26 的 WebKit 会把 baidu.com 这类已知 HTTPS 站点自动升级回 https，于是来回跳个不停。现在内置浏览器的 UA 后缀带 `Version/<本机 Safari 版本> Safari/605.1.15`（读不到 Safari 版本时回落为 26.0）；用 curl 对照验证过，带这个后缀时百度的 http 请求 302 到 https，https 直接返回首页。
+- **Agent 调用内置浏览器工具时自动打开侧栏浏览器。** 以前只有「设计稿转代码」流程会预先挂上浏览器侧栏，普通的「打开侧边栏浏览器访问……」只能靠用户手动点开，WebView 在窗口外加载，看不见，也更慢。现在任何 `embedded_browser_*` 工具执行前（与终端工具亮出终端面板同一个时机），都会亮出本会话的浏览器标签；有多个浏览器标签时亮出工具实际驱动的那个。浏览器是按会话隔离的，所以后台会话只更新自己的面板状态，不抢当前会话的侧栏。
+- **`embedded_browser_navigate` 等页面加载完再返回（最多 10 秒）。** 以前一发起加载就返回 `is_loading: true`，模型还得另外调一次 wait / read 才能拿到页面，多一轮模型往返。结果新增 `settled` 字段，说明是否在时限内加载完。
+- 新增测试：`AgentEmbeddedBrowserRevealTests`（工具名匹配、当前会话亮出侧栏且与工具共用同一个 WebView、多标签时选中被驱动的那个、后台会话不抢侧栏、UA 带 Safari 标记）。
+
 ## 1.395.0-rc3 - 2026-09-21
 
 ### Fixed

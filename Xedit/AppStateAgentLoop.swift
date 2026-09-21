@@ -2382,7 +2382,11 @@ extension AppState {
                     toolName: call.toolName,
                     runtime: runtime
                 )
-                if didRevealTerminal {
+                let didRevealBrowser = revealEmbeddedBrowserPanelForToolExecution(
+                    toolName: call.toolName,
+                    runtime: runtime
+                )
+                if didRevealTerminal || didRevealBrowser {
                     // Let SwiftUI commit the side-panel transition before the
                     // command/control mutation reaches the PTY. The terminal
                     // operation remains audited and automatic in Full Access,

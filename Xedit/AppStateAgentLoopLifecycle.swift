@@ -126,6 +126,40 @@ extension AppState {
         return canRevealPanel
     }
 
+    /// Show the session's own side-panel browser before an embedded-browser
+    /// tool runs. Unlike Terminal the browser belongs to one session, so a
+    /// background session only records the tab in its own panel state and
+    /// never takes over the panel of the session on screen.
+    @discardableResult
+    func revealEmbeddedBrowserPanelForToolExecution(
+        toolName: String,
+        runtime: AgentRuntime,
+        now: Date = Date()
+    ) -> Bool {
+        guard AgentEmbeddedBrowserAutomationPolicy.requiresVisiblePanel(toolName: toolName) else {
+            return false
+        }
+        // Show the browser tab the tool will drive. With no such tab yet,
+        // opening one also activates its resource, so the tool below and the
+        // panel share one web view.
+        let activeResourceID = AgentEmbeddedBrowserController.activeTabID(for: runtime.id)
+        if let activeTab = runtime.sidePanelState.openTabs.first(where: {
+            $0.kind == .embeddedBrowser && $0.resourceID != nil && $0.resourceID == activeResourceID
+        }) {
+            updatePanelTabs(runtime: runtime) { $0.selectTab(activeTab.id) }
+        } else {
+            _ = openPanelTab(.embeddedBrowser, runtime: runtime)
+        }
+        var sidePanelState = runtime.sidePanelState
+        sidePanelState.lastViewedAt = now
+        runtime.sidePanelState = sidePanelState
+        persistAgentSidePanelState(runtime: runtime)
+
+        guard activeRuntime === runtime else { return false }
+        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .embeddedBrowser)
+        return true
+    }
+
     /// A cancelled transport may unwind after the stop fallback started a new turn.
     /// Only the current owner may clear runtime state or schedule continuations.
     func finishAgentLoopTurn(

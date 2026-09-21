@@ -1572,7 +1572,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_navigate",
-            description: "Navigate the visible in-app Embedded Browser side panel to a URL or domain. Requires approval because it loads external web content. Requires the Browser Ops expert and an open Embedded Browser side panel.",
+            description: "Navigate the visible in-app Embedded Browser side panel to a URL or domain, opening the panel if needed, and wait up to ten seconds for the page to finish loading (`settled` in the result says whether it did). Requires approval because it loads external web content. Requires the Browser Ops expert.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "url", type: .string, description: "Absolute URL or bare domain to open, e.g. `https://example.com` or `example.com`.", required: true)

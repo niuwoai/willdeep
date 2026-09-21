@@ -39,6 +39,25 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     private var failedResourceEvents: [[String: Any]] = []
     private let failedResourceEventLimit = 300
 
+    /// Appended to WebKit's user agent so sites see a Safari, not a bare
+    /// `AppleWebKit … (KHTML, like Gecko)` embedder. Without the token Baidu
+    /// serves its https page as a script that downgrades to http, while
+    /// WebKit upgrades known HTTPS hosts back to https — the page bounced
+    /// between the two forever.
+    static let safariUserAgentSuffix = "Version/\(installedSafariVersion) Safari/605.1.15"
+    private static let fallbackSafariVersion = "26.0"
+    /// Upper bound for `embedded_browser_navigate` to wait for the page to
+    /// settle before returning, so the Agent does not need a separate wait.
+    static let navigationSettleTimeout: Duration = .seconds(10)
+    private static let navigationSettlePollInterval: Duration = .milliseconds(100)
+
+    private static var installedSafariVersion: String {
+        let version = Bundle(path: "/Applications/Safari.app")?
+            .infoDictionary?["CFBundleShortVersionString"] as? String
+        guard let version, !version.isEmpty else { return fallbackSafariVersion }
+        return version
+    }
+
     private override init() {
         super.init()
     }
@@ -53,6 +72,10 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         let controller = AgentEmbeddedBrowserController()
         runtimeControllers[runtimeID, default: [:]][resolvedTabID] = controller
         return controller
+    }
+
+    static func activeTabID(for runtimeID: UUID) -> UUID? {
+        activeTabIDs[runtimeID]
     }
 
     static func activate(tabID: UUID, for runtimeID: UUID) {
@@ -95,6 +118,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         let preferences = WKWebpagePreferences()
         preferences.allowsContentJavaScript = true
         configuration.defaultWebpagePreferences = preferences
+        configuration.applicationNameForUserAgent = Self.safariUserAgentSuffix
         let webView = WKWebView(frame: .zero, configuration: configuration)
         self.webView = webView
         webView.navigationDelegate = self
@@ -140,6 +164,19 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         lastError = nil
         webView.load(URLRequest(url: url))
         updateState(from: webView)
+    }
+
+    /// Wait until the web view stops loading (redirects included), bounded by
+    /// `timeout`. Returns whether the page settled in time.
+    func waitForNavigationToSettle(timeout: Duration = navigationSettleTimeout) async -> Bool {
+        guard let webView else { return false }
+        let deadline = ContinuousClock.now + timeout
+        while webView.isLoading {
+            guard ContinuousClock.now < deadline, !Task.isCancelled else { return false }
+            try? await Task.sleep(for: Self.navigationSettlePollInterval)
+        }
+        updateState(from: webView)
+        return true
     }
 
     func reload() {
@@ -1280,6 +1317,17 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     }
 }
 
+nonisolated enum AgentEmbeddedBrowserAutomationPolicy {
+    static let toolNamePrefix = "embedded_browser_"
+
+    /// Every embedded-browser tool acts on the side-panel browser, so the
+    /// panel is shown before the tool runs: the user watches what the Agent
+    /// browses, and the web view is in a window instead of loading offscreen.
+    static func requiresVisiblePanel(toolName: String) -> Bool {
+        toolName.hasPrefix(toolNamePrefix)
+    }
+}
+
 enum AgentEmbeddedBrowserTools {
     static func status(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let payload = controller(for: runtimeID).statusPayload()
@@ -1290,7 +1338,9 @@ enum AgentEmbeddedBrowserTools {
         let url = try requiredString("url", arguments: arguments)
         let controller = controller(for: runtimeID, loadInitialPage: false)
         try controller.navigate(to: url)
-        let payload = controller.statusPayload()
+        let settled = await controller.waitForNavigationToSettle()
+        var payload = controller.statusPayload()
+        payload["settled"] = settled
         return AgentToolResult(summary: "Navigated embedded browser", payload: prettyJSONString(payload))
     }
 
