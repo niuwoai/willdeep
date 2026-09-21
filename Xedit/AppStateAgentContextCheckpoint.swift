@@ -24,8 +24,10 @@ extension AppState {
     func makeContextCheckpoint(for runtime: AgentRuntime, through id: UUID) throws -> AgentContextCheckpoint {
         guard let index = runtime.messages.firstIndex(where: { $0.id == id }) else { throw AgentContextCheckpoint.Failure.stale }
         let prefix = Array(runtime.messages.prefix(index + 1))
-        let inputs = prefix.filter { $0.role == .user && ($0.source == nil || $0.source == .operatorInput) }
-            .map(AgentContextCheckpoint.UserInput.from)
+        let (inputs, omittedInputs) = AgentContextCheckpoint.boundedUserInputs(
+            prefix.filter { $0.role == .user && ($0.source == nil || $0.source == .operatorInput) }
+                .map(AgentContextCheckpoint.UserInput.from)
+        )
         let goal = runtime.currentGoal.map {
             AgentContextCheckpoint.Goal(contractDigest: AgentGoalVerification.contractDigest($0), statement: $0.statement,
                 checklist: $0.checklist, budget: $0.continuationBudget, verificationPhase: $0.verification?.phase,
@@ -47,7 +49,8 @@ extension AppState {
             executionAgent: runtime.executionAgent, userInputs: inputs, goal: goal, plan: runtime.currentPlan,
             attributedPaths: paths.kept, recentToolReceipts: receipts,
             omittedToolReceiptCount: max(0, calls.count - receipts.count), pendingDecisionIDs: task?.pendingDecisionIDs ?? [],
-            roadmap: runtime.goalRoadmap, omittedAttributedPathCount: paths.omitted > 0 ? paths.omitted : nil)
+            roadmap: runtime.goalRoadmap, omittedAttributedPathCount: paths.omitted > 0 ? paths.omitted : nil,
+            omittedUserInputCount: omittedInputs > 0 ? omittedInputs : nil)
     }
 
     func prepareContextCompression(for runtime: AgentRuntime, through id: UUID, sourceTokens: Int) throws -> ContextCompressionTicket {

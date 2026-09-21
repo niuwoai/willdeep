@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.394.0-rc4 - 2026-09-21
+
+### Fixed
+
+- **写集归因不再把未 gitignore 的构建缓存算成 Agent 的改动。** 写集来自 `git status -uall` 快照比对，一次 `go build` 就能把 `.tmp/gocache` 下几千个缓存文件逐条记进 `agentEditedPaths`（本机最大一个会话 9966 条），worktree 改动卡片也把它们当成 Agent 改的。1.393.0-rc2 只在压缩检查点那头截了，这次从源头治。
+  - 新增 `AgentWorktreeGeneratedPaths`：后台加载快照时认出落在构建缓存目录下的**未跟踪**文件（`AgentWorktreeSnapshot.generatedPaths`），归因时减掉。目录名是各项目自己起的（`.tmp/gocache`、`.buildtmp/cache`、`.tmp/go-cache-vet`），按名字认不全，主要靠标记文件：Go 构建缓存根目录固定的 `README` 开头、CACHEDIR.TAG 约定（Cargo `target`、pytest、ruff 等）。名字只认 `hiddenCacheDirectoryNames` 那批公认缓存目录、`node_modules` / `__pycache__` / `DerivedData`，以及 Go 临时工作目录 `go-build<数字>`。
+  - 刻意不认 `build` / `dist`（常是用户要的产物）；已跟踪文件被改照旧算改动。
+  - 已经被污染的写集在下一次工具执行后自动清掉：归因时对旧写集也减一次。
+  - 委派执行的 `changedPaths`（会进复核提示词）同样减掉构建缓存。
+  - 新增测试 `AgentWorktreeGeneratedPathsTests`（3 项，真实临时 git 仓库，覆盖标记识别、不误伤源码 / `build` 产物 / 已跟踪文件、端到端归因与旧写集清理）。反验：去掉归因那一行，端到端用例的写集与卡片两处断言都变红。
+- **超长会话的用户原话也不会再撑爆压缩检查点。** 用户亲手打的字原来按设计一字不截，理论上单靠它就能超过 128KB，压缩从此永久失败。现在用户输入有总预算（`userInputBudgetBytes` = 80KB）：
+  - 超预算时从最旧的中间输入开始缩成首尾摘录（前 600 字 + 后 200 字），中间写明省了多少、用 `read_context_message` 按 `messageID` 能取回全文；缩过的条目带 `truncated` 与 `originalCharacters`。第一条（原始任务）和最近 8 条优先保留全文，它们本身超预算时最后才缩，最新一条排在最后。
+  - 几千条短输入缩无可缩时，才从最旧的中间输入整条移出检查点，只记 `omittedUserInputCount`；原话仍在本地完整对话里。
+  - **设计约定变更**：原用例「必需约束超限明确拒绝，不静默截断成一个更小目标」改为「超预算时显式摘录并指向全文，不静默截断」。旧约定的代价就是这次的故障（会话永久压不动）；新做法仍不静默——每处缩减都有标记和取回路径，原对话一字不动。
+  - 检查点说明文字同步告诉模型 `truncated` 与 `omittedUserInputCount` 的含义。新字段都是可选的，旧检查点照常解码。
+  - 新增测试：`userInputsOverBudgetAreExcerptedOldestFirst`、`userInputsWithinBudgetAreUntouched`、`manyShortInputsDropOldestMiddle`、`hugeSingleInputStillCompresses`、`oversizedRequiredStateIsExcerptedExplicitly`。
+
 ## 1.394.0-rc3 - 2026-09-21
 
 ### Fixed

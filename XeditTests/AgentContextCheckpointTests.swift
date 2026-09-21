@@ -241,12 +241,22 @@ struct AgentContextCheckpointTests {
         #expect(enriched > plain)
     }
 
-    @Test("必需约束超限明确拒绝，不静默截断成一个更小目标")
-    func oversizedRequiredStateIsNotTruncated() throws {
+    /// 1.394.0-rc3 之前这里是「超限就拒绝」：宁可压缩失败也不截。代价是会话
+    /// 从此永远压缩不了。现在超预算时显式摘录——标 `truncated`、记原长度、
+    /// 写明全文怎么取——仍然不是静默截断，原对话也一字不动。
+    @Test("必需约束超预算时显式摘录并指向全文，不静默截断")
+    func oversizedRequiredStateIsExcerptedExplicitly() throws {
         let f = try fixture(); defer { f.cleanup() }
-        f.runtime.messages[0].content = String(repeating: "不可遗漏", count: 50_000)
-        #expect(throws: AgentContextCheckpoint.Failure.self) { try f.ticket() }
-        #expect(f.runtime.contextSummary == nil)
+        let original = String(repeating: "不可遗漏", count: 50_000)
+        f.runtime.messages[0].content = original
+        let checkpoint = try f.ticket().checkpoint
+        let first = try #require(checkpoint.userInputs.first)
+        #expect(first.truncated == true)
+        #expect(first.originalCharacters == original.count)
+        #expect(first.text.hasPrefix("不可遗漏"))
+        #expect(first.text.contains("read_context_message message_id=\(f.runtime.messages[0].id.uuidString)"))
+        #expect(f.runtime.messages[0].content == original)
+        #expect(try checkpoint.encoded().count <= AgentContextCheckpoint.maximumEncodedBytes)
     }
 
     @Test("消息修改后不降级复用旧摘要，恢复完整历史供重新压缩")
@@ -395,6 +405,68 @@ struct AgentContextCheckpointTests {
         let json = String(decoding: try checkpoint.encoded(), as: UTF8.self)
         #expect(!json.contains("Skill routing candidates"))
         #expect(!json.contains("附件正文"))
+    }
+
+    private func input(_ text: String) -> AgentContextCheckpoint.UserInput {
+        .init(messageID: UUID(), text: text, imageIDs: [], textAttachmentIDs: [])
+    }
+
+    @Test("用户原话超预算：先把中间旧输入缩成首尾摘录，第一条和最近几条保持全文")
+    func userInputsOverBudgetAreExcerptedOldestFirst() throws {
+        let long = String(repeating: "长", count: 6_000)
+        let recent = AgentContextCheckpoint.recentFullUserInputCount
+        var inputs = [input("原始任务：重写解析器，不要发布")]
+        inputs += (0..<22).map { input("第 \($0) 轮 " + long) }
+        inputs += (0..<recent).map { input("最近第 \($0) 轮：" + String(repeating: "近", count: 300)) }
+        let bounded = AgentContextCheckpoint.boundedUserInputs(inputs)
+
+        #expect(bounded.omitted == 0)
+        #expect(bounded.inputs.count == inputs.count)
+        #expect(bounded.inputs.map(\.messageID) == inputs.map(\.messageID))
+        #expect(bounded.inputs.first == inputs.first)
+        #expect(Array(bounded.inputs.suffix(recent)) == Array(inputs.suffix(recent)))
+        let excerpt = try #require(bounded.inputs[1].truncated == true ? bounded.inputs[1] : nil)
+        #expect(excerpt.originalCharacters == inputs[1].text.count)
+        #expect(excerpt.text.contains("read_context_message message_id=\(inputs[1].messageID.uuidString)"))
+        #expect(excerpt.text.hasPrefix("第 0 轮 "))
+        let encoded = try JSONEncoder().encode(bounded.inputs).count
+        #expect(encoded <= AgentContextCheckpoint.userInputBudgetBytes)
+    }
+
+    @Test("预算内的用户原话一字不动")
+    func userInputsWithinBudgetAreUntouched() {
+        let inputs = (0..<20).map { input("第 \($0) 轮：不要发布") }
+        let bounded = AgentContextCheckpoint.boundedUserInputs(inputs)
+        #expect(bounded.inputs == inputs)
+        #expect(bounded.omitted == 0)
+    }
+
+    @Test("几千条短输入缩无可缩时，从最旧的中间输入整条移出并计数")
+    func manyShortInputsDropOldestMiddle() throws {
+        let inputs = (0..<3_000).map { input("第 \($0) 轮：短句") }
+        let bounded = AgentContextCheckpoint.boundedUserInputs(inputs)
+
+        #expect(bounded.omitted > 0)
+        #expect(bounded.inputs.count + bounded.omitted == inputs.count)
+        #expect(bounded.inputs.first == inputs.first)
+        #expect(bounded.inputs.last == inputs.last)
+        #expect(try JSONEncoder().encode(bounded.inputs).count <= AgentContextCheckpoint.userInputBudgetBytes)
+    }
+
+    @Test("单条就贴了几百 KB 也能压缩：检查点落在上限内")
+    func hugeSingleInputStillCompresses() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        f.runtime.messages.insert(.init(role: .user, content: String(repeating: "日志", count: 150_000)), at: 0)
+        var requests = 0
+        f.app.contextCompressionSummaryOperation = { _, _ in requests += 1; return "摘要" }
+        f.runtime.isCompressingContext = true
+        await f.app.runContextCompression(for: f.runtime, head: Array(f.runtime.messages.prefix(3)),
+            tail: Array(f.runtime.messages.suffix(1)), configurations: [.default])
+        #expect(requests == 1)
+        #expect(f.runtime.errorMessage == nil)
+        let checkpoint = try #require(f.runtime.contextCheckpoint)
+        #expect(checkpoint.userInputs.contains { $0.truncated == true })
+        #expect(checkpoint.userInputs.contains { $0.text == "不要改无关文件；必须实际验证。" })
     }
 
     @Test("写集截短：未超限原样保留，超限先源码后生成物，同档浅路径优先")

@@ -1108,10 +1108,11 @@ extension AppState {
                 fingerprint: "",
                 fileSignatures: [:]
             )
+            // 构建缓存不进复核提示词，否则一次 `go build` 就能灌进上万行路径。
             let changedPaths = Self.agentWorktreePathsChangedSinceBaseline(
                 baseline: baselineSnapshot,
                 current: currentSnapshot
-            ).sorted()
+            ).subtracting(currentSnapshot.generatedPaths).sorted()
 
             updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
                 run.phase = .selfVerifying

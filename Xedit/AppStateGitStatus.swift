@@ -786,8 +786,11 @@ extension AppState {
             guard let metadata = Self.fileSignatureMetadata(atPath: absolute) else { return false }
             return metadata.modified > observation.modifiedAt.timeIntervalSince1970
         }
+        // 构建缓存（未 gitignore 的 `.tmp/gocache` 之类）不算 Agent 改的。
+        // 对已有写集也减一次：旧版本记进去的缓存路径借这次顺手清掉。
         let attributedPaths = runtime.agentEditedPaths
             .union(changedPaths.subtracting(externallyChanged))
+            .subtracting(snapshot.generatedPaths)
 
         let filteredChanges = snapshot.changes.filtering(paths: attributedPaths)
         if runtime.worktreeChanges != filteredChanges {
@@ -840,6 +843,9 @@ extension AppState {
         /// intentionally independent from Git so `.gitignore` cannot hide a
         /// real conversation output.
         var artifactFileSignatures: [String: String] = [:]
+        /// 落在构建缓存目录下的未跟踪路径，归因时不算 Agent 的改动。
+        /// 见 `AgentWorktreeGeneratedPaths`。
+        var generatedPaths: Set<String> = []
     }
 
     nonisolated static func loadAgentWorktreeSnapshot(
@@ -869,7 +875,8 @@ extension AppState {
                 changes: changes,
                 fingerprint: fingerprint,
                 fileSignatures: fileSignatures,
-                artifactFileSignatures: artifactFileSignatures
+                artifactFileSignatures: artifactFileSignatures,
+                generatedPaths: AgentWorktreeGeneratedPaths.untrackedGeneratedPaths(in: status)
             )
         }.value
     }
