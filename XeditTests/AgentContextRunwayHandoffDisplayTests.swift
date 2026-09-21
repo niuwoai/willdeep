@@ -227,10 +227,12 @@ struct AgentContextRunwayHandoffFooterTests {
         #expect(!rendered.string.contains("NEXT PROMPT"))
         #expect(rendered.string.contains("还差 footer 接线"))
         #expect(attributeCount(.agentChatHistoryResumeHandoff, in: rendered) == 1)
+        // 「开新会话继续」带的是整份交接：新会话没有这段对话，只带
+        // NEXT PROMPT 一句的话 DONE / ANCHORS / REMAINING 就丢了。
         #expect(
             firstAttributeRange(
                 .agentChatHistoryHandoffRelayPrompt,
-                value: "接着把两个接力图标挂到 footer 上。",
+                value: Self.handoff,
                 in: rendered
             ) != nil
         )

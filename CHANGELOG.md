@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.394.0-rc2 - 2026-09-21
+
+### Fixed
+
+- **`AgentContextRunwayHandoffFooterTests.latestHandoffCarriesRelayActions` 跟上 1.394.0-rc1 的页脚载荷。** rc1 把「开新会话继续」图标挂的内容从 NEXT PROMPT 一句改成整份交接，这条用例还在断言只带那一句，结果在发布前的全量测试里红了，发布在归档前中止，没有任何产物上传。现在断言页脚带的是整份交接。rc1 开发时只按结构体名选了 `AgentContextRunwayHandoffDisplayTests`，同文件里的 footer suite 没被选中，所以漏掉了。
+- 同一次全量里 `AgentPlanningBudgetTransportTests.structuredRunnerUsesActualLedger` 报「超过 1 分钟执行时限」。单独跑 0.135 秒通过，是满载下的计时抖动，与本次改动无关，未改动。
+
 ## 1.394.0-rc1 - 2026-09-21
 
 ### Added
