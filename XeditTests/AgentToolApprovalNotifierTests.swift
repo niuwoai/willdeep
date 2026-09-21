@@ -4,6 +4,13 @@ import Testing
 @Suite
 @MainActor
 struct AgentToolApprovalNotifierTests {
+    /// 测试宿主是真实的 WillDeep.app：`AgentBackgroundJobsTests` 里 `exit 7` 这类任务
+    /// 结束时曾弹出真实的「后台任务失败」系统横幅。所有通知与 webhook 出口靠这个判断拦住。
+    @Test("system notifications and webhooks are suppressed while unit tests run")
+    func notificationsAreSuppressedUnderTests() {
+        #expect(AgentToolApprovalNotifier.isSuppressedForTests)
+    }
+
     @Test("interactive notification titles use localized resources")
     func localizedInteractionTitles() {
         #expect(

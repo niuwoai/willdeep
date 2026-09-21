@@ -306,6 +306,7 @@ extension AppState {
         // 通知中心里不写清是哪个插件发的，用户就没法把噪音关掉。
         content.title = "\(AgentPluginRegistry.shared.displayName(for: pluginID) ?? pluginID) · \(title)"
         content.body = body
+        guard !AgentToolApprovalNotifier.isSuppressedForTests else { return }
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized

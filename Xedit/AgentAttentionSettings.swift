@@ -541,6 +541,8 @@ enum AgentAttentionWebhookClient {
         attentionKind: String? = nil,
         summary: String? = nil
     ) {
+        // 测试宿主是真实的 App：读到的是用户本机的 webhook 偏好，不拦就会真发出去。
+        guard !AgentToolApprovalNotifier.isSuppressedForTests else { return }
         let preferences = AgentAttentionPreferencesStore.load()
         guard preferences.webhookEnabled,
               shouldDeliver(kind: kind, preferences: preferences) else { return }

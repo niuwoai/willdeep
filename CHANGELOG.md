@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.394.0-rc6 - 2026-09-21
+
+### Fixed
+
+- **跑单元测试时会弹出真实的系统通知、往真实 webhook 发消息。** 测试宿主是真实的 WillDeep.app：`AgentBackgroundJobsTests.nonZeroExitFlipsToFailed` 起的 `exit 7` 后台任务结束时，走了正常的 `notifyJobFinished`，App 不在前台，于是弹出「后台任务失败 · job_… · exit 7 · exit」横幅——rocky 以为是 CLI 版在报错。webhook 入队读的是用户本机的偏好与地址，带 executor 的测试任务同样会真发出去。新增 `AgentToolApprovalNotifier.isSuppressedForTests`（按 `XCTestConfigurationFilePath` 判断，与仓库里其它测试宿主判断同一口径），系统通知的三个出口（审批 / 任务结束、定时任务、插件通知）与 webhook 入队都先问它。`webhook` 的手动「发送测试」不受影响。
+- 测试：`AgentToolApprovalNotifierTests` 钉住测试进程里通知出口处于拦截状态；`AgentToolApprovalNotifierTests` 与 `AgentBackgroundJobsTests` 共 54 项全过。
+
 ## 1.394.0-rc5 - 2026-09-21
 
 ### Fixed

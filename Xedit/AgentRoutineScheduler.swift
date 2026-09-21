@@ -161,6 +161,7 @@ final class AgentRoutineScheduler {
         if let attachment = AgentNotificationIcon.attachment() {
             content.attachments = [attachment]
         }
+        guard !AgentToolApprovalNotifier.isSuppressedForTests else { return }
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {

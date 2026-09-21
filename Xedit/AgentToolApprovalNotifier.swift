@@ -137,11 +137,19 @@ enum AgentToolApprovalNotifier {
         }
     }
 
+    /// 单元测试跑在真实的 WillDeep.app 里当宿主：不拦的话，测试里起的后台任务
+    /// （例如 `exit 7`）结束时会弹出真实的系统横幅、往用户配置的 webhook 发真消息。
+    /// 所有系统通知与 webhook 出口都先问这一句。
+    nonisolated static var isSuppressedForTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
     @MainActor
     private static func postNotificationWhenAuthorized(
         identifier: String,
         content: UNMutableNotificationContent
     ) {
+        guard !isSuppressedForTests else { return }
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             switch settings.authorizationStatus {
