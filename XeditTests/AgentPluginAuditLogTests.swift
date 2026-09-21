@@ -26,14 +26,16 @@ struct AgentPluginAuditLogTests {
         return decoder
     }
 
-    /// 落盘是 detached 的，别的什么都不做就断言会读到空文件。
-    private func waitForFile(_ url: URL, timeout: TimeInterval = 5) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if FileManager.default.fileExists(atPath: url.path) { return true }
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
-        return false
+    /// 落盘是 detached 的，别的什么都不做就断言会读到空文件。用例一律 await
+    /// `record*` 返回的落盘任务，而不是盯着文件轮询：落盘走 `.utility` 优先级，
+    /// 满载全量时 5 秒都可能轮不到（2026-09-21 发版全量里两条就这样红过），
+    /// 轮询把「多快写完」当成了「是否写了」。
+    private func exists(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path)
+    }
+
+    private func writtenLines(of url: URL) -> [String] {
+        ((try? String(contentsOf: url, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
     }
 
     /// 插件 ID 来自插件清单，可能带斜杠或 `..`。直接当目录名会写到别处去。
@@ -51,24 +53,24 @@ struct AgentPluginAuditLogTests {
     @Test("一插件一目录，两类记录分开落")
     func eachPluginGetsItsOwnDirectory() async throws {
         try await withRoot { root in
-            AgentPluginAuditLog.recordAICall(.init(
+            await AgentPluginAuditLog.recordAICall(.init(
                 recordedAt: Date(), pluginID: "video-studio", providerID: "some.im", model: "gpt-5.6-sol",
                 seconds: 12.5, messageCount: 3, promptCharacters: 4200, skillCount: 0,
                 declaredTools: ["write_episode"], toolCalls: ["write_episode"],
                 responseCharacters: 800, outcome: "succeeded", errorDescription: nil
-            ), root: root)
-            AgentPluginAuditLog.recordCommandRun(.init(
+            ), root: root)?.value
+            await AgentPluginAuditLog.recordCommandRun(.init(
                 recordedAt: Date(), pluginID: "arcade", command: "yarn build",
                 sandboxMode: "workspaceWrite", approval: "remembered",
                 seconds: 3.1, outcome: "succeeded", errorDescription: nil
-            ), root: root)
+            ), root: root)?.value
 
             let aiURL = AgentPluginAuditLog.directory(forPluginID: "video-studio", root: root)
                 .appendingPathComponent(AgentPluginAuditLog.aiFileName)
             let commandURL = AgentPluginAuditLog.directory(forPluginID: "arcade", root: root)
                 .appendingPathComponent(AgentPluginAuditLog.commandsFileName)
-            #expect(await waitForFile(aiURL))
-            #expect(await waitForFile(commandURL))
+            #expect(exists(aiURL))
+            #expect(exists(commandURL))
             // 两个插件互不串目录。
             #expect(!FileManager.default.fileExists(
                 atPath: AgentPluginAuditLog.directory(forPluginID: "arcade", root: root)
@@ -81,15 +83,15 @@ struct AgentPluginAuditLogTests {
     @Test("AI 记录装的是计数和耗时，不装正文")
     func aiEntryCarriesNoContent() async throws {
         try await withRoot { root in
-            AgentPluginAuditLog.recordAICall(.init(
+            await AgentPluginAuditLog.recordAICall(.init(
                 recordedAt: Date(), pluginID: "video-studio", providerID: "some.im", model: "gpt-5.6-sol",
                 seconds: 85.1, messageCount: 4, promptCharacters: 585_622, skillCount: 1,
                 declaredTools: ["write_episode"], toolCalls: [],
                 responseCharacters: 1200, outcome: "succeeded", errorDescription: nil
-            ), root: root)
+            ), root: root)?.value
             let url = AgentPluginAuditLog.directory(forPluginID: "video-studio", root: root)
                 .appendingPathComponent(AgentPluginAuditLog.aiFileName)
-            #expect(await waitForFile(url))
+            #expect(exists(url))
             let text = try String(contentsOf: url, encoding: .utf8)
             let entry = try decoder.decode(
                 AgentPluginAuditLog.AICall.self,
@@ -109,24 +111,16 @@ struct AgentPluginAuditLogTests {
     func commandEntryCarriesTheCommandAndHowItWasAllowed() async throws {
         try await withRoot { root in
             for approval in ["alwaysSafe", "remembered", "confirmed", "declined"] {
-                AgentPluginAuditLog.recordCommandRun(.init(
+                await AgentPluginAuditLog.recordCommandRun(.init(
                     recordedAt: Date(), pluginID: "arcade", command: "rm -rf node_modules",
                     sandboxMode: "workspaceWrite", approval: approval,
                     seconds: 1.0, outcome: "succeeded", errorDescription: nil
-                ), root: root)
+                ), root: root)?.value
             }
             let url = AgentPluginAuditLog.directory(forPluginID: "arcade", root: root)
                 .appendingPathComponent(AgentPluginAuditLog.commandsFileName)
-            #expect(await waitForFile(url))
             // 四条都要在，尤其是 remembered：勾了「不再询问」之后仍然可数。
-            let deadline = Date().addingTimeInterval(5)
-            var lines: [String] = []
-            while Date() < deadline {
-                lines = (try? String(contentsOf: url, encoding: .utf8))?
-                    .split(separator: "\n").map(String.init) ?? []
-                if lines.count >= 4 { break }
-                try? await Task.sleep(nanoseconds: 20_000_000)
-            }
+            let lines = writtenLines(of: url)
             #expect(lines.count == 4)
             let entries = lines.compactMap {
                 try? decoder.decode(AgentPluginAuditLog.CommandRun.self, from: Data($0.utf8))
@@ -141,28 +135,22 @@ struct AgentPluginAuditLogTests {
     @Test("并发写入不会把两条记录搅在一行")
     func concurrentWritesStayOnTheirOwnLines() async throws {
         try await withRoot { root in
+            // 25 个写入任务同时发起、并发落盘，全部 await 完再读——并发度没变，
+            // 只是不再靠时钟猜它们写完没有。
             await withTaskGroup(of: Void.self) { group in
                 for index in 0..<25 {
                     group.addTask {
-                        AgentPluginAuditLog.recordCommandRun(.init(
+                        await AgentPluginAuditLog.recordCommandRun(.init(
                             recordedAt: Date(), pluginID: "arcade", command: "echo \(index)",
                             sandboxMode: "readOnly", approval: "alwaysSafe",
                             seconds: 0.1, outcome: "succeeded", errorDescription: nil
-                        ), root: root)
+                        ), root: root)?.value
                     }
                 }
             }
             let url = AgentPluginAuditLog.directory(forPluginID: "arcade", root: root)
                 .appendingPathComponent(AgentPluginAuditLog.commandsFileName)
-            #expect(await waitForFile(url))
-            let deadline = Date().addingTimeInterval(8)
-            var lines: [String] = []
-            while Date() < deadline {
-                lines = (try? String(contentsOf: url, encoding: .utf8))?
-                    .split(separator: "\n").map(String.init) ?? []
-                if lines.count >= 25 { break }
-                try? await Task.sleep(nanoseconds: 20_000_000)
-            }
+            let lines = writtenLines(of: url)
             #expect(lines.count == 25)
             // 每一行都必须能单独解出来。
             let decoded = lines.compactMap {
@@ -178,14 +166,14 @@ struct AgentPluginAuditLogTests {
     @Test("宿主命令调用记尺寸和结果，不记参数与返回内容")
     func hostCallEntryRecordsSizesNotContent() async throws {
         try await withRoot { root in
-            AgentPluginAuditLog.recordHostCall(.init(
+            await AgentPluginAuditLog.recordHostCall(.init(
                 recordedAt: Date(), pluginID: "video-studio", commandID: "drama.list",
                 argumentCount: 1, argumentBytes: 42, resultBytes: 2_960_028,
                 seconds: 1.8, outcome: "succeeded", errorDescription: nil
-            ), root: root)
+            ), root: root)?.value
             let url = AgentPluginAuditLog.directory(forPluginID: "video-studio", root: root)
                 .appendingPathComponent(AgentPluginAuditLog.hostCallsFileName)
-            #expect(await waitForFile(url))
+            #expect(exists(url))
             let text = try String(contentsOf: url, encoding: .utf8)
             let entry = try decoder.decode(
                 AgentPluginAuditLog.HostCall.self,
@@ -204,27 +192,27 @@ struct AgentPluginAuditLogTests {
     @Test("三类记录落在同一目录的三个文件里")
     func threeKindsOfRecordStayInTheirOwnFiles() async throws {
         try await withRoot { root in
-            AgentPluginAuditLog.recordAICall(.init(
+            await AgentPluginAuditLog.recordAICall(.init(
                 recordedAt: Date(), pluginID: "video-studio", providerID: "some.im", model: "m",
                 seconds: 1, messageCount: 1, promptCharacters: 10, skillCount: 0,
                 declaredTools: [], toolCalls: [], responseCharacters: 5,
                 outcome: "succeeded", errorDescription: nil
-            ), root: root)
-            AgentPluginAuditLog.recordCommandRun(.init(
+            ), root: root)?.value
+            await AgentPluginAuditLog.recordCommandRun(.init(
                 recordedAt: Date(), pluginID: "video-studio", command: "yarn build",
                 sandboxMode: "workspaceWrite", approval: "confirmed",
                 seconds: 1, outcome: "succeeded", errorDescription: nil
-            ), root: root)
-            AgentPluginAuditLog.recordHostCall(.init(
+            ), root: root)?.value
+            await AgentPluginAuditLog.recordHostCall(.init(
                 recordedAt: Date(), pluginID: "video-studio", commandID: "drama.saveShot",
                 argumentCount: 3, argumentBytes: 900, resultBytes: 120,
                 seconds: 0.2, outcome: "succeeded", errorDescription: nil
-            ), root: root)
+            ), root: root)?.value
             let directory = AgentPluginAuditLog.directory(forPluginID: "video-studio", root: root)
             for name in [AgentPluginAuditLog.aiFileName,
                          AgentPluginAuditLog.commandsFileName,
                          AgentPluginAuditLog.hostCallsFileName] {
-                #expect(await waitForFile(directory.appendingPathComponent(name)), "\(name)")
+                #expect(exists(directory.appendingPathComponent(name)), "\(name)")
             }
         }
     }

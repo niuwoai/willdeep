@@ -103,7 +103,8 @@ nonisolated enum AgentPluginAuditLog {
         let errorDescription: String?
     }
 
-    static func recordHostCall(_ entry: HostCall, root: URL = AgentSandboxAuditLog.directory) {
+    @discardableResult
+    static func recordHostCall(_ entry: HostCall, root: URL = AgentSandboxAuditLog.directory) -> Task<Void, Never>? {
         append(entry, to: directory(forPluginID: entry.pluginID, root: root).appendingPathComponent(hostCallsFileName))
     }
 
@@ -124,22 +125,30 @@ nonisolated enum AgentPluginAuditLog {
             .appendingPathComponent(directoryName(forPluginID: pluginID), isDirectory: true)
     }
 
-    static func recordAICall(_ entry: AICall, root: URL = AgentSandboxAuditLog.directory) {
+    @discardableResult
+    static func recordAICall(_ entry: AICall, root: URL = AgentSandboxAuditLog.directory) -> Task<Void, Never>? {
         append(entry, to: directory(forPluginID: entry.pluginID, root: root).appendingPathComponent(aiFileName))
     }
 
-    static func recordCommandRun(_ entry: CommandRun, root: URL = AgentSandboxAuditLog.directory) {
+    @discardableResult
+    static func recordCommandRun(_ entry: CommandRun, root: URL = AgentSandboxAuditLog.directory) -> Task<Void, Never>? {
         append(entry, to: directory(forPluginID: entry.pluginID, root: root).appendingPathComponent(commandsFileName))
     }
 
     /// 每次执行都要留痕，所以写失败不能把调用方带崩，也不该阻塞它。
-    private static func append<T: Encodable>(_ entry: T, to url: URL) {
+    ///
+    /// 返回落盘任务：产品调用方一律丢弃、不等。只有测试 await 它——落盘走
+    /// `.utility` 优先级，满载全量测试时几秒都轮不到，盯着文件轮询判断「写
+    /// 没写」会把「多快写完」当成「是否写了」（2026-09-21 发版全量里两条用例
+    /// 就这样等满 5 秒红掉，单跑全过）。
+    @discardableResult
+    private static func append<T: Encodable>(_ entry: T, to url: URL) -> Task<Void, Never>? {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         guard let data = try? encoder.encode(entry),
-              var line = String(data: data, encoding: .utf8) else { return }
+              var line = String(data: data, encoding: .utf8) else { return nil }
         line += "\n"
-        Task.detached(priority: .utility) { await AgentPluginAuditWriter.shared.append(line, to: url) }
+        return Task.detached(priority: .utility) { await AgentPluginAuditWriter.shared.append(line, to: url) }
     }
 }
 

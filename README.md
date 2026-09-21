@@ -12,7 +12,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.394.0--rc6-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.394.0--rc7-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 **[下载 WillDeep](https://willdeep.com)** · [阅读使用指南](docs/willdeep-tutorial/README.md) · [从源码构建](docs/DEVELOPMENT.md)

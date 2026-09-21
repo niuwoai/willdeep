@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.394.0-rc7 - 2026-09-21
+
+### Fixed
+
+- **`AgentPluginAuditLogTests` 不再靠时钟判断审计日志写没写完。** 插件审计日志的落盘是发出即不管的 `Task.detached(priority: .utility)`，用例原来每 20ms 查一次文件、最多等 5 秒（并发那条按行数等 8 秒）。满载全量时 utility 优先级的任务几秒都轮不到，2026-09-21 Xcode 27 首次发版里 `eachPluginGetsItsOwnDirectory` 与 `aiEntryCarriesNoContent` 就这样等满红掉，单跑全过。
+  - `AgentPluginAuditLog.recordAICall` / `recordCommandRun` / `recordHostCall` 改为返回落盘任务（`@discardableResult`）。4 处产品调用点一行没改，照旧不等、不阻塞。
+  - 7 条用例全部 `await` 落盘任务再断言，删掉 `waitForFile` 和两段按行数的轮询循环；并发写入那条仍是 25 个任务同时落盘，并发度没变。
+  - 验证：普通跑 7/7；另起 16 个 `yes` 把 8 核压满再跑，7/7。
+
 ## 1.394.0-rc6 - 2026-09-21
 
 ### Fixed
