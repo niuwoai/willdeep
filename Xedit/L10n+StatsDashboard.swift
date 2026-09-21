@@ -13,6 +13,14 @@ extension L10n {
     enum StatsDashboard {
         static let activityCumulative = String(localized: "stats-dashboard.activity.cumulative", defaultValue: "Cumulative")
         static let activityDaily = String(localized: "stats-dashboard.activity.daily", defaultValue: "Daily")
+        static let sourceAll = String(localized: "stats-dashboard.source.all", defaultValue: "All")
+        static let sourceDesktop = String(localized: "stats-dashboard.source.desktop", defaultValue: "Desktop")
+        static let sourceCLI = String(localized: "stats-dashboard.source.cli", defaultValue: "CLI")
+        static let sourceBoth = String(localized: "stats-dashboard.source.both", defaultValue: "Desktop + CLI")
+        static let sourceFilterHelp = String(
+            localized: "stats-dashboard.source.help",
+            defaultValue: "Show usage from the desktop app, the willdeep CLI, or both"
+        )
         static let activityTitle = String(localized: "stats-dashboard.activity.title", defaultValue: "Token activity")
         static let activityWeekly = String(localized: "stats-dashboard.activity.weekly", defaultValue: "Weekly")
         static let usageCalendarTitle = String(localized: "stats-dashboard.usage-calendar.title", defaultValue: "Usage calendar")

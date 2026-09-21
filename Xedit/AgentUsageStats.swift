@@ -53,13 +53,27 @@ struct AgentUsageOverview: Equatable {
     var favoriteModel: String?
 }
 
-/// One cell of the GitHub-style heatmap: a calendar day plus its
-/// user-authored request count and real-or-estimated Token usage.
+/// One cell of the GitHub-style heatmap: a calendar day, its model-call count
+/// and Token usage, split by source.
+///
+/// "Request" means one model call (docs/USAGE_LEDGER_DESIGN.md §6.4), the
+/// same unit the request pages and the CLI ledger use. It used to count user
+/// messages, so a turn that ran past midnight showed "0 requests" with tokens
+/// on the next day.
 struct AgentHeatmapCell: Identifiable, Equatable {
     var id: Date { date }
     let date: Date
     let requestCount: Int
     let tokenCount: Int
+    var desktopRequestCount = 0
+    var cliRequestCount = 0
+    var desktopTokenCount = 0
+    var cliTokenCount = 0
+    /// Share of measured input tokens served from the provider's prompt cache,
+    /// nil when no call that day reported both numbers.
+    var cacheHitRate: Double? = nil
+    /// User-started turns (desktop user messages). Secondary: tooltip only.
+    var turnCount = 0
 }
 
 /// One calendar day's usage, shared by the monthly usage calendar and tests.
@@ -101,6 +115,8 @@ struct AgentModelUsageRow: Identifiable, Equatable {
     var isDelegatedExternal: Bool
     var cacheDiagnosticTurns: Int
     var stablePrefixCharactersTotal: Int
+    /// Which clients called this model (desktop sessions, CLI ledger).
+    var sources: Set<AgentUsageSource> = [.desktop]
 
     var cacheHitRate: Double {
         guard promptTokens > 0 else { return 0 }
@@ -617,6 +633,7 @@ nonisolated enum AgentUsageStats {
     /// the result. Pure function like the individual helpers it wraps.
     static func dashboardModel(
         for sessions: [AgentUsageSessionSnapshot],
+        cliRecords: [AgentCLIUsageRecord] = [],
         heatmapWeekCount: Int = 12,
         now: Date = Date()
     ) -> AgentUsageDashboardModel {
@@ -642,6 +659,11 @@ nonisolated enum AgentUsageStats {
             }
             peakTaskTokenCount = max(peakTaskTokenCount, sessionTokens)
         }
+        var cliSessionTokens: [String: Int] = [:]
+        for record in cliRecords {
+            cliSessionTokens[record.sessionID ?? record.id.uuidString, default: 0] += record.countedTokens
+        }
+        peakTaskTokenCount = max(peakTaskTokenCount, cliSessionTokens.values.max() ?? 0)
 
         let managedRoutingRate: Double
         if sessions.isEmpty {
@@ -656,8 +678,8 @@ nonisolated enum AgentUsageStats {
             : Double(reasonedCount) / Double(assistantCount)
 
         return AgentUsageDashboardModel(
-            overview: overview(for: sessions, now: now),
-            modelUsage: modelUsage(for: sessions),
+            overview: overview(for: sessions, cliRecords: cliRecords, now: now),
+            modelUsage: modelUsage(for: sessions, cliRecords: cliRecords),
             capabilityUsage: capabilityUsage(for: sessions),
             subagentUsage: subagentUsage(for: sessions),
             subagentSessionCount: sessions.count { session in
@@ -666,12 +688,12 @@ nonisolated enum AgentUsageStats {
                     || !(session.coordinatorWorkerRuns ?? []).isEmpty
             },
             skillWorkerKPIs: skillWorkerKPIs(for: sessions),
-            heatmapCells: heatmap(for: sessions, weekCount: heatmapWeekCount, now: now),
+            heatmapCells: heatmap(for: sessions, cliRecords: cliRecords, weekCount: heatmapWeekCount, now: now),
             peakTaskTokenCount: peakTaskTokenCount,
             managedRoutingRate: managedRoutingRate,
             reasoningUsageRate: reasoningUsageRate,
             uniqueToolCount: toolNames.count,
-            requestAnalytics: AgentRequestAnalytics.snapshot(for: sessions, now: now)
+            requestAnalytics: AgentRequestAnalytics.snapshot(for: sessions, cliRecords: cliRecords, now: now)
         )
     }
 
@@ -697,6 +719,7 @@ nonisolated enum AgentUsageStats {
 
     static func overview(
         for sessions: [AgentUsageSessionSnapshot],
+        cliRecords: [AgentCLIUsageRecord] = [],
         allTimeStreakSessions: [AgentUsageSessionSnapshot]? = nil,
         now: Date = Date()
     ) -> AgentUsageOverview {
@@ -709,6 +732,7 @@ nonisolated enum AgentUsageStats {
         // by more than 2×. `monthlySessionCount` in the calendar view has
         // always counted this way; this brings the all-time tile in line.
         let sessionCount = sessions.count { !$0.messages.isEmpty }
+            + Set(cliRecords.map { $0.sessionID ?? $0.id.uuidString }).count
         let userTurnCount = allMessages.count { $0.role == .user }
         let toolCallCount = allMessages.reduce(0) { $0 + $1.toolCallNames.count }
         let editedFileCount = sessions.reduce(0) { $0 + $1.editedFileCount }
@@ -726,14 +750,20 @@ nonisolated enum AgentUsageStats {
                 totalTokens += estimateTokens(for: message)
             }
         }
+        for record in cliRecords {
+            let tokens = record.countedTokens
+            totalTokens += tokens
+            hasAnyRealUsage = hasAnyRealUsage || tokens > 0
+        }
 
         let calendar = Calendar.current
-        let dayKeys: [Date] = allMessages.map { calendar.startOfDay(for: $0.createdAt) }
+        let cliDayKeys = cliRecords.map { calendar.startOfDay(for: $0.timestamp) }
+        let dayKeys: [Date] = allMessages.map { calendar.startOfDay(for: $0.createdAt) } + cliDayKeys
         let uniqueDays = Set(dayKeys)
         let activeDays = uniqueDays.count
 
         let streakMessages = (allTimeStreakSessions ?? sessions).flatMap(\.messages)
-        let streakDays = Set(streakMessages.map { calendar.startOfDay(for: $0.createdAt) })
+        let streakDays = Set(streakMessages.map { calendar.startOfDay(for: $0.createdAt) } + cliDayKeys)
         let streaks = computeStreaks(
             uniqueDays: streakDays,
             now: now,
@@ -745,14 +775,28 @@ nonisolated enum AgentUsageStats {
             let hour = calendar.component(.hour, from: message.createdAt)
             hourCounts[hour, default: 0] += 1
         }
+        for record in cliRecords {
+            hourCounts[calendar.component(.hour, from: record.timestamp), default: 0] += 1
+        }
         let peakHour = hourCounts.max { $0.value < $1.value }?.key
 
+        // 按每一次模型调用实际用的模型计，而不是会话默认模型 × 消息数：
+        // 省心托管和中途切模型的会话以前全算在会话默认模型头上。
         var modelCounts: [String: Int] = [:]
-        for session in sessions {
-            guard let model = session.modelID, !model.isEmpty else { continue }
-            modelCounts[model, default: 0] += session.messages.count
+        for event in AgentRequestAnalytics.requestEvents(for: sessions, cliRecords: cliRecords)
+        where event.modelID != "unknown-model" {
+            modelCounts[event.modelID, default: 0] += event.requestCount
         }
-        let favoriteModel = modelCounts.max { $0.value < $1.value }?.key
+        if modelCounts.isEmpty {
+            // 早期会话的消息没有逐次请求记录，退回按会话模型计。
+            for session in sessions {
+                guard let model = session.modelID, !model.isEmpty else { continue }
+                modelCounts[model, default: 0] += session.messages.count
+            }
+        }
+        let favoriteModel = modelCounts.max {
+            $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key
+        }?.key
 
         return AgentUsageOverview(
             sessionCount: sessionCount,
@@ -774,10 +818,12 @@ nonisolated enum AgentUsageStats {
     }
 
     /// Produce a GitHub-style heatmap: `weekCount` columns of 7 rows
-    /// each (Mon..Sun), counting user-authored requests and summing
-    /// real-or-estimated Token usage per day in the user's local timezone.
-    /// Defaults to 12 weeks. Returned in column-major order (oldest column
-    /// first); the caller renders left → right.
+    /// each (Mon..Sun) in the user's local timezone. Each day counts model
+    /// calls ("requests", docs/USAGE_LEDGER_DESIGN.md §6.4) and Token usage,
+    /// desktop and CLI separately. Desktop tokens are real-or-estimated per
+    /// transcript message plus worker and auxiliary calls; CLI tokens are
+    /// exactly what the ledger reports. Returned in column-major order
+    /// (oldest column first); the caller renders left → right.
     static func heatmap(
         for sessions: [AgentSession],
         weekCount: Int = 12,
@@ -788,6 +834,7 @@ nonisolated enum AgentUsageStats {
 
     static func heatmap(
         for sessions: [AgentUsageSessionSnapshot],
+        cliRecords: [AgentCLIUsageRecord] = [],
         weekCount: Int = 12,
         now: Date = Date()
     ) -> [[AgentHeatmapCell]] {
@@ -797,18 +844,46 @@ nonisolated enum AgentUsageStats {
             return []
         }
 
-        let messages = sessions.flatMap(\.messages)
-        var tokenCountByDay: [Date: Int] = [:]
-        var requestCountByDay: [Date: Int] = [:]
-        for message in messages {
-            let day = calendar.startOfDay(for: message.createdAt)
-            if day < earliestStart { continue }
-            let tokenCount = message.usageTokens.flatMap { $0 > 0 ? $0 : nil }
-                ?? estimateTokens(for: message)
-            tokenCountByDay[day, default: 0] += tokenCount
-            if message.role == .user {
-                requestCountByDay[day, default: 0] += 1
+        struct DayTotals {
+            var desktopRequests = 0
+            var cliRequests = 0
+            var desktopTokens = 0
+            var cliTokens = 0
+            var cachedInput = 0
+            var measuredInput = 0
+            var turns = 0
+        }
+        var days: [Date: DayTotals] = [:]
+
+        for session in sessions {
+            for message in session.messages {
+                let day = calendar.startOfDay(for: message.createdAt)
+                if day < earliestStart { continue }
+                let tokenCount = message.usageTokens.flatMap { $0 > 0 ? $0 : nil }
+                    ?? estimateTokens(for: message)
+                days[day, default: DayTotals()].desktopTokens += tokenCount
+                if message.role == .user {
+                    days[day, default: DayTotals()].turns += 1
+                }
             }
+        }
+        for event in AgentRequestAnalytics.requestEvents(for: sessions, cliRecords: cliRecords) {
+            let day = calendar.startOfDay(for: event.createdAt)
+            if day < earliestStart { continue }
+            var totals = days[day, default: DayTotals()]
+            switch event.source {
+            case .desktop:
+                totals.desktopRequests += event.requestCount
+                totals.desktopTokens += event.additionalTokens
+            case .cli:
+                totals.cliRequests += event.requestCount
+                totals.cliTokens += event.additionalTokens
+            }
+            if let prompt = event.promptTokens, prompt > 0, let cached = event.cachedPromptTokens {
+                totals.measuredInput += prompt
+                totals.cachedInput += min(max(0, cached), prompt)
+            }
+            days[day] = totals
         }
 
         var columns: [[AgentHeatmapCell]] = []
@@ -817,16 +892,26 @@ nonisolated enum AgentUsageStats {
             for day in 0..<7 {
                 let offset = week * 7 + day
                 guard let date = calendar.date(byAdding: .day, value: offset, to: earliestStart) else { continue }
+                let totals = days[date] ?? DayTotals()
                 column.append(AgentHeatmapCell(
                     date: date,
-                    requestCount: requestCountByDay[date] ?? 0,
-                    tokenCount: tokenCountByDay[date] ?? 0
+                    requestCount: totals.desktopRequests + totals.cliRequests,
+                    tokenCount: totals.desktopTokens + totals.cliTokens,
+                    desktopRequestCount: totals.desktopRequests,
+                    cliRequestCount: totals.cliRequests,
+                    desktopTokenCount: totals.desktopTokens,
+                    cliTokenCount: totals.cliTokens,
+                    cacheHitRate: totals.measuredInput > 0
+                        ? Double(totals.cachedInput) / Double(totals.measuredInput)
+                        : nil,
+                    turnCount: totals.turns
                 ))
             }
             columns.append(column)
         }
         return columns
     }
+
 
     /// Build every day in the requested local calendar month, including zero
     /// usage days so the presentation layer can render a stable month grid.
@@ -970,6 +1055,68 @@ nonisolated enum AgentUsageStats {
 
     static func modelUsage(for sessions: [AgentSession]) -> [AgentModelUsageRow] {
         modelUsage(for: sessions.map { AgentUsageSessionSnapshot(session: $0) })
+    }
+
+    /// Desktop model rows plus the CLI ledger, merged by provider|model so a
+    /// model used from both clients is one row tagged with both sources.
+    static func modelUsage(
+        for sessions: [AgentUsageSessionSnapshot],
+        cliRecords: [AgentCLIUsageRecord]
+    ) -> [AgentModelUsageRow] {
+        let desktopRows = modelUsage(for: sessions)
+        guard !cliRecords.isEmpty else { return desktopRows }
+        var rows = Dictionary(uniqueKeysWithValues: desktopRows.map { ($0.id, $0) })
+        var sessionKeys: [String: Set<String>] = [:]
+        for record in cliRecords {
+            let modelID = normalizedModelID(record.modelID ?? "")
+            let declaredProviderID = record.providerID ?? ""
+            let providerID = declaredProviderID.isEmpty ? inferProviderID(from: modelID) : declaredProviderID
+            let key = "\(providerID)|\(modelID)"
+            var row = rows[key] ?? AgentModelUsageRow(
+                providerID: providerID,
+                providerName: AgentProviderPreset.normalizedDisplayName(
+                    providerID: providerID,
+                    storedDisplayName: nil
+                ) ?? providerID,
+                modelID: modelID,
+                sessionCount: 0,
+                messageCount: 0,
+                promptTokens: 0,
+                completionTokens: 0,
+                cachedPromptTokens: 0,
+                cacheWritePromptTokens: 0,
+                reasoningTokens: 0,
+                totalTokens: 0,
+                estimatedTokens: 0,
+                estimatedCostUSD: nil,
+                hasEstimatedUsage: false,
+                isDelegatedExternal: false,
+                cacheDiagnosticTurns: 0,
+                stablePrefixCharactersTotal: 0,
+                sources: []
+            )
+            if sessionKeys[key, default: []].insert(record.sessionID ?? record.id.uuidString).inserted {
+                row.sessionCount += 1
+            }
+            row.sources.insert(.cli)
+            row.messageCount += 1
+            row.promptTokens += record.inputTokens ?? 0
+            row.completionTokens += record.outputTokens ?? 0
+            row.cachedPromptTokens += record.cachedInputTokens ?? 0
+            row.totalTokens += record.countedTokens
+            row.estimatedCostUSD = estimatedCostUSD(for: row)
+            rows[key] = row
+        }
+        return rows.values
+            .filter { $0.messageCount > 0 || $0.totalTokens > 0 }
+            .sorted {
+                let lhs = $0.estimatedCostUSD ?? -1
+                let rhs = $1.estimatedCostUSD ?? -1
+                if lhs != rhs { return lhs > rhs }
+                if $0.totalTokens != $1.totalTokens { return $0.totalTokens > $1.totalTokens }
+                if $0.providerName != $1.providerName { return $0.providerName < $1.providerName }
+                return $0.modelID < $1.modelID
+            }
     }
 
     static func modelUsage(for sessions: [AgentUsageSessionSnapshot]) -> [AgentModelUsageRow] {

@@ -1684,6 +1684,7 @@ extension AppState {
             snapshotsByID[snapshot.id] = snapshot
         }
         agentUsageSnapshots = snapshotsByID.values.sorted { $0.updatedAt > $1.updatedAt }
+        await refreshAgentCLIUsageRecords()
         hasLoadedAgentUsageSnapshots = true
         AppStartupTimingLog.record(
             .usageDashboardReady,

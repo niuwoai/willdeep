@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-21 | Current version: v1.394.0-rc7
+> Last updated: 2026-09-21 | Current version: v1.395.0-rc1
+
+用量统计合并 willdeep CLI 的用量（1.395.0-rc1）：读取 CLI 写在 `~/.willdeep/usage/` 的本地用量账本，Token 活动、总览、模型拆分、请求页都算上 CLI 的模型调用，热力图旁可切「全部 / 桌面 / CLI」。热力图的「请求」统一为模型调用次数，跨零点的回合不再显示「0 次请求」。设计见 `docs/USAGE_LEDGER_DESIGN.md`。
 
 上下文跑道交接后压缩失败，会自动带着整份交接开新会话接着跑（1.394.0-rc1）。新会话继承原会话的工作区、模型与供应商、审批档位、执行器和沙箱设置，续跑次数接着原会话往下数；原会话留一行「已转到新会话」。Goal、远程工作区、找不到交接消息这三种情况不接力，照旧停住。页脚「开新会话继续」也改为带上完整交接（PAUSE / DONE / ANCHORS / REMAINING / NEXT PROMPT），不再只带 NEXT PROMPT 一句。
 

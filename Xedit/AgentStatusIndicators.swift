@@ -219,6 +219,10 @@ struct AgentStatsDashboard: View {
         .padding(AgentStatsDashboardLayout.panelPadding)
         .task {
             await appState.loadAgentUsageSnapshotsIfNeeded()
+            appState.startWatchingAgentCLIUsage()
+        }
+        .onDisappear {
+            appState.stopWatchingAgentCLIUsage()
         }
         .onReceive(
             NotificationCenter.default.publisher(
@@ -644,6 +648,10 @@ struct AgentStatsDashboard: View {
                         weight: .semibold
                     ))
                 Spacer(minLength: 0)
+                if appState.hasAgentCLIUsage {
+                    sourceFilterPicker
+                        .padding(.trailing, 16)
+                }
                 HStack(spacing: 13) {
                     ForEach(ActivityMode.allCases) { mode in
                         Button {
@@ -687,11 +695,7 @@ struct AgentStatsDashboard: View {
                             // One tooltip string per cell per pass, via the
                             // cached formatter (a fresh DateFormatter per cell
                             // used to stutter the main thread).
-                            L10n.HeatmapCell.tooltip(
-                                cellDateLabel(cell.date),
-                                formatInteger(cell.requestCount),
-                                formatTokenCount(cell.tokenCount)
-                            )
+                            heatmapTooltip(cell)
                         }
                     )
                     .equatable()
@@ -1372,6 +1376,56 @@ struct AgentStatsDashboard: View {
         dashboardModel.heatmapCells
     }
 
+    /// 全部 / 桌面 / CLI. Only shown once the CLI ledger has data.
+    private var sourceFilterPicker: some View {
+        HStack(spacing: 10) {
+            ForEach(AgentUsageSourceFilter.allCases) { filter in
+                Button {
+                    appState.agentUsageSourceFilter = filter
+                } label: {
+                    Text(sourceFilterTitle(filter))
+                        .font(supportingFont(
+                            visualMinimum: AgentStatsDashboardTypography.body,
+                            weight: appState.agentUsageSourceFilter == filter ? .medium : .regular
+                        ))
+                        .foregroundStyle(appState.agentUsageSourceFilter == filter ? Color.primary : Color.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .help(L10n.StatsDashboard.sourceFilterHelp)
+        .accessibilityIdentifier("stats-usage-source-filter")
+    }
+
+    private func sourceFilterTitle(_ filter: AgentUsageSourceFilter) -> String {
+        switch filter {
+        case .all: return L10n.StatsDashboard.sourceAll
+        case .desktop: return L10n.StatsDashboard.sourceDesktop
+        case .cli: return L10n.StatsDashboard.sourceCLI
+        }
+    }
+
+    /// 「9月21日 · 请求：704 次 · Token：3330万 · 桌面 25 · CLI 679 · 缓存命中 87%」.
+    /// The split only appears when both sources were active that day.
+    private func heatmapTooltip(_ cell: AgentHeatmapCell) -> String {
+        var text = L10n.HeatmapCell.tooltip(
+            cellDateLabel(cell.date),
+            formatInteger(cell.requestCount),
+            formatTokenCount(cell.tokenCount)
+        )
+        if cell.desktopRequestCount > 0 || cell.desktopTokenCount > 0,
+           cell.cliRequestCount > 0 || cell.cliTokenCount > 0 {
+            text += " · " + L10n.HeatmapCell.sourceSplit(
+                formatInteger(cell.desktopRequestCount),
+                formatInteger(cell.cliRequestCount)
+            )
+        }
+        if let rate = cell.cacheHitRate, rate > 0 {
+            text += " · " + L10n.HeatmapCell.cacheHit(formatPercentage(rate))
+        }
+        return text
+    }
+
     private func activityDisplayCounts(_ cells: [[AgentHeatmapCell]]) -> [[Int]] {
         switch activityMode {
         case .daily:
@@ -1905,6 +1959,11 @@ struct AgentStatsDashboard: View {
         }
         if row.isDelegatedExternal {
             parts.append(L10n.ModelUsage.sourceExternal)
+        }
+        if row.sources.contains(.cli) {
+            parts.append(row.sources.contains(.desktop)
+                ? L10n.StatsDashboard.sourceBoth
+                : L10n.StatsDashboard.sourceCLI)
         }
         if row.averageStablePrefixCharacters > 0 {
             parts.append(L10n.ModelUsage.prefix(formatTokens(row.averageStablePrefixCharacters)))

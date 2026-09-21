@@ -1189,6 +1189,15 @@ nonisolated enum L10n {
             let template = String(localized: "heatmap-cell.tooltip", defaultValue: "%1$@ · Requests: %2$@ · Tokens: %3$@")
             return String(format: template, a1, a2, a3)
         }
+        /// Appended when a day has both desktop and CLI calls.
+        static func sourceSplit(_ desktop: String, _ cli: String) -> String {
+            let template = String(localized: "heatmap-cell.source-split", defaultValue: "Desktop %1$@ · CLI %2$@")
+            return String(format: template, desktop, cli)
+        }
+        static func cacheHit(_ percent: String) -> String {
+            let template = String(localized: "heatmap-cell.cache-hit", defaultValue: "Cache hit %@")
+            return String(format: template, percent)
+        }
     }
 
     enum ImageDescription {

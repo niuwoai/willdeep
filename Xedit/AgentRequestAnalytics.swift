@@ -145,11 +145,39 @@ nonisolated struct AgentRequestAnalyticsSnapshot: Equatable {
     let recentAPIModels: [AgentRequestModelUsageRow]
 }
 
+/// One provider round (or a worker's batch of rounds) as the dashboards count
+/// "requests": the unit an API gateway or local endpoint sees. Shared by the
+/// heatmap, the favorite-model tile and the request pages so all three use
+/// one definition (docs/USAGE_LEDGER_DESIGN.md §6.4).
+nonisolated struct AgentUsageRequestEvent: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        /// A main-loop assistant round; its tokens are already counted from
+        /// the message itself.
+        case message
+        /// A worker loop; `requestCount` is its round count.
+        case worker
+        /// Title, compression, image description, routing, suggestions.
+        case auxiliary
+        /// A CLI ledger line.
+        case cli
+    }
+
+    let kind: Kind
+    let source: AgentUsageSource
+    let createdAt: Date
+    let requestCount: Int
+    let modelID: String
+    /// Tokens not already counted from a transcript message (0 for `.message`).
+    let additionalTokens: Int
+    let promptTokens: Int?
+    let cachedPromptTokens: Int?
+}
+
 nonisolated enum AgentRequestAnalytics {
     private static let localProviderID = "ollama"
 
     private struct Sample {
-        let sessionID: UUID
+        let sessionID: String
         let providerID: String
         let providerName: String
         let modelID: String
@@ -163,7 +191,7 @@ nonisolated enum AgentRequestAnalytics {
     }
 
     private struct Accumulator {
-        var sessionIDs: Set<UUID> = []
+        var sessionIDs: Set<String> = []
         var requestCount = 0
         var promptTokens = 0
         var completionTokens = 0
@@ -233,12 +261,15 @@ nonisolated enum AgentRequestAnalytics {
 
     static func snapshot(
         for sessions: [AgentUsageSessionSnapshot],
+        cliRecords: [AgentCLIUsageRecord] = [],
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> AgentRequestAnalyticsSnapshot {
-        let samples = sessions.flatMap(samples(for:))
+        let samples = sessions.flatMap(samples(for:)) + cliRecords.map(sample(for:))
         let today = calendar.startOfDay(for: now)
         let recentStart = calendar.date(byAdding: .day, value: -6, to: today) ?? today
+        // 「API 请求 · 近 7 天」按设计包含本地模型：本地端点也是一个 API
+        // （AgentUsageStatsTests 钉着这条口径）。
         let recent = samples.filter { $0.createdAt >= recentStart && $0.createdAt <= now }
         let local = samples.filter(\.isLocal)
         return AgentRequestAnalyticsSnapshot(
@@ -261,7 +292,7 @@ nonisolated enum AgentRequestAnalytics {
                 || message.usageTokens != nil
             guard hasRequestEvidence else { return nil }
             return Sample(
-                sessionID: session.id,
+                sessionID: session.id.uuidString,
                 providerID: provider,
                 providerName: providerName(provider, stored: message.requestProviderDisplayName ?? session.providerDisplayName),
                 modelID: model,
@@ -278,7 +309,7 @@ nonisolated enum AgentRequestAnalytics {
         for message in session.messages where !message.subagentRuns.isEmpty {
             result.append(contentsOf: workerSamples(
                 message.subagentRuns,
-                sessionID: session.id,
+                sessionID: session.id.uuidString,
                 createdAt: message.createdAt
             ))
         }
@@ -286,12 +317,12 @@ nonisolated enum AgentRequestAnalytics {
             + (session.coordinatorWorkerRuns ?? [])
         result.append(contentsOf: workerSamples(
             sessionLevelWorkerRuns,
-            sessionID: session.id,
+            sessionID: session.id.uuidString,
             createdAt: session.updatedAt
         ))
         result.append(contentsOf: session.auxiliaryModelRequests.map { record in
             Sample(
-                sessionID: session.id,
+                sessionID: session.id.uuidString,
                 providerID: normalized(record.providerID, fallback: "unknown-provider"),
                 providerName: providerName(record.providerID, stored: record.providerName),
                 modelID: normalized(record.modelID, fallback: "unknown-model"),
@@ -307,9 +338,105 @@ nonisolated enum AgentRequestAnalytics {
         return result
     }
 
+    private static func sample(for record: AgentCLIUsageRecord) -> Sample {
+        let provider = normalized(record.providerID, fallback: "unknown-provider")
+        return Sample(
+            sessionID: "cli:" + (record.sessionID ?? record.id.uuidString),
+            providerID: provider,
+            providerName: providerName(provider, stored: nil),
+            modelID: normalized(record.modelID, fallback: "unknown-model"),
+            isLocal: record.isLocal,
+            createdAt: record.timestamp,
+            requestCount: 1,
+            promptTokens: record.inputTokens,
+            completionTokens: record.outputTokens,
+            elapsedSeconds: record.latencySeconds,
+            firstResponseSeconds: nil
+        )
+    }
+
+    /// Every model call behind the dashboards, desktop and CLI alike.
+    ///
+    /// Desktop main-loop rounds come from assistant messages with request
+    /// evidence (their tokens stay counted from the message); worker loops
+    /// count their rounds and contribute their own tokens; auxiliary helper
+    /// calls (title, compression, …) count one each. CLI ledger lines count
+    /// one each with their reported tokens.
+    static func requestEvents(
+        for sessions: [AgentUsageSessionSnapshot],
+        cliRecords: [AgentCLIUsageRecord] = []
+    ) -> [AgentUsageRequestEvent] {
+        var events: [AgentUsageRequestEvent] = []
+        for session in sessions {
+            for message in session.messages {
+                guard message.role == .assistant, message.origin != .delegatedExternal,
+                      message.origin != .hostGenerated else { continue }
+                let hasRequestEvidence = message.requestModelID != nil
+                    || message.requestProviderID != nil
+                    || message.elapsedSeconds != nil
+                    || message.usageTokens != nil
+                guard hasRequestEvidence else { continue }
+                events.append(AgentUsageRequestEvent(
+                    kind: .message,
+                    source: .desktop,
+                    createdAt: message.createdAt,
+                    requestCount: 1,
+                    modelID: normalized(message.requestModelID ?? session.modelID, fallback: "unknown-model"),
+                    additionalTokens: 0,
+                    promptTokens: message.promptTokens,
+                    cachedPromptTokens: message.cachedPromptTokens
+                ))
+            }
+            let messageWorkerRuns = session.messages.flatMap { message in
+                message.subagentRuns.map { (run: $0, createdAt: message.createdAt) }
+            }
+            let sessionWorkerRuns = ((session.hostWorkerRuns ?? []).compactMap(\.usage)
+                + (session.coordinatorWorkerRuns ?? []))
+                .map { (run: $0, createdAt: session.updatedAt) }
+            for entry in messageWorkerRuns + sessionWorkerRuns where entry.run.roundCount > 0 {
+                let run = entry.run
+                events.append(AgentUsageRequestEvent(
+                    kind: .worker,
+                    source: .desktop,
+                    createdAt: entry.createdAt,
+                    requestCount: run.roundCount,
+                    modelID: normalized(run.model, fallback: "unknown-model"),
+                    additionalTokens: max(run.usageTokens, run.promptTokens + run.completionTokens),
+                    promptTokens: run.promptTokens > 0 ? run.promptTokens : nil,
+                    cachedPromptTokens: run.cachedPromptTokens > 0 ? run.cachedPromptTokens : nil
+                ))
+            }
+            for record in session.auxiliaryModelRequests {
+                events.append(AgentUsageRequestEvent(
+                    kind: .auxiliary,
+                    source: .desktop,
+                    createdAt: record.createdAt,
+                    requestCount: 1,
+                    modelID: normalized(record.modelID, fallback: "unknown-model"),
+                    additionalTokens: max(0, record.promptTokens ?? 0) + max(0, record.completionTokens ?? 0),
+                    promptTokens: record.promptTokens,
+                    cachedPromptTokens: nil
+                ))
+            }
+        }
+        for record in cliRecords {
+            events.append(AgentUsageRequestEvent(
+                kind: .cli,
+                source: .cli,
+                createdAt: record.timestamp,
+                requestCount: 1,
+                modelID: normalized(record.modelID, fallback: "unknown-model"),
+                additionalTokens: record.countedTokens,
+                promptTokens: record.inputTokens,
+                cachedPromptTokens: record.cachedInputTokens
+            ))
+        }
+        return events
+    }
+
     private static func workerSamples(
         _ runs: [AgentSubagentRunUsage],
-        sessionID: UUID,
+        sessionID: String,
         createdAt: Date
     ) -> [Sample] {
         runs.compactMap { run in

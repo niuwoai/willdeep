@@ -392,6 +392,28 @@ final class AppState: ObservableObject {
     @Published var agentUsageSnapshots: [AgentUsageSessionSnapshot] = [] {
         didSet { agentUsageStatsRevision &+= 1 }
     }
+    /// Model calls read from the willdeep-rs usage ledger
+    /// (docs/USAGE_LEDGER_DESIGN.md). Loaded with the desktop snapshots and
+    /// refreshed while the stats dashboard is watching the ledger directory.
+    @Published var agentCLIUsageRecords: [AgentCLIUsageRecord] = [] {
+        didSet { agentUsageStatsRevision &+= 1 }
+    }
+    /// The heatmap's 全部 / 桌面 / CLI switch; filters every dashboard aggregate.
+    @Published var agentUsageSourceFilter: AgentUsageSourceFilter = AppState.loadAgentUsageSourceFilter() {
+        didSet {
+            agentUsageStatsRevision &+= 1
+            UserDefaults.standard.set(agentUsageSourceFilter.rawValue, forKey: Self.agentUsageSourceFilterDefaultsKey)
+        }
+    }
+    static let agentUsageSourceFilterDefaultsKey = "com.willdeep.usageDashboard.sourceFilter.v1"
+    /// Nil in unit tests unless a test injects one: the real `~/.willdeep`
+    /// must never leak into test expectations.
+    var agentCLIUsageLedgerReader: AgentCLIUsageLedgerReader? =
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
+            ? AgentCLIUsageLedgerReader(directory: AgentCLIUsageLedgerReader.defaultDirectory())
+            : nil
+    var agentCLIUsageLedgerWatcher: AgentCLIUsageLedgerWatcher?
+    var isRefreshingAgentCLIUsage = false
     /// Monotonic write counter for `agentUsageSnapshots`. Keys the memoized
     /// dashboard aggregates so cache checks never have to compare the
     /// snapshot payloads themselves.
@@ -450,11 +472,14 @@ final class AppState: ObservableObject {
         // The newest request wins; the ones it laps were going to produce
         // superseded numbers anyway.
         agentUsageDashboardTask?.cancel()
-        let snapshots = agentUsageSnapshots
+        let filter = agentUsageSourceFilter
+        let snapshots = filter.includes(.desktop) ? agentUsageSnapshots : []
+        let cliRecords = filter.includes(.cli) ? agentCLIUsageRecords : []
         agentUsageDashboardTask = Task { [weak self] in
             let model = await Task.detached(priority: .userInitiated) {
                 AgentUsageStats.dashboardModel(
                     for: snapshots,
+                    cliRecords: cliRecords,
                     heatmapWeekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks,
                     now: now
                 )
