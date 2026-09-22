@@ -73,7 +73,7 @@ extension AppState {
             workspaceURL = try? runtime.localWorkspaceURLForOptimisticUse()
         }
 
-        let profile = AgentSubagentProfileStore.resolvedProfile(id: profileID)
+        let profile = Self.preflightProfile(AgentSubagentProfileStore.resolvedProfile(id: profileID))
         // Defensive: every preflight trade is non-writing, but a user-edited
         // profile store could have widened one of them.
         guard !profile.requiresWriteAccess else { return nil }
@@ -233,6 +233,20 @@ extension AppState {
             // WillDeep's plumbing invites it to reason about the wrong thing.
         }
         return nil
+    }
+
+    /// Round cap for a preflight. The whole run sits between the user's
+    /// message and the root model's first token, so it gets a far tighter
+    /// budget than the same trade doing real work: on 2026-09-22 an
+    /// ops_runner preflight used its ordinary 32-round budget, ran 24 rounds
+    /// (4m33s) and turned a 33-second edit into a 5m19s turn. At the cap a
+    /// free-text preflight still hands back what it found.
+    static let preflightMaxRounds = 6
+
+    static func preflightProfile(_ profile: AgentSubagentProfile) -> AgentSubagentProfile {
+        var bounded = profile
+        bounded.maxRounds = min(profile.maxRounds, preflightMaxRounds)
+        return bounded
     }
 
     /// The worker sees none of this conversation, so the request is restated

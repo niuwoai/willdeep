@@ -268,6 +268,28 @@ struct AgentRequestRouterTests {
         #expect(AgentRequestRouter.classify("按部署流程把新版本部署到生产环境").profileID == "ops_runner")
     }
 
+    @Test("点名要改 yaml 清单是编辑，不因引述里的生产词汇走运维")
+    func namedManifestEditIsNotAnOperation() {
+        // The 2026-09-22 request that spent 4m33s in an ops preflight.
+        let request = "生产集群没动。若要走生产，注意 preflight 报告指出的坑：deploy/k8s/overlays/production/03b-deploy-svc.yaml 里镜像标签还停在 0.238.0-rc8，直接 apply overlay 会把生产降级，必须先同步该文件的 tag 与 change-cause 再发。你改一下yaml文件吧"
+        let decision = AgentRequestRouter.classify(request)
+        #expect(decision.profileID != "ops_runner", "routed to \(decision.profileID)")
+        #expect(decision.preflightProfileID != "ops_runner")
+
+        // A file-type word with no path is still an edit.
+        #expect(AgentRequestRouter.classify("把生产环境的 yaml 文件里的副本数改成 3").profileID != "ops_runner")
+        // Path followed directly by CJK text still names the file.
+        #expect(AgentRequestRouter.namedEditableFiles("改一下 k8s/app.yaml里的镜像").contains("k8s/app.yaml"))
+        // Editable-file detection is wider than the build-fixer's source list.
+        #expect(AgentRequestRouter.namedSourceFiles("改一下 values.yaml").isEmpty)
+        #expect(!AgentRequestRouter.namedEditableFiles("改一下 values.yaml").isEmpty)
+
+        // A genuine rollout without a file to edit still goes to operations.
+        #expect(AgentRequestRouter.classify("按部署流程把新版本部署到生产环境").profileID == "ops_runner")
+        // A version string is not a file name.
+        #expect(AgentRequestRouter.namedEditableFiles("把 0.247.0-rc2 发到生产").isEmpty)
+    }
+
     @Test("fix only counts as a mutating verb when it stands alone")
     func fixNeedsAWordBoundary() {
         // "prefix" is not a repair request; it used to skip every read-only

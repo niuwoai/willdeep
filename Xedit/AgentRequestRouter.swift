@@ -248,7 +248,7 @@ nonisolated enum AgentRequestRouter {
         // privileged branches first and hand the edit to a trade with no
         // write tools (terminal_operator) or a forced-delegation lock
         // (ops_runner) that the edit could never satisfy.
-        let editsNamedFile = mutating && !namedSourceFiles(sample).isEmpty
+        let editsNamedFile = mutating && (!namedEditableFiles(sample).isEmpty || mentionsEditableFileType(sample))
 
         // The terminal operator has no write tools; a mutating request is
         // never its job even when it mentions the terminal.
@@ -498,15 +498,50 @@ nonisolated enum AgentRequestRouter {
     /// must not do. Extensions come from the repair set so "a source file"
     /// means one thing across the runtime — `.o` / `.json` / `.lock` paths in
     /// a pasted log never count as an edit target.
+    /// Extensions that make "change X" a file edit for the privileged-branch
+    /// gate. Wider than `repairableExtensions` (which picks code a build
+    /// fixer can repair): manifests and configs are edited, not deployed, when
+    /// the request names them. 2026-09-22: "…03b-deploy-svc.yaml 里镜像标签
+    /// 还停在 0.238.0-rc8…你改一下yaml文件吧" routed to ops_runner because
+    /// `yaml` was missing, and its preflight spent 4m33s inspecting a cluster
+    /// for a five-line edit.
+    static let editableFileExtensions: Set<String> = AgentWorkerAutoDispatch.repairableExtensions.union([
+        "yaml", "yml", "json", "toml", "ini", "conf", "cfg", "env", "properties",
+        "xml", "plist", "md", "txt", "tf", "hcl", "sql", "dockerfile",
+    ])
+
+    /// "改一下yaml文件" / "edit the helm values file": a file-type word with no
+    /// path is still a request to edit a file.
+    static let editableFileTypePhrases = [
+        "yaml文件", "yml文件", "json文件", "toml文件", "配置文件", "清单文件", "yaml 文件", "yml 文件",
+        "yaml file", "yml file", "json file", "config file", "manifest file", "values file",
+    ]
+
+    static func namedEditableFiles(_ sample: String) -> Set<String> {
+        namedFiles(sample, extensions: editableFileExtensions)
+    }
+
+    static func mentionsEditableFileType(_ sample: String) -> Bool {
+        let lowered = sample.lowercased()
+        return editableFileTypePhrases.contains { lowered.contains($0) }
+    }
+
     static func namedSourceFiles(_ sample: String) -> Set<String> {
+        namedFiles(sample, extensions: AgentWorkerAutoDispatch.repairableExtensions)
+    }
+
+    private static func namedFiles(_ sample: String, extensions: Set<String>) -> Set<String> {
         let separators = CharacterSet(charactersIn: " \t\n\r,;:()[]{}<>\"'`，。、；：（）【】「」")
         var files: Set<String> = []
         for token in sample.components(separatedBy: separators) {
             let trimmed = token.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?"))
             guard let dot = trimmed.lastIndex(of: "."), dot != trimmed.startIndex else { continue }
-            let ext = String(trimmed[trimmed.index(after: dot)...])
-            guard AgentWorkerAutoDispatch.repairableExtensions.contains(ext) else { continue }
-            files.insert(trimmed)
+            // Chinese text often runs straight on after a path ("svc.yaml里
+            // 镜像…"), so the extension is the leading ASCII run only.
+            let ext = String(trimmed[trimmed.index(after: dot)...].prefix { $0.isASCII && ($0.isLetter || $0.isNumber) })
+            guard !ext.isEmpty, extensions.contains(ext.lowercased()) else { continue }
+            let nameEnd = trimmed.index(dot, offsetBy: ext.count + 1)
+            files.insert(String(trimmed[..<nameEnd]))
         }
         return files
     }

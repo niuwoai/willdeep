@@ -5,6 +5,20 @@ import Testing
 @Suite
 @MainActor
 struct AgentReadOnlyPreflightTests {
+    @Test("预检轮数上限远低于工种正常预算，但不会把本来更小的预算放大")
+    func preflightRoundBudgetIsTight() {
+        let ops = AgentSubagentProfileStore.resolvedProfile(id: AgentSubagentProfileCatalog.opsRunnerID)
+        #expect(ops.maxRounds > AppState.preflightMaxRounds)
+        let bounded = AppState.preflightProfile(ops)
+        #expect(bounded.maxRounds == AppState.preflightMaxRounds)
+        #expect(bounded.id == ops.id)
+        #expect(bounded.toolNames == ops.toolNames)
+
+        var small = ops
+        small.maxRounds = 2
+        #expect(AppState.preflightProfile(small).maxRounds == 2)
+    }
+
     @Test("preflight defaults off and is explicitly enabled by shared config")
     func preflightDefaultsOff() {
         // Serial preflight delays the root model's first token, so an absent
