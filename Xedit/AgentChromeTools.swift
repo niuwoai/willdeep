@@ -11,7 +11,15 @@ import Foundation
 
 enum AgentChromeTools {
     private static let defaultEndpoint = "http://127.0.0.1:8797"
+    /// How long the bridge waits for the extension to answer.
     private static let requestTimeout: TimeInterval = 10
+    /// Navigation waits for the tab to finish loading inside the extension
+    /// (up to 10 s), so it gets a longer bridge budget.
+    private static let navigationRequestTimeout: TimeInterval = 15
+    /// The HTTP request must outlive the bridge's own timeout. When both were
+    /// 10 s the client usually gave up first and reported "bridge not
+    /// reachable, install the extension" for what was only a slow page.
+    private static let httpTimeoutGrace: TimeInterval = 5
     /// Must match `ChromeBridgeTokenHeader` in willdeep-agent's
     /// chrome_native_host.go. The native host writes a fresh token to
     /// `bridgeTokenURL` (0600) each time it binds the bridge port.
@@ -85,7 +93,11 @@ enum AgentChromeTools {
 
     static func navigate(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let url = try requiredString("url", arguments: arguments)
-        let data = try await bridgeRequest(type: "tab.navigate", payload: ["url": url])
+        let data = try await bridgeRequest(
+            type: "tab.navigate",
+            payload: ["url": url],
+            timeout: navigationRequestTimeout
+        )
         return AgentToolResult(summary: "Navigated active Chrome tab", payload: prettyJSONString(data))
     }
 
@@ -222,13 +234,17 @@ enum AgentChromeTools {
         return AgentToolResult(summary: "Ran Chrome debugger command", payload: prettyJSONString(data))
     }
 
-    private static func bridgeRequest(type: String, payload: [String: Any]) async throws -> Any {
+    private static func bridgeRequest(
+        type: String,
+        payload: [String: Any],
+        timeout: TimeInterval = requestTimeout
+    ) async throws -> Any {
         let body: [String: Any] = [
             "type": type,
             "payload": payload,
-            "timeout_ms": Int(requestTimeout * 1_000),
+            "timeout_ms": Int(timeout * 1_000),
         ]
-        let envelope = try await post(path: "/chrome/request", body: body)
+        let envelope = try await post(path: "/chrome/request", body: body, bridgeTimeout: timeout)
         guard let ok = envelope["ok"] as? Bool else {
             throw AgentToolError.invalidArgument("Chrome bridge returned an invalid response.")
         }
@@ -242,25 +258,36 @@ enum AgentChromeTools {
     private static func get(path: String) async throws -> [String: Any] {
         var request = URLRequest(url: try endpoint(path: path))
         request.httpMethod = "GET"
-        request.timeoutInterval = requestTimeout
+        request.timeoutInterval = requestTimeout + httpTimeoutGrace
         AgentNetworkSupport.applyStandardHeaders(to: &request)
         try applyBridgeToken(to: &request)
-        return try await send(request)
+        return try await send(request, bridgeTimeout: requestTimeout)
     }
 
-    private static func post(path: String, body: [String: Any]) async throws -> [String: Any] {
+    private static func post(
+        path: String,
+        body: [String: Any],
+        bridgeTimeout: TimeInterval
+    ) async throws -> [String: Any] {
         var request = URLRequest(url: try endpoint(path: path))
         request.httpMethod = "POST"
-        request.timeoutInterval = requestTimeout
+        request.timeoutInterval = bridgeTimeout + httpTimeoutGrace
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
         AgentNetworkSupport.applyStandardHeaders(to: &request)
         try applyBridgeToken(to: &request)
-        return try await send(request)
+        return try await send(request, bridgeTimeout: bridgeTimeout)
     }
 
-    private static func send(_ request: URLRequest) async throws -> [String: Any] {
+    /// A timeout is not "the extension is missing": the command reached
+    /// Chrome and may already have clicked or typed. Saying so keeps the
+    /// model from retrying a side effect blindly.
+    static func timeoutMessage(seconds: TimeInterval) -> String {
+        "Chrome did not answer within \(Int(seconds)) s. The action may still have run — read the page or take a snapshot to check the current state before retrying."
+    }
+
+    private static func send(_ request: URLRequest, bridgeTimeout: TimeInterval) async throws -> [String: Any] {
         let session = URLSession(configuration: .ephemeral)
         defer { session.finishTasksAndInvalidate() }
         do {
@@ -270,6 +297,9 @@ enum AgentChromeTools {
             }
             let parsed = try parseJSONObject(data)
             guard (200..<300).contains(http.statusCode) else {
+                if http.statusCode == 504 {
+                    throw AgentToolError.invalidArgument(timeoutMessage(seconds: bridgeTimeout))
+                }
                 let message = parsed["error"] as? String
                     ?? String(data: data.prefix(400), encoding: .utf8)
                     ?? "Chrome bridge request failed."
@@ -278,6 +308,8 @@ enum AgentChromeTools {
             return parsed
         } catch let error as AgentToolError {
             throw error
+        } catch let error as URLError where error.code == .timedOut {
+            throw AgentToolError.invalidArgument(timeoutMessage(seconds: request.timeoutInterval))
         } catch {
             throw AgentToolError.invalidArgument(
                 "Chrome bridge is not reachable at \(defaultEndpoint). Install/load the WillDeep Browser extension and Native Messaging host, then retry. Underneath: \(error.localizedDescription)"

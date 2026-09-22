@@ -15,7 +15,7 @@ import SwiftUI
 import WebKit
 
 @MainActor
-final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNavigationDelegate, WKScriptMessageHandler {
+final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     static let shared = AgentEmbeddedBrowserController()
     static let diagnosticsMessageHandlerName = "willdeepBrowserDiagnostics"
     private static var runtimeControllers: [UUID: [UUID: AgentEmbeddedBrowserController]] = [:]
@@ -57,6 +57,16 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     static let documentContentWaitTimeout: Duration = .seconds(3)
     /// DOM probes run `innerText`, so they poll slower than `isLoading`.
     private static let documentProbeInterval: Duration = .milliseconds(250)
+    /// Longest a click waits for the page to start navigating before it
+    /// decides the click did not change pages.
+    static let clickNavigationStartWindow: Duration = .milliseconds(600)
+    /// Upper bound for any single page script (read, click, eval). A page
+    /// with a hung main thread or an eval that awaits forever used to hang
+    /// the whole turn, and the user's Stop could not interrupt it.
+    static let scriptTimeout: Duration = .seconds(30)
+    /// Per-field cap for console messages and dialog text. Pages that log a
+    /// whole Redux store produced multi-megabyte console payloads.
+    static let consoleFieldCharacterLimit = 2_000
     /// Page-script helpers shared by every read. `wdSafeValue` never returns
     /// the value of password / secret / hidden fields — `embedded_browser_type`
     /// resolves secret placeholders, so the next read would otherwise hand the
@@ -76,6 +86,19 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     /// Set by `navigate(to:)` until the new document commits, so readiness
     /// probes never mistake the previous page's DOM for the new one.
     private var awaitingCommit = false
+    /// The navigation `navigate(to:)` started. Callbacks for any other
+    /// navigation — the initial example.com load, a request it superseded —
+    /// must not clear `awaitingCommit` or report their errors as this one's.
+    private var pendingNavigation: WKNavigation?
+    /// Main-frame navigation counters, so `click` can tell that it triggered
+    /// a page change (link, form submit, JS location change, popup).
+    private var provisionalNavigationCount = 0
+    private var committedNavigationCount = 0
+    /// JavaScript dialogs and file choosers the page opened. The Agent has
+    /// no way to answer them, so they are dismissed (confirm → Cancel) and
+    /// reported instead of silently swallowed.
+    private(set) var recentDialogs: [[String: Any]] = []
+    private let dialogLimit = 20
     private static var installedSafariVersion: String {
         let version = Bundle(path: "/Applications/Safari.app")?
             .infoDictionary?["CFBundleShortVersionString"] as? String
@@ -129,6 +152,16 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         runtimeControllers[runtimeID]?.isEmpty == false
     }
 
+    /// URL of the page the session's browser shows, without creating a
+    /// controller as a side effect. The @browser mention used to read the
+    /// unused `shared` controller and so always reported "no page".
+    static func currentURL(for runtimeID: UUID?) -> String {
+        guard let runtimeID else { return shared.currentURL }
+        guard let controllers = runtimeControllers[runtimeID] else { return "" }
+        let tabID = activeTabIDs[runtimeID] ?? legacyTabID
+        return (controllers[tabID] ?? controllers.values.first)?.currentURL ?? ""
+    }
+
     @discardableResult
     func ensureWebView(loadInitialPage: Bool = true) -> WKWebView {
         if let webView {
@@ -147,6 +180,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         let webView = WKWebView(frame: .zero, configuration: configuration)
         self.webView = webView
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         updateState(from: webView)
         if loadInitialPage, let url = normalizedURL(address) {
             webView.load(URLRequest(url: url))
@@ -158,6 +192,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         webView?.stopLoading()
         webView?.loadHTMLString("", baseURL: nil)
         webView?.navigationDelegate = nil
+        webView?.uiDelegate = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(
             forName: Self.diagnosticsMessageHandlerName
         )
@@ -171,6 +206,10 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         lastError = nil
         lastScreenshotPath = nil
         lastHTTPStatus = nil
+        pendingNavigation = nil
+        provisionalNavigationCount = 0
+        committedNavigationCount = 0
+        recentDialogs.removeAll()
         canGoBack = false
         canGoForward = false
         consoleEvents.removeAll()
@@ -193,9 +232,9 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         if url.isFileURL {
             // Grant read access to the page's folder only, so relative
             // CSS/JS/images load without exposing the rest of the disk.
-            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+            pendingNavigation = webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
-            webView.load(URLRequest(url: url))
+            pendingNavigation = webView.load(URLRequest(url: url))
         }
         updateState(from: webView)
     }
@@ -218,7 +257,12 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
                 nextProbe = clock.now + Self.documentProbeInterval
                 let probe = try? await documentProbe()
                 if let probe, AgentEmbeddedBrowserReadiness.isParsed(readyState: probe.readyState) {
-                    if previousTextLength == probe.textLength { break }
+                    // An empty body "holding steady" is a JS redirect or a
+                    // skeleton still rendering, not a usable page.
+                    if previousTextLength == probe.textLength,
+                       probe.textLength > 0 || probe.readyState == "complete" {
+                        break
+                    }
                     previousTextLength = probe.textLength
                 } else {
                     previousTextLength = nil
@@ -310,6 +354,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             "last_error": lastError ?? NSNull(),
             "last_screenshot_path": lastScreenshotPath ?? NSNull(),
             "http_status": lastHTTPStatus ?? NSNull(),
+            "last_dialog": recentDialogs.last ?? NSNull(),
         ]
     }
 
@@ -386,6 +431,10 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         let script = """
         (() => {
           \(Self.sensitiveValueScript)
+          // Refs from an earlier snapshot must not survive: after the DOM
+          // changes, a stale `wd3` on another element would win
+          // querySelector and the click would land on the wrong target.
+          document.querySelectorAll('[data-wd-browser-ref]').forEach((el) => el.removeAttribute('data-wd-browser-ref'));
           const selectorFor = (el) => {
             if (!el || !el.tagName) return '';
             if (el.id) return `#${CSS.escape(el.id)}`;
@@ -463,18 +512,78 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
           const selector = \(selectorLiteral);
           const element = document.querySelector(selector);
           if (!element) return { ok: false, error: `No element matched selector: ${selector}` };
+          if (element.disabled || element.getAttribute('aria-disabled') === 'true') {
+            return { ok: false, error: `Element is disabled: ${selector}` };
+          }
           element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+          const rect = element.getBoundingClientRect();
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          const topmost = document.elementFromPoint(x, y);
+          const coveredBy = topmost && topmost !== element && !element.contains(topmost) && !topmost.contains(element)
+            ? `${topmost.tagName.toLowerCase()}${topmost.id ? '#' + topmost.id : ''}${topmost.className && typeof topmost.className === 'string' ? '.' + topmost.className.trim().split(/\\s+/).slice(0, 2).join('.') : ''}`
+            : null;
+          // Menus and comboboxes (Radix, MUI, headless UI) open on
+          // pointerdown/mousedown, which element.click() alone never fires.
+          const init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0 };
+          if (window.PointerEvent) element.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse', isPrimary: true, buttons: 1 }));
+          element.dispatchEvent(new MouseEvent('mousedown', { ...init, buttons: 1 }));
+          if (typeof element.focus === 'function') element.focus({ preventScroll: true });
+          if (window.PointerEvent) element.dispatchEvent(new PointerEvent('pointerup', { ...init, pointerType: 'mouse', isPrimary: true }));
+          element.dispatchEvent(new MouseEvent('mouseup', init));
           element.click();
           return {
             ok: true,
             selector,
             tag: element.tagName.toLowerCase(),
             id: element.id || '',
-            text: (element.innerText || wdSafeValue(element) || element.getAttribute('aria-label') || '').trim().slice(0, 160)
+            text: (element.innerText || wdSafeValue(element) || element.getAttribute('aria-label') || '').trim().slice(0, 160),
+            covered_by: coveredBy
           };
         })()
         """
-        return try await evaluateObject(script)
+        let provisionalBefore = provisionalNavigationCount
+        let committedBefore = committedNavigationCount
+        let dialogsBefore = recentDialogs.count
+        var payload = try await evaluateObject(script)
+        guard payload["ok"] as? Bool == true else { return payload }
+        if payload["covered_by"] is NSNull { payload["covered_by"] = nil }
+        if await waitForClickNavigation(provisionalBefore: provisionalBefore, committedBefore: committedBefore) {
+            let settled = await waitForNavigationToSettle()
+            payload["navigated"] = true
+            payload["settled"] = settled
+            payload["url"] = currentURL
+            payload["title"] = title
+            payload["http_status"] = lastHTTPStatus ?? NSNull()
+            if let reason = await blockedPageReason() {
+                payload["blocked_by_site"] = true
+                payload["note"] = AgentBlockedPageDetector.stopNote(reason: reason)
+            }
+        }
+        if recentDialogs.count > dialogsBefore {
+            payload["dialogs"] = Array(recentDialogs.suffix(recentDialogs.count - dialogsBefore))
+        }
+        return payload
+    }
+
+    /// After a click, give the page a short window to start a main-frame
+    /// navigation (link, form submit, JS location change, popup opened in
+    /// place). If one starts, wait for its commit so the next read sees the
+    /// new document instead of the old one that is already `complete`.
+    private func waitForClickNavigation(provisionalBefore: Int, committedBefore: Int) async -> Bool {
+        let clock = ContinuousClock()
+        let startDeadline = clock.now + Self.clickNavigationStartWindow
+        while provisionalNavigationCount == provisionalBefore,
+              committedNavigationCount == committedBefore {
+            guard clock.now < startDeadline, !Task.isCancelled else { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let commitDeadline = clock.now + Self.navigationSettleTimeout
+        while committedNavigationCount == committedBefore, webView?.isLoading == true {
+            guard clock.now < commitDeadline, !Task.isCancelled else { break }
+            try? await Task.sleep(for: Self.navigationSettlePollInterval)
+        }
+        return true
     }
 
     func typeText(selector: String, text: String) async throws -> [String: Any] {
@@ -487,16 +596,45 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
           const element = document.querySelector(selector);
           if (!element) return { ok: false, error: `No element matched selector: ${selector}` };
           element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+          const inputType = element instanceof HTMLInputElement ? String(element.type || 'text').toLowerCase() : '';
+          if (['checkbox', 'radio'].includes(inputType)) {
+            return { ok: false, error: `This is a ${inputType}; use embedded_browser_click to toggle it.` };
+          }
+          if (inputType === 'file') {
+            return { ok: false, error: 'File inputs cannot be filled by the Agent; ask the user to choose the file.' };
+          }
           element.focus();
-          if ('value' in element) {
-            element.value = text;
+          if (element instanceof HTMLSelectElement) {
+            const option = Array.from(element.options).find((o) => o.value === text)
+              || Array.from(element.options).find((o) => o.label.trim() === text.trim());
+            if (!option) return { ok: false, error: `No option with value or label "${text}".` };
+            element.value = option.value;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          } else if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+            // Use the prototype setter: React/Vue controlled inputs track the
+            // value through it, and an instance assignment leaves their state
+            // empty so the typed text vanishes on the next render.
+            const proto = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+            setter.call(element, text);
+            element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertReplacementText', data: text }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
           } else if (element.isContentEditable) {
-            element.textContent = text;
+            // Rich editors (ProseMirror, Lexical, Draft) keep their own model
+            // and only follow edits that arrive as input events.
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            if (!document.execCommand('insertText', false, text)) {
+              element.textContent = text;
+              element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+            }
           } else {
             return { ok: false, error: 'Matched element is not text-editable.' };
           }
-          element.dispatchEvent(new Event('input', { bubbles: true }));
-          element.dispatchEvent(new Event('change', { bubbles: true }));
           return {
             ok: true,
             selector,
@@ -553,12 +691,16 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         }
         """
         let webView = ensureWebView()
-        let value = try await webView.callAsyncJavaScript(
-            body,
-            arguments: ["source": source, "maxChars": maxChars],
-            in: nil,
-            contentWorld: .page
-        )
+        let value = try await awaitWebKitCallback(timeout: Self.scriptTimeout, what: "embedded_browser_eval script") { finish in
+            webView.callAsyncJavaScript(
+                body,
+                arguments: ["source": source, "maxChars": maxChars],
+                in: nil,
+                in: .page
+            ) { result in
+                finish(result.map { $0 as Any }.mapError { Self.describedScriptError($0) })
+            }
+        }
         guard let object = value as? [String: Any] else {
             throw AgentToolError.invalidArgument("Embedded browser script returned an invalid response.")
         }
@@ -965,16 +1107,19 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
 
     func captureScreenshot() async throws -> String {
         let webView = ensureWebView()
-        let image: NSImage = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<NSImage, any Error>) in
+        let captured = try await awaitWebKitCallback(timeout: Self.scriptTimeout, what: "screenshot") { finish in
             webView.takeSnapshot(with: nil) { image, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    finish(.failure(error))
                 } else if let image {
-                    continuation.resume(returning: image)
+                    finish(.success(image))
                 } else {
-                    continuation.resume(throwing: AgentToolError.invalidArgument("WKWebView did not return a screenshot."))
+                    finish(.failure(AgentToolError.invalidArgument("WKWebView did not return a screenshot.")))
                 }
             }
+        }
+        guard let image = captured as? NSImage else {
+            throw AgentToolError.invalidArgument("WKWebView did not return a screenshot.")
         }
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff),
@@ -991,6 +1136,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         isLoading = true
         lastError = nil
+        provisionalNavigationCount += 1
         updateState(from: webView)
     }
 
@@ -1005,28 +1151,115 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // Any commit means a new document replaced the old one, including a
+        // redirect chain that started from the pending navigation.
         awaitingCommit = false
+        committedNavigationCount += 1
         updateState(from: webView)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        isLoading = false
-        awaitingCommit = false
+        isLoading = webView.isLoading
+        if navigation === pendingNavigation {
+            awaitingCommit = false
+            pendingNavigation = nil
+        }
         updateState(from: webView)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        isLoading = false
-        awaitingCommit = false
-        lastError = error.localizedDescription
-        updateState(from: webView)
+        handleNavigationFailure(navigation, error: error, in: webView)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        isLoading = false
-        awaitingCommit = false
-        lastError = error.localizedDescription
+        handleNavigationFailure(navigation, error: error, in: webView)
+    }
+
+    /// A failure only speaks for the navigation it belongs to. Earlier every
+    /// failure — including the -999 "cancelled" that a newer load delivers to
+    /// the one it replaces — cleared `awaitingCommit`, so a navigate issued
+    /// while example.com was still loading could settle on example.com's DOM
+    /// (seen as url=baidu, title="Example Domain").
+    private func handleNavigationFailure(_ navigation: WKNavigation?, error: Error, in webView: WKWebView) {
+        isLoading = webView.isLoading
+        let nsError = error as NSError
+        let superseded = nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+        let isPending = navigation != nil && navigation === pendingNavigation
+        if isPending, !superseded || !webView.isLoading {
+            awaitingCommit = false
+            pendingNavigation = nil
+        }
+        if !superseded, isPending || pendingNavigation == nil {
+            lastError = error.localizedDescription
+        }
         updateState(from: webView)
+    }
+
+    // MARK: - WKUIDelegate
+
+    /// `target=_blank` links and `window.open` have no second window to go
+    /// to; without this they silently did nothing while `click` reported
+    /// success. The embedded browser is single-tab, so they open in place.
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        if navigationAction.request.url != nil {
+            webView.load(navigationAction.request)
+        }
+        return nil
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo
+    ) async {
+        recordDialog(kind: "alert", message: message, answer: "dismissed")
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo
+    ) async -> Bool {
+        // Cancel is the safe default: a confirm usually guards a deletion
+        // or a purchase, and nobody is there to read it.
+        recordDialog(kind: "confirm", message: message, answer: "cancelled")
+        return false
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo
+    ) async -> String? {
+        recordDialog(kind: "prompt", message: prompt, answer: "cancelled")
+        return nil
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo
+    ) async -> [URL]? {
+        recordDialog(kind: "file_chooser", message: "The page asked for a file upload.", answer: "cancelled")
+        return nil
+    }
+
+    private func recordDialog(kind: String, message: String, answer: String) {
+        recentDialogs.append([
+            "kind": kind,
+            "message": String(message.prefix(Self.consoleFieldCharacterLimit)),
+            "answer": answer,
+            "at": ISO8601DateFormatter().string(from: Date()),
+        ])
+        if recentDialogs.count > dialogLimit {
+            recentDialogs = Array(recentDialogs.suffix(dialogLimit))
+        }
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -1062,7 +1295,11 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             "initiator_type",
         ] {
             if let value = body[key] {
-                event[key] = value
+                if let text = value as? String, text.count > Self.consoleFieldCharacterLimit {
+                    event[key] = String(text.prefix(Self.consoleFieldCharacterLimit)) + "…[truncated \(text.count - Self.consoleFieldCharacterLimit) chars]"
+                } else {
+                    event[key] = value
+                }
             }
         }
         switch event["kind"] as? String {
@@ -1114,12 +1351,12 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
 
     private func evaluateObject(_ script: String) async throws -> [String: Any] {
         let webView = ensureWebView()
-        let value: Any = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any, any Error>) in
+        let value = try await awaitWebKitCallback(timeout: Self.scriptTimeout, what: "page script") { finish in
             webView.evaluateJavaScript(script) { value, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    finish(.failure(Self.describedScriptError(error)))
                 } else {
-                    continuation.resume(returning: value ?? NSNull())
+                    finish(.success(value ?? NSNull()))
                 }
             }
         }
@@ -1127,6 +1364,43 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             throw AgentToolError.invalidArgument("Embedded browser script returned an invalid response.")
         }
         return object
+    }
+
+    /// Bridges a WebKit completion handler to async/await with a deadline
+    /// and cooperative cancellation. The continuation resumes exactly once:
+    /// whichever of completion, timeout or the user's Stop arrives first.
+    private func awaitWebKitCallback(
+        timeout: Duration,
+        what: String,
+        start: (@escaping @MainActor (Result<Any, any Error>) -> Void) -> Void
+    ) async throws -> Any {
+        try Task.checkCancellation()
+        let gate = WebKitCallbackGate()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any, any Error>) in
+                gate.continuation = continuation
+                start { result in gate.finish(result) }
+                Task { @MainActor in
+                    try? await Task.sleep(for: timeout)
+                    gate.finish(.failure(AgentToolError.invalidArgument(
+                        "Embedded browser \(what) did not finish within \(timeout). The page may be hung or the script awaits forever; read the page or take a screenshot before retrying."
+                    )))
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in gate.finish(.failure(CancellationError())) }
+        }
+    }
+
+    /// WebKit reports a thrown page exception as "A JavaScript exception
+    /// occurred" and keeps the real message (e.g. an invalid selector's
+    /// SyntaxError) in userInfo; surface it so the model can fix the call.
+    nonisolated static func describedScriptError(_ error: any Error) -> any Error {
+        let nsError = error as NSError
+        guard let message = nsError.userInfo["WKJavaScriptExceptionMessage"] as? String, !message.isEmpty else {
+            return error
+        }
+        return AgentToolError.invalidArgument("JavaScript exception in the page: \(message)")
     }
 
     private func updateState(from webView: WKWebView) {
@@ -1488,156 +1762,6 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     }
 }
 
-nonisolated enum AgentEmbeddedBrowserAutomationPolicy {
-    static let toolNamePrefix = "embedded_browser_"
-
-    /// Every embedded-browser tool acts on the side-panel browser, so the
-    /// panel is shown before the tool runs: the user watches what the Agent
-    /// browses, and the web view is in a window instead of loading offscreen.
-    static func requiresVisiblePanel(toolName: String) -> Bool {
-        toolName.hasPrefix(toolNamePrefix)
-    }
-}
-
-/// Where `embedded_browser_navigate` may take the Agent. The user's own
-/// address bar is not restricted; this only bounds model-chosen URLs, which a
-/// prompt-injected page can steer.
-nonisolated enum AgentEmbeddedBrowserNavigationPolicy {
-    enum Decision: Equatable {
-        case allow(URL)
-        case reject(String)
-    }
-
-    static func evaluate(rawURL: String, allowedFileRoots: [URL]) -> Decision {
-        let trimmed = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return .reject("Invalid browser URL: empty.") }
-        let candidate: URL?
-        if let parsed = URL(string: trimmed), parsed.scheme != nil {
-            candidate = parsed
-        } else {
-            candidate = URL(string: "https://\(trimmed)")
-        }
-        guard let url = candidate, let scheme = url.scheme?.lowercased() else {
-            return .reject("Invalid browser URL: \(trimmed)")
-        }
-        switch scheme {
-        case "http", "https":
-            guard let host = url.host, !host.isEmpty else {
-                return .reject("Invalid browser URL: \(trimmed)")
-            }
-            if isLoopback(host) {
-                // Local dev servers are the main reason to render in-app.
-                return .allow(url)
-            }
-            if AgentWebTools.isBlockedHost(host) {
-                return .reject(
-                    "embedded_browser_navigate does not open private-network hosts (\(host)): routers, NAS and internal services are off limits to the Agent. Ask the user to open it themselves if it is really needed."
-                )
-            }
-            return .allow(url)
-        case "about":
-            return url.absoluteString.lowercased() == "about:blank"
-                ? .allow(url)
-                : .reject("Only about:blank is allowed among about: URLs.")
-        case "file":
-            let path = url.standardizedFileURL.resolvingSymlinksInPath().path
-            let inside = allowedFileRoots.contains { root in
-                let rootPath = root.standardizedFileURL.resolvingSymlinksInPath().path
-                return path == rootPath || path.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
-            }
-            return inside
-                ? .allow(url)
-                : .reject("file:// URLs may only point inside the session workspace. Serve the file from the workspace or a local dev server instead.")
-        default:
-            return .reject("embedded_browser_navigate only opens http(s) URLs, about:blank, or file:// URLs inside the workspace; \(scheme): is not allowed.")
-        }
-    }
-
-    static func isLoopback(_ rawHost: String) -> Bool {
-        var host = rawHost.lowercased()
-        if host.hasPrefix("["), host.hasSuffix("]") {
-            host = String(host.dropFirst().dropLast())
-        }
-        if host == "localhost" || host.hasSuffix(".localhost") || host == "::1" { return true }
-        let octets = host.split(separator: ".")
-        return octets.count == 4 && octets.first == "127" && octets.allSatisfy { UInt8($0) != nil }
-    }
-}
-
-/// Recognizes pages where a site is refusing automation. The 2026-09-22
-/// Baidu turn hit "百度安全验证" and, with nothing telling it to stop, spent
-/// ten minutes on spoofed curl, OCR, proxies and scraping relays.
-nonisolated enum AgentBlockedPageDetector {
-    /// Body text is only trusted as a signal on short pages: a real article
-    /// may mention "captcha" or "验证码" without being a block page.
-    static let shortPageTextLimit = 2_000
-
-    /// Phrases that only appear on interstitials; a title match is enough.
-    private static let strongTitleMarkers = [
-        "安全验证", "人机验证", "请完成验证", "访问验证",
-        "verify you are human", "are you a robot", "attention required",
-        "just a moment", "access denied",
-    ]
-    /// Words an ordinary article can use ("How CAPTCHAs work"); they count
-    /// only on a short page.
-    private static let weakMarkers = [
-        "captcha", "验证码", "访问频繁", "请求过于频繁", "unusual traffic", "too many requests",
-        "checking your browser", "enable javascript and cookies", "拖动滑块", "点击完成验证",
-    ]
-    private static let hostMarkers = ["wappass.baidu.com", "captcha."]
-    private static let pathMarkers = ["/captcha", "/challenge", "/sorry/"]
-    private static let blockingStatuses: Set<Int> = [403, 429, 503]
-
-    static func reason(title: String, url: String, text: String, httpStatus: Int?) -> String? {
-        let lowerTitle = title.lowercased()
-        if let marker = strongTitleMarkers.first(where: { lowerTitle.contains($0) }) {
-            return "page title looks like a block page (\"\(title)\", matched \"\(marker)\")"
-        }
-        if let components = URLComponents(string: url) {
-            let host = components.host?.lowercased() ?? ""
-            let path = components.path.lowercased()
-            if hostMarkers.contains(where: { host.contains($0) }) || pathMarkers.contains(where: { path.contains($0) }) {
-                return "URL is a verification or challenge page (\(url))"
-            }
-        }
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isShort = trimmedText.count <= shortPageTextLimit
-        if let status = httpStatus, blockingStatuses.contains(status), isShort {
-            return "site answered HTTP \(status) with a short page"
-        }
-        if isShort {
-            let haystack = lowerTitle + "\n" + trimmedText.lowercased()
-            if let marker = (strongTitleMarkers + weakMarkers).first(where: { haystack.contains($0) }) {
-                return "short page asks for verification (matched \"\(marker)\")"
-            }
-        }
-        return nil
-    }
-
-    static func stopNote(reason: String) -> String {
-        "The site is blocking automated access: \(reason). Stop here and tell the user what you saw; let them take over in the browser panel or choose another source. Do not try to get around it with spoofed user agents, proxies, scraping relays, curl replays or OCR."
-    }
-}
-
-nonisolated enum AgentEmbeddedBrowserReadiness {
-    /// `interactive` means the HTML is parsed and the DOM is readable even
-    /// while subresources are still pending.
-    static func isParsed(readyState: String) -> Bool {
-        readyState == "interactive" || readyState == "complete"
-    }
-
-    /// Model-facing hint attached when a read comes back empty, so an empty
-    /// body is treated as "not rendered yet" instead of "this page is blank".
-    static func emptyContentNote(readyState: String, isEmpty: Bool) -> String? {
-        guard isEmpty else { return nil }
-        let state = readyState.isEmpty ? "unknown" : readyState
-        return "The page has no readable content yet (ready_state=\(state)). It may still be rendering, "
-            + "redirecting, or showing an interstitial. Do not conclude the page is empty: call "
-            + "embedded_browser_wait_for (e.g. condition=text) and read again, or use "
-            + "embedded_browser_capture_screenshot to see what the user sees."
-    }
-}
-
 enum AgentEmbeddedBrowserTools {
     static func status(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let payload = controller(for: runtimeID).statusPayload()
@@ -1781,10 +1905,56 @@ enum AgentEmbeddedBrowserTools {
 
     static func captureScreenshot(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let path = try await controller(for: runtimeID).captureScreenshot()
+        // Hand the image itself to vision-capable models. With only a path,
+        // the Baidu turn wrote its own Swift OCR program to read the page.
+        let image = screenshotAttachment(atPath: path)
         return AgentToolResult(
             summary: "Captured embedded browser screenshot",
-            payload: prettyJSONString(["path": path])
+            payload: prettyJSONString([
+                "path": path,
+                "image_attached": image != nil,
+            ]),
+            images: image.map { [$0] } ?? []
         )
+    }
+
+    /// Longest edge of the screenshot sent to the model; the full PNG stays
+    /// on disk at `path`.
+    static let screenshotAttachmentMaxDimension: CGFloat = 1_280
+
+    static func screenshotAttachment(atPath path: String) -> AgentImageAttachment? {
+        guard let source = NSImage(contentsOfFile: path),
+              let cgImage = source.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        let scale = min(1, screenshotAttachmentMaxDimension / max(width, height, 1))
+        let targetSize = NSSize(width: (width * scale).rounded(), height: (height * scale).rounded())
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(targetSize.width),
+            pixelsHigh: Int(targetSize.height),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+        NSGraphicsContext.current?.imageInterpolation = .high
+        NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+            .draw(in: NSRect(origin: .zero, size: targetSize))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.75]) else {
+            return nil
+        }
+        var attachment = try? AgentImageAttachment.fileBacked(data: jpeg, mimeType: "image/jpeg")
+        attachment?.originToolName = "embedded_browser_capture_screenshot"
+        return attachment
     }
 
     private static func controller(
@@ -1815,218 +1985,16 @@ enum AgentEmbeddedBrowserTools {
     }
 }
 
-struct AgentEmbeddedBrowserPanel: View {
-    @ObservedObject private var controller: AgentEmbeddedBrowserController
-    @State private var screenshotError: String?
-    @State private var isChromeImportPresented = false
-    let width: CGFloat
+/// Resume-once box for `awaitWebKitCallback`. MainActor-confined; marked
+/// `@unchecked Sendable` only so the cancellation handler can hop back to
+/// the main actor with it.
+@MainActor
+private final class WebKitCallbackGate: @unchecked Sendable {
+    var continuation: CheckedContinuation<Any, any Error>?
 
-    private let runtimeID: UUID?
-    private let tabID: UUID?
-
-    init(runtimeID: UUID? = nil, tabID: UUID? = nil, width: CGFloat) {
-        self.width = width
-        self.runtimeID = runtimeID
-        self.tabID = tabID
-        _controller = ObservedObject(
-            wrappedValue: AgentEmbeddedBrowserController.controller(for: runtimeID, tabID: tabID)
-        )
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            AgentEmbeddedBrowserWebView(controller: controller)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
-            footer
-        }
-        .frame(width: width)
-        .focusable(false)
-        .onAppear {
-            if let runtimeID, let tabID {
-                AgentEmbeddedBrowserController.activate(tabID: tabID, for: runtimeID)
-            }
-        }
-    }
-
-    private var toolbar: some View {
-        HStack(spacing: 6) {
-            Button {
-                controller.goBack()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .disabled(!controller.canGoBack)
-            .help(L10n.AgentEmbeddedBrowser.back)
-
-            Button {
-                controller.goForward()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .disabled(!controller.canGoForward)
-            .help(L10n.AgentEmbeddedBrowser.forward)
-
-            Button {
-                controller.reload()
-            } label: {
-                Image(systemName: controller.isLoading ? "xmark" : "arrow.clockwise")
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help(L10n.AgentEmbeddedBrowser.reload)
-
-            TextField(L10n.AgentEmbeddedBrowser.addressPlaceholder, text: $controller.address)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 11))
-                .onSubmit {
-                    loadAddress()
-                }
-
-            Button {
-                loadAddress()
-            } label: {
-                Image(systemName: "arrow.forward")
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help(L10n.AgentEmbeddedBrowser.go)
-
-            Button {
-                isChromeImportPresented = true
-            } label: {
-                Image(systemName: "person.crop.circle.badge.plus")
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help(L10n.AgentEmbeddedBrowser.importChrome)
-
-            Button {
-                captureScreenshot()
-            } label: {
-                Image(systemName: "camera")
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help(L10n.AgentEmbeddedBrowser.capture)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .sheet(isPresented: $isChromeImportPresented) {
-            ChromeCookieImportSheet(controller: controller)
-        }
-    }
-
-    private var footer: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(controller.title.isEmpty ? L10n.AgentEmbeddedBrowser.untitled : controller.title)
-                .font(.system(size: 11, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Text(footerDetail)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .truncationMode(.middle)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private var footerDetail: String {
-        if let screenshotError {
-            return screenshotError
-        }
-        if let path = controller.lastScreenshotPath {
-            return L10n.AgentEmbeddedBrowser.lastScreenshot(path)
-        }
-        if let lastError = controller.lastError {
-            return lastError
-        }
-        return controller.currentURL.isEmpty ? L10n.AgentEmbeddedBrowser.ready : controller.currentURL
-    }
-
-    private func loadAddress() {
-        screenshotError = nil
-        do {
-            try controller.navigate(to: controller.address)
-        } catch {
-            screenshotError = error.localizedDescription
-        }
-    }
-
-    private func captureScreenshot() {
-        screenshotError = nil
-        Task {
-            do {
-                _ = try await controller.captureScreenshot()
-            } catch {
-                screenshotError = error.localizedDescription
-            }
-        }
-    }
-}
-
-private struct AgentEmbeddedBrowserWebView: NSViewRepresentable {
-    let controller: AgentEmbeddedBrowserController
-
-    func makeNSView(context: Context) -> AgentEmbeddedBrowserHostView {
-        let host = AgentEmbeddedBrowserHostView()
-        host.attach(controller.ensureWebView())
-        return host
-    }
-
-    func updateNSView(_ host: AgentEmbeddedBrowserHostView, context: Context) {
-        host.attach(controller.ensureWebView())
-    }
-
-    static func dismantleNSView(_ host: AgentEmbeddedBrowserHostView, coordinator: ()) {
-        host.detach()
-    }
-}
-
-/// Hosts the controller's single `WKWebView`. There is exactly one per
-/// controller, so hosts hand it between themselves rather than each owning
-/// one — and the handover is what makes teardown order matter.
-final class AgentEmbeddedBrowserHostView: NSView {
-    private weak var hostedWebView: WKWebView?
-
-    func attach(_ webView: WKWebView) {
-        guard hostedWebView !== webView || webView.superview !== self else { return }
-        hostedWebView?.removeFromSuperview()
-        webView.removeFromSuperview()
-        webView.frame = bounds
-        webView.autoresizingMask = [.width, .height]
-        addSubview(webView)
-        hostedWebView = webView
-    }
-
-    /// Give up the web view only if it is still ours.
-    ///
-    /// Detaching a panel into its own window tears the sidebar host down
-    /// *after* the window's host has already taken the web view: SwiftUI
-    /// clears the sidebar's `kind` and opens the window, but the dismantle
-    /// arrives later. An unconditional `removeFromSuperview()` here then
-    /// reached into the new window and pulled the web view back out of it,
-    /// leaving the detached panel blank — and since the view was no longer in
-    /// any hierarchy, typing an address still navigated, just nowhere visible.
-    func detach() {
-        if hostedWebView?.superview === self {
-            hostedWebView?.removeFromSuperview()
-        }
-        hostedWebView = nil
+    func finish(_ result: Result<Any, any Error>) {
+        guard let continuation else { return }
+        self.continuation = nil
+        continuation.resume(with: result)
     }
 }

@@ -80,6 +80,21 @@ rejects requests with an `Origin` header (web pages), a `Host` other than
 are not `application/json` (CORS-simple `text/plain` posts). A host that fails
 to bind the port — e.g. a second Chrome profile — does not touch the token.
 
+Resilience (1.396.0-rc5):
+
+- A host that loses the port race retries the bind every 5 s, so closing the
+  profile that owned the bridge hands it to another open profile instead of
+  leaving the bridge dark. The owner deletes its token file on shutdown
+  unless a newer host already replaced it.
+- The extension reconnects the native port on every service-worker wake-up
+  and, after a disconnect, retries through a 30-second `chrome.alarms` alarm.
+  Opening the popup is no longer needed to revive the bridge.
+- `tab.navigate` waits for the tab to reach `status: "complete"` (up to 10 s)
+  and returns the real URL/title plus `settled`. The app gives navigation a
+  15 s bridge budget; every HTTP request outlives the bridge timeout by 5 s,
+  and a timeout is reported as "Chrome did not answer; the action may still
+  have run" instead of "install the extension".
+
 The request endpoint accepts:
 
 ```json

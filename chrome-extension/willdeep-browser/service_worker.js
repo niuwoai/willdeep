@@ -10,6 +10,12 @@ import {
 
 const HOST_NAME = "com.willdeep.browser_bridge";
 const CONTENT_SCRIPT = "content.js";
+// Chrome's minimum alarm period. A host crash, a service-worker restart or a
+// host manifest that was not installed yet at Chrome startup used to leave
+// the bridge dead until the user opened the popup or restarted Chrome.
+const NATIVE_RECONNECT_ALARM = "willdeep-native-reconnect";
+const NATIVE_RECONNECT_MINUTES = 0.5;
+const NAVIGATION_SETTLE_TIMEOUT_MS = 10000;
 
 let nativePort = null;
 let nativeReady = false;
@@ -29,8 +35,16 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === UPDATE_ALARM_NAME) {
     void runManagedUpdateCheck({ notify: true });
+  } else if (alarm.name === NATIVE_RECONNECT_ALARM && !nativePort) {
+    connectNativeHost();
   }
 });
+
+// Every service-worker wake-up (not just install/startup) re-establishes the
+// native connection, so the loopback bridge comes back without user action.
+if (!nativePort) {
+  connectNativeHost();
+}
 
 chrome.notifications.onClicked.addListener((notificationId) => {
   if (notificationId.startsWith("willdeep-browser-update:")) {
@@ -63,12 +77,22 @@ function connectNativeHost() {
         pending.resolve({ ok: false, error: "native host disconnected", id });
       }
       pendingNative.clear();
+      scheduleNativeReconnect();
     });
+    void chrome.alarms.clear(NATIVE_RECONNECT_ALARM);
     postNative("hello", { extensionVersion: chrome.runtime.getManifest().version }).catch(() => {});
   } catch {
     nativeReady = false;
     nativePort = null;
+    scheduleNativeReconnect();
   }
+}
+
+function scheduleNativeReconnect() {
+  void chrome.alarms.create(NATIVE_RECONNECT_ALARM, {
+    delayInMinutes: NATIVE_RECONNECT_MINUTES,
+    periodInMinutes: NATIVE_RECONNECT_MINUTES
+  });
 }
 
 async function handleRuntimeMessage(message) {
@@ -277,8 +301,40 @@ async function navigateActiveTab(payload) {
   const url = normalizeNavigationURL(payload.url);
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!active?.id) return { ok: false, error: "no active tab" };
-  const tab = await chrome.tabs.update(active.id, { url });
-  return { ok: true, tab: { id: tab.id, title: tab.title || "", url } };
+  await chrome.tabs.update(active.id, { url });
+  // tabs.update resolves before the navigation commits; returning then let a
+  // follow-up page.read hit the old document's content script.
+  const settled = await waitForTabComplete(active.id, NAVIGATION_SETTLE_TIMEOUT_MS);
+  const tab = await chrome.tabs.get(active.id);
+  return {
+    ok: true,
+    settled,
+    tab: { id: tab.id, title: tab.title || "", url: tab.url || tab.pendingUrl || url, status: tab.status || "" }
+  };
+}
+
+function waitForTabComplete(tabId, timeoutMs) {
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = (value) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(value);
+    };
+    const listener = (updatedId, changeInfo) => {
+      if (updatedId === tabId && changeInfo.status === "complete") finish(true);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+    // A cached page can finish before the listener is attached. While a
+    // navigation is pending the tab carries `pendingUrl`, so an old page's
+    // "complete" is not mistaken for the new one.
+    chrome.tabs.get(tabId).then((tab) => {
+      if (tab.status === "complete" && !tab.pendingUrl) finish(true);
+    }).catch(() => finish(false));
+  });
 }
 
 async function navigateHistory(payload) {

@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.396.0-rc5 - 2026-09-22
+
+### Fixed
+
+- **`target=_blank` 链接和 `window.open` 以前点了没反应，现在在当前页打开。** 控制器从没设过 `uiDelegate`，新窗口请求被直接丢掉，而 click 仍然返回 `ok: true`。百度的搜索结果基本都是新窗口打开，所以 Agent 只能一遍遍重试。内置浏览器是单标签的，这类链接现在在当前页打开。
+- **页面弹出的 alert / confirm / prompt 和文件选择框不再被悄悄吞掉。** 现在会关掉这些对话框（confirm 一律选"取消"：它通常用来确认删除或付款，而屏幕前没人），再把对话框记录在 click 结果的 `dialogs` 和状态里的 `last_dialog` 中，让 Agent 知道发生了什么。
+- **点击后如果触发跳转，会等新页面加载好再返回。** 以前只有 navigate 会等新文档提交；点击链接、提交表单、JS 改 `location` 之后紧接着读页面，看到的还是已经 `complete` 的旧页面。现在 click 会在 600 毫秒内观察有没有开始主框架导航：有就等到提交、页面可读为止，结果里带上 `navigated`、`url`、`title`、`http_status`，碰到拦截页也会标出来。
+- **上一次导航的回调不再清掉这一次的状态。** 以前任何导航失败都会清掉"等待新文档"的标记，包括新导航顶替旧导航时，旧导航收到的 -999（已取消）。于是在 example.com 还没加载完时发起 navigate，就可能停在 example.com 的 DOM 上，也就是之前看到的"url 是百度、title 却是 Example Domain"。现在导航会记住自己是哪一次：只有属于它的完成或失败回调才会结束等待，被取消的那次不写 `lastError`。
+- **补上"文本稳定"判定的漏洞。** 空 body 连续两次长度都是 0 也被当作稳定，JS 跳转的中间页、骨架屏因此会直接返回 `settled: true`。现在要求正文不为空，或者 `readyState == complete`。
+- **snapshot 前清掉上一轮的 ref。** 以前 `data-wd-browser-ref` 从不清理，页面变化后同一个 `wd3` 可能同时挂在旧元素和新元素上，点击会落到文档顺序靠前的旧元素上。
+- **点击更接近真实操作。** 依次派发 pointerdown → mousedown → focus → pointerup → mouseup → click，Radix、MUI 这类在 pointerdown 时展开的菜单能点开了；元素被遮挡时报告 `covered_by`；disabled 元素直接拒绝点击，不再假装成功。
+- **输入框赋值走原型 setter，并派发 `InputEvent`。**
+  - React / Vue 的受控输入框能感知到值的变化。以前直接给实例 `.value` 赋值，React 的值跟踪看不到，下次渲染时刚输入的文字就消失了。
+  - contenteditable 改用选中全部内容再 `insertText`，ProseMirror、Lexical 这类编辑器不再丢失内部状态。
+  - `<select>` 可以按选项的 value 或文字来选。
+  - checkbox / radio 会提示改用 click；file 类型的输入框明确告知 Agent 不能代填。
+- **页面脚本有 30 秒上限，也能被"停止"打断。** read、click、eval、截图原来都是不响应取消的 continuation：页面主线程卡死，或者 eval 里写了永远不结束的 `await`，整个回合就挂住，用户点停止也没用。现在无论完成、超时还是取消先到，都只恢复一次。
+- **JS 异常会带出真实的报错信息**（例如非法选择器的 SyntaxError），不再只有一句 "A JavaScript exception occurred"。
+- **控制台日志每个字段最多保留 2000 字。** 页面把整个 Redux state 打到控制台时，一次 `console` 工具的返回会有几 MB。
+- **截图会作为图片交给模型。** `embedded_browser_capture_screenshot` 除了返回 PNG 路径，还会附上一张最长边 1280 的 JPEG，支持视觉的模型可以直接看。以前只有路径，百度那轮模型为了看页面，自己写了一个 Swift OCR 程序。
+- **composer 里 @browser 提及读的是当前会话的浏览器。** 以前读的是没人用的 `shared` 控制器，永远显示"没有页面"。
+- **Chrome 路径**：
+  - 扩展在 service worker 每次被唤醒时都会连接 native host，断开后每 30 秒用 alarm 重连一次，不必再手动打开 popup 或重启 Chrome。
+  - `chrome_navigate` 等标签页加载完（最多 10 秒）再返回实际的 URL / title 和 `settled`。
+  - HTTP 请求的超时比桥的超时多 5 秒余量；真正超时时报"Chrome 没有应答，动作可能已经执行，先查看状态再决定是否重试"，而不是"请安装扩展"。
+  - 抢不到端口的 native host（第二个 Chrome Profile）每 5 秒重试一次：先占住端口的 Profile 关掉后由它接手，退出时删掉自己的 token 文件。
+  - **扩展的改动需要在 chrome://extensions 里重新加载 WillDeep Browser 扩展后才生效。**
+
+### Changed
+
+- `AgentEmbeddedBrowser.swift` 已经超过 2000 行，拆出 `AgentEmbeddedBrowserPolicies.swift`（导航策略、拦截页识别、就绪判断）和 `AgentEmbeddedBrowserPanel.swift`（侧栏视图和 WebView 宿主）。都是原样搬移，搬移前后逐字比对一致。
+- 测试：新增 `AgentEmbeddedBrowserInteractionTests`（11 项：新窗口链接当前页打开、同页链接等新文档、confirm 被取消并报告、点击事件顺序 + 遮挡报告 + 禁用拒绝、snapshot 清理旧 ref、受控输入框 + 下拉选择 + checkbox 提示、卡住的 eval 可以取消、页面异常带出真实信息、控制台截断、截图附件缩放、Chrome 超时文案）；Go 新增端口重试接手、token 只删自己的两项（已在 `-race` 下重复跑 3 遍）。
+
 ## 1.396.0-rc4 - 2026-09-22
 
 ### Fixed

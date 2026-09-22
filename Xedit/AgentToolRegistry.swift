@@ -1596,7 +1596,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_click",
-            description: "Click an element in the visible in-app Embedded Browser side panel using a CSS selector. Requires approval because it changes browser/page state.",
+            description: "Click an element in the visible in-app Embedded Browser side panel using a CSS selector. Sends real pointer/mouse events, reports `covered_by` when another element sits on top, and refuses disabled elements. If the click opens a page (link, form submit, target=_blank), it waits for the new page and returns `navigated`, `url` and `title`; page dialogs it triggers are dismissed (confirm → Cancel) and listed in `dialogs`. Requires approval because it changes browser/page state.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the element to click, e.g. `button[type=submit]`.", required: true)
@@ -1604,7 +1604,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_type",
-            description: "Focus an element in the visible in-app Embedded Browser side panel and replace its text/value using a CSS selector. Requires approval because it can edit web apps.",
+            description: "Focus an element in the visible in-app Embedded Browser side panel and replace its text/value using a CSS selector. Works with React/Vue controlled inputs and rich-text editors; for a <select>, pass an option's value or label. Use embedded_browser_click for checkboxes and radios; file inputs cannot be filled. Requires approval because it can edit web apps.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the input, textarea, editable element, or text-like target.", required: true),
@@ -1695,7 +1695,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_capture_screenshot",
-            description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. This read-only capture runs without a WillDeep confirmation card.",
+            description: "Capture the visible in-app Embedded Browser side panel as a PNG, return the local file path, and attach a downscaled copy of the image to the result so you can look at it directly. This read-only capture runs without a WillDeep confirmation card.",
             risk: .read,
             parameters: []
         ),

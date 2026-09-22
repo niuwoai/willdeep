@@ -1,13 +1,16 @@
 package agent
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestChromeBridgeGuard(t *testing.T) {
@@ -103,6 +106,75 @@ func TestWriteChromeBridgeTokenIsPrivateAndAtomic(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("temp files left behind: %v", entries)
+	}
+}
+
+func TestChromeBridgeRetriesUntilPortFreesThenCleansToken(t *testing.T) {
+	tokenPath := filepath.Join(t.TempDir(), chromeBridgeTokenFileName)
+	t.Setenv(chromeBridgeTokenFileEnvVar, tokenPath)
+	occupier, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := occupier.Addr().(*net.TCPAddr).Port
+	t.Setenv("WILLDEEP_CHROME_BRIDGE_PORT", strconv.Itoa(port))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	bridge := &ChromeNativeBridge{pending: map[string]chan ChromeNativeHostMessage{}}
+	go func() {
+		defer close(done)
+		bridge.serveHTTPBridgeWithRetry(ctx, 20*time.Millisecond)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
+		t.Fatalf("token written while another host owned the port")
+	}
+	_ = occupier.Close()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if data, err := os.ReadFile(tokenPath); err == nil && len(data) == chromeBridgeTokenBytes*2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("bridge never took over the freed port")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("bridge goroutine did not stop after cancel")
+	}
+	deadline = time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("owned token file was not removed on shutdown")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestRemoveChromeBridgeTokenKeepsNewerHostsToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), chromeBridgeTokenFileName)
+	if err := writeChromeBridgeToken(path, "newer-host-token"); err != nil {
+		t.Fatal(err)
+	}
+	removeChromeBridgeTokenIfOwned(path, "old-host-token")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("newer host's token was removed: %v", err)
+	}
+	removeChromeBridgeTokenIfOwned(path, "newer-host-token")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("own token was not removed")
 	}
 }
 

@@ -38,6 +38,9 @@ const (
 	chromeBridgeTokenBytes      = 32
 	chromeBridgeTokenFileName   = "bridge-token"
 	chromeBridgeTokenFileEnvVar = "WILLDEEP_CHROME_BRIDGE_TOKEN_FILE"
+	// chromeBridgeBindRetryInterval is how often a host that lost the port
+	// race tries again.
+	chromeBridgeBindRetryInterval = 5 * time.Second
 )
 
 type ChromeNativeHostMessage struct {
@@ -85,22 +88,19 @@ func ServeChromeNativeHost(ctx context.Context, input io.Reader, output io.Write
 	defer cancel()
 	defer bridge.writer.Flush()
 
-	httpServer, listener, err := bridge.startHTTPBridge(ctx)
-	if err != nil {
-		log.Printf("willdeep chrome bridge HTTP listener disabled: %v", err)
-	} else {
-		defer func() {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer shutdownCancel()
-			_ = httpServer.Shutdown(shutdownCtx)
-		}()
-		go func() {
-			if serveErr := httpServer.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-				log.Printf("willdeep chrome bridge HTTP server stopped: %v", serveErr)
-			}
-		}()
-		log.Printf("willdeep chrome bridge listening on http://%s", listener.Addr().String())
-	}
+	// One host process runs per Chrome profile, and only one can own the
+	// port. The others keep retrying so the bridge survives the owner's
+	// profile being closed instead of going dark while Chrome is still open.
+	var bridgeServer sync.WaitGroup
+	bridgeServer.Add(1)
+	go func() {
+		defer bridgeServer.Done()
+		bridge.serveHTTPBridgeWithRetry(ctx, chromeBridgeBindRetryInterval)
+	}()
+	defer func() {
+		cancel()
+		bridgeServer.Wait()
+	}()
 
 	for {
 		select {
@@ -123,6 +123,32 @@ func ServeChromeNativeHost(ctx context.Context, input io.Reader, output io.Write
 		response := handleChromeNativeHostMessage(message)
 		if err := bridge.writeResponse(response); err != nil {
 			return err
+		}
+	}
+}
+
+// serveHTTPBridgeWithRetry binds the loopback bridge, retrying every
+// interval while another host owns the port, and serves until ctx ends.
+// startHTTPBridge's own goroutine shuts the server down on ctx.Done.
+func (b *ChromeNativeBridge) serveHTTPBridgeWithRetry(ctx context.Context, interval time.Duration) {
+	loggedBusy := false
+	for {
+		httpServer, listener, err := b.startHTTPBridge(ctx)
+		if err == nil {
+			log.Printf("willdeep chrome bridge listening on http://%s", listener.Addr().String())
+			if serveErr := httpServer.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+				log.Printf("willdeep chrome bridge HTTP server stopped: %v", serveErr)
+			}
+			return
+		}
+		if !loggedBusy {
+			log.Printf("willdeep chrome bridge HTTP listener unavailable, retrying every %s: %v", interval, err)
+			loggedBusy = true
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(interval):
 		}
 	}
 }
@@ -150,13 +176,26 @@ func (b *ChromeNativeBridge) startHTTPBridge(ctx context.Context) (*http.Server,
 	mux.HandleFunc("GET /chrome/health", b.handleHealth)
 	mux.HandleFunc("POST /chrome/request", b.handleRequest)
 	server := &http.Server{Handler: b.guard(mux, listener.Addr())}
+	tokenPath := chromeBridgeTokenPath()
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
+		removeChromeBridgeTokenIfOwned(tokenPath, token)
 	}()
 	return server, listener, nil
+}
+
+// removeChromeBridgeTokenIfOwned deletes the token file on shutdown unless a
+// newer host has already replaced it, so the app does not keep sending a
+// token nobody is listening for.
+func removeChromeBridgeTokenIfOwned(path, token string) {
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != token {
+		return
+	}
+	_ = os.Remove(path)
 }
 
 func (b *ChromeNativeBridge) handleHealth(w http.ResponseWriter, _ *http.Request) {

@@ -841,7 +841,7 @@ private struct ComposerCard: View {
         }
 
         if AgentPanelStateMention.PanelKind.browser.matches(query: q) {
-            let raw = AgentEmbeddedBrowserController.shared.currentURL
+            let raw = AgentEmbeddedBrowserController.currentURL(for: appState.activeAgentSessionID)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             entries.append(
                 .panelState(

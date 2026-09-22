@@ -2853,7 +2853,7 @@ extension AppState {
         }
 
         if requested.contains(.browser) {
-            let raw = AgentEmbeddedBrowserController.shared.currentURL
+            let raw = AgentEmbeddedBrowserController.currentURL(for: runtime.id)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             snapshots.append(
                 .init(
