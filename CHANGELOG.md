@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.396.0-rc2 - 2026-09-22
+
+### Fixed
+
+- **`embedded_browser_eval` 每次调用都失败。** 包装脚本是一个 async IIFE，交给 `evaluateJavaScript` 执行后返回的是 Promise，WKWebView 必定报「执行JavaScript返回结果的类型不受支持」（JavaScript execution returned a result of an unsupported type）。2026-09-21 / 22 两轮「用侧边栏浏览器查百度『杭州一日游』第一个非广告结果」的任务里，eval 全部命中这个错。现在改走 `callAsyncJavaScript`，脚本源码和 `max_chars` 作为参数传入，不再拼接成 JS 字面量；抛错时返回 `ok: false`，错误信息写成「消息 + 调用栈」。原来只取 `error.stack`，而 JavaScriptCore 的 stack 不含错误消息，模型只能看到调用栈、看不到出了什么错。超长结果照旧截断。
+- **打开百度这类页面时，`embedded_browser_navigate` 总是空等满 10 秒才返回 `settled: false`。** 1.395.0-rc4 只以 `isLoading` 作为加载完成的依据，但百度搜索页有个子资源永远挂起，`isLoading` 一直不变 false；而实测页面约 1.8 秒就到了 `readyState=interactive`，正文 3859 字、192 个链接，已经完全可读。现在满足以下任一条件就算加载完成：WebKit 停止加载；或者新文档已提交（commit）、`readyState` 离开 `loading`，且正文长度连续两次采样不变。结果新增 `still_loading_resources`，告诉模型 DOM 已经可读、只是还有子资源没加载完。
+- **`embedded_browser_read_page` / `snapshot` 在页面还没解析完时返回空内容，却不做任何说明。** 在导航刚开始的头一秒内读取，拿到的是 `readyState=loading` 的空文档：`text`、`title` 为空，链接数为 0。模型据此认定「浏览器读不到东西」，转而用 curl、OCR、代理和第三方抓取绕路，一轮跑了 48 次工具调用、十几分钟还没结束。现在读取前如果文档仍在 `loading`，会最多等 3 秒；结果里带上 `ready_state`，`read_page` 还带 `is_loading`。读到的正文为空，或 snapshot 没有可交互元素时，附带 `note`，提示模型先 wait_for 或截图，不要把空内容当成空页面。
+- 新增测试：`AgentEmbeddedBrowserReadinessTests`（readyState 判定、空内容提示、eval 返回 async 结果、eval 报错与截断、navigate 后 read_page 读到正文、空白页附带提示）。
+
 ## 1.396.0-rc1 - 2026-09-22
 
 ### Added

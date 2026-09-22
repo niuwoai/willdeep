@@ -50,7 +50,15 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     /// settle before returning, so the Agent does not need a separate wait.
     static let navigationSettleTimeout: Duration = .seconds(10)
     private static let navigationSettlePollInterval: Duration = .milliseconds(100)
+    /// How long `read_page` / `snapshot` wait for a document that is still
+    /// being parsed before reading it anyway.
+    static let documentContentWaitTimeout: Duration = .seconds(3)
+    /// DOM probes run `innerText`, so they poll slower than `isLoading`.
+    private static let documentProbeInterval: Duration = .milliseconds(250)
 
+    /// Set by `navigate(to:)` until the new document commits, so readiness
+    /// probes never mistake the previous page's DOM for the new one.
+    private var awaitingCommit = false
     private static var installedSafariVersion: String {
         let version = Bundle(path: "/Applications/Safari.app")?
             .infoDictionary?["CFBundleShortVersionString"] as? String
@@ -142,6 +150,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         currentURL = ""
         title = ""
         isLoading = false
+        awaitingCommit = false
         lastError = nil
         lastScreenshotPath = nil
         canGoBack = false
@@ -162,21 +171,67 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         let webView = ensureWebView(loadInitialPage: false)
         address = rawValue
         lastError = nil
+        awaitingCommit = true
         webView.load(URLRequest(url: url))
         updateState(from: webView)
     }
 
-    /// Wait until the web view stops loading (redirects included), bounded by
-    /// `timeout`. Returns whether the page settled in time.
+    /// Wait until the page is usable, bounded by `timeout`, and return
+    /// whether it got there. Usable means WebKit stopped loading, or the new
+    /// document committed, left `readyState == "loading"` and its text held
+    /// steady across two probes. The second path matters: pages such as
+    /// Baidu search keep a subresource pending forever, so `isLoading` never
+    /// drops even though the results are readable within two seconds.
     func waitForNavigationToSettle(timeout: Duration = navigationSettleTimeout) async -> Bool {
         guard let webView else { return false }
-        let deadline = ContinuousClock.now + timeout
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        var nextProbe = clock.now
+        var previousTextLength: Int?
         while webView.isLoading {
-            guard ContinuousClock.now < deadline, !Task.isCancelled else { return false }
+            guard clock.now < deadline, !Task.isCancelled else { return false }
+            if !awaitingCommit, clock.now >= nextProbe {
+                nextProbe = clock.now + Self.documentProbeInterval
+                let probe = try? await documentProbe()
+                if let probe, AgentEmbeddedBrowserReadiness.isParsed(readyState: probe.readyState) {
+                    if previousTextLength == probe.textLength { break }
+                    previousTextLength = probe.textLength
+                } else {
+                    previousTextLength = nil
+                }
+            }
             try? await Task.sleep(for: Self.navigationSettlePollInterval)
         }
         updateState(from: webView)
         return true
+    }
+
+    /// Give a document that is still being parsed a short grace period so a
+    /// read right after navigation or a click does not return an empty body.
+    private func waitForDocumentContent(timeout: Duration = documentContentWaitTimeout) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while clock.now < deadline, !Task.isCancelled {
+            if !awaitingCommit,
+               let probe = try? await documentProbe(),
+               AgentEmbeddedBrowserReadiness.isParsed(readyState: probe.readyState) {
+                return
+            }
+            try? await Task.sleep(for: Self.documentProbeInterval)
+        }
+    }
+
+    private func documentProbe() async throws -> (readyState: String, textLength: Int) {
+        let payload = try await evaluateObject("""
+        (() => ({
+          ready_state: document.readyState,
+          text_length: (document.body ? document.body.innerText : '').length
+        }))()
+        """)
+        return (
+            payload["ready_state"] as? String ?? "",
+            (payload["text_length"] as? NSNumber)?.intValue ?? 0
+        )
     }
 
     func reload() {
@@ -249,10 +304,20 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             placeholder: el.getAttribute('placeholder') || '',
             text: (el.innerText || el.value || '').slice(0, 80)
           }));
-          return { title: document.title || '', url: location.href, text, links, forms };
+          return { title: document.title || '', url: location.href, ready_state: document.readyState, text, links, forms };
         })()
         """
-        return try await evaluateObject(script)
+        await waitForDocumentContent()
+        var payload = try await evaluateObject(script)
+        payload["is_loading"] = webView?.isLoading ?? false
+        if let note = AgentEmbeddedBrowserReadiness.emptyContentNote(
+            readyState: payload["ready_state"] as? String ?? "",
+            isEmpty: (payload["text"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ) {
+            payload["note"] = note
+        }
+        return payload
     }
 
     func snapshot(maxElements: Int) async throws -> [String: Any] {
@@ -314,10 +379,18 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
               bounds: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }
             };
           });
-          return { title: document.title || '', url: location.href, count: elements.length, elements };
+          return { title: document.title || '', url: location.href, ready_state: document.readyState, count: elements.length, elements };
         })()
         """
-        return try await evaluateObject(script)
+        await waitForDocumentContent()
+        var payload = try await evaluateObject(script)
+        if let note = AgentEmbeddedBrowserReadiness.emptyContentNote(
+            readyState: payload["ready_state"] as? String ?? "",
+            isEmpty: (payload["count"] as? NSNumber)?.intValue == 0
+        ) {
+            payload["note"] = note
+        }
+        return payload
     }
 
     func click(selector: String) async throws -> [String: Any] {
@@ -393,12 +466,14 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         ]
     }
 
+    /// Runs through `callAsyncJavaScript`: the wrapper awaits the user's
+    /// async body, and `evaluateJavaScript` cannot return a Promise — it
+    /// failed every call with "JavaScript execution returned a result of an
+    /// unsupported type".
     func evaluate(source: String, maxChars: Int) async throws -> [String: Any] {
-        let sourceLiteral = try Self.javaScriptLiteral(source)
-        let script = """
-        (async () => {
-          const source = \(sourceLiteral);
-          let result = await (new Function(`return (async () => {\\n${source}\\n})()`))();
+        let body = """
+        try {
+          const result = await (new Function(`return (async () => {\\n${source}\\n})()`))();
           const type = result === null ? 'null' : Array.isArray(result) ? 'array' : typeof result;
           let value;
           try {
@@ -406,11 +481,25 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
           } catch (error) {
             value = String(result);
           }
-          if (value && value.length > \(maxChars)) value = value.slice(0, \(maxChars)) + '\\n[truncated]';
+          if (value && value.length > maxChars) value = value.slice(0, maxChars) + '\\n[truncated]';
           return { ok: true, type, value };
-        })().catch((error) => ({ ok: false, error: String(error && error.stack ? error.stack : error) }))
+        } catch (error) {
+          // JavaScriptCore's `stack` omits the message, so lead with it.
+          const stack = error && error.stack ? `\\n${error.stack}` : '';
+          return { ok: false, error: `${String(error)}${stack}` };
+        }
         """
-        return try await evaluateObject(script)
+        let webView = ensureWebView()
+        let value = try await webView.callAsyncJavaScript(
+            body,
+            arguments: ["source": source, "maxChars": maxChars],
+            in: nil,
+            contentWorld: .page
+        )
+        guard let object = value as? [String: Any] else {
+            throw AgentToolError.invalidArgument("Embedded browser script returned an invalid response.")
+        }
+        return object
     }
 
     func consolePayload(maxEntries: Int, levels: [String]) -> [String: Any] {
@@ -842,19 +931,27 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         updateState(from: webView)
     }
 
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        awaitingCommit = false
+        updateState(from: webView)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isLoading = false
+        awaitingCommit = false
         updateState(from: webView)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         isLoading = false
+        awaitingCommit = false
         lastError = error.localizedDescription
         updateState(from: webView)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         isLoading = false
+        awaitingCommit = false
         lastError = error.localizedDescription
         updateState(from: webView)
     }
@@ -1328,6 +1425,25 @@ nonisolated enum AgentEmbeddedBrowserAutomationPolicy {
     }
 }
 
+nonisolated enum AgentEmbeddedBrowserReadiness {
+    /// `interactive` means the HTML is parsed and the DOM is readable even
+    /// while subresources are still pending.
+    static func isParsed(readyState: String) -> Bool {
+        readyState == "interactive" || readyState == "complete"
+    }
+
+    /// Model-facing hint attached when a read comes back empty, so an empty
+    /// body is treated as "not rendered yet" instead of "this page is blank".
+    static func emptyContentNote(readyState: String, isEmpty: Bool) -> String? {
+        guard isEmpty else { return nil }
+        let state = readyState.isEmpty ? "unknown" : readyState
+        return "The page has no readable content yet (ready_state=\(state)). It may still be rendering, "
+            + "redirecting, or showing an interstitial. Do not conclude the page is empty: call "
+            + "embedded_browser_wait_for (e.g. condition=text) and read again, or use "
+            + "embedded_browser_capture_screenshot to see what the user sees."
+    }
+}
+
 enum AgentEmbeddedBrowserTools {
     static func status(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let payload = controller(for: runtimeID).statusPayload()
@@ -1341,6 +1457,9 @@ enum AgentEmbeddedBrowserTools {
         let settled = await controller.waitForNavigationToSettle()
         var payload = controller.statusPayload()
         payload["settled"] = settled
+        // `settled` can be true while a subresource is still pending; say so
+        // instead of letting the model wait on `is_loading`.
+        payload["still_loading_resources"] = settled && controller.isLoading
         return AgentToolResult(summary: "Navigated embedded browser", payload: prettyJSONString(payload))
     }
 

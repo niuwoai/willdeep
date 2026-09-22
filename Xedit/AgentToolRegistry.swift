@@ -1572,7 +1572,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_navigate",
-            description: "Navigate the visible in-app Embedded Browser side panel to a URL or domain, opening the panel if needed, and wait up to ten seconds for the page to finish loading (`settled` in the result says whether it did). Requires approval because it loads external web content. Requires the Browser Ops expert.",
+            description: "Navigate the visible in-app Embedded Browser side panel to a URL or domain, opening the panel if needed, and wait up to ten seconds for the page to become readable (`settled` in the result says whether it did; `still_loading_resources` means the DOM is readable while some subresources are still pending, so read it instead of waiting further). Requires approval because it loads external web content. Requires the Browser Ops expert.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "url", type: .string, description: "Absolute URL or bare domain to open, e.g. `https://example.com` or `example.com`.", required: true)
@@ -1580,7 +1580,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_read_page",
-            description: "Read the current page in the visible in-app Embedded Browser side panel. Returns title, URL, readable text, link summaries, and basic form element summaries. Read-only. Requires the Browser Ops expert.",
+            description: "Read the current page in the visible in-app Embedded Browser side panel. Returns title, URL, ready_state, readable text, link summaries, and basic form element summaries; waits briefly for a page that is still parsing, and adds a `note` when the page has no readable text yet. Read-only. Requires the Browser Ops expert.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum readable text characters to return. Defaults to 20000, capped at 100000.", required: false)
