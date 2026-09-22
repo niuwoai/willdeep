@@ -281,7 +281,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
 
     /// Give a document that is still being parsed a short grace period so a
     /// read right after navigation or a click does not return an empty body.
-    private func waitForDocumentContent(timeout: Duration = documentContentWaitTimeout) async {
+    func waitForDocumentContent(timeout: Duration = documentContentWaitTimeout) async {
         let clock = ContinuousClock()
         let deadline = clock.now + timeout
         while clock.now < deadline, !Task.isCancelled {

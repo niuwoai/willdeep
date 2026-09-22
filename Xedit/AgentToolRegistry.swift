@@ -1608,6 +1608,17 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "max_elements", type: .integer, description: "Maximum interactive elements to return. Defaults to 100, capped at 300.", required: false)
             ]
         ),
+AgentToolDescriptor(
+    name: "embedded_browser_extract",
+    description: "Extract structured data from the in-app Embedded Browser page without writing JavaScript: for every element matching `selector` (up to `limit`), return the requested fields. Use it for result lists, tables, prices, ad markers and real link targets. Read-only, no approval.",
+    risk: .read,
+    parameters: [
+        AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the items, e.g. #content_left > div.result.", required: true),
+        AgentToolParameter(name: "fields", type: .stringArray, description: "Fields per item as name=subselector@source. Source is text (default), exists, count, or an attribute such as href, src, class, data-id; leave subselector empty for the item itself. E.g. title=h3, link=h3 a@href, ad=.ec-tuiguang@exists, classes=@class. Omit for text plus first link.", required: false),
+        AgentToolParameter(name: "limit", type: .integer, description: "Maximum items. Defaults to 20, capped at 200.", required: false),
+        AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum characters per field. Defaults to 300, capped at 2000.", required: false)
+    ]
+),
         AgentToolDescriptor(
             name: "embedded_browser_click",
             description: "Click an element in the visible in-app Embedded Browser side panel using a CSS selector. Sends real pointer/mouse events, reports `covered_by` when another element sits on top, and refuses disabled elements. If the click opens a page (link, form submit, target=_blank), it waits for the new page and returns `navigated`, `url` and `title`; page dialogs it triggers are dismissed (confirm → Cancel) and listed in `dialogs`. Requires approval because it changes browser/page state.",

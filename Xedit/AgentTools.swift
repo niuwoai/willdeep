@@ -699,6 +699,8 @@ enum AgentToolRunner {
                 result = try await AgentEmbeddedBrowserTools.readPage(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_snapshot":
                 result = try await AgentEmbeddedBrowserTools.snapshot(arguments: activeArguments, runtimeID: activeContext.runtimeID)
+            case "embedded_browser_extract":
+                result = try await AgentEmbeddedBrowserTools.extract(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_click":
                 result = try await AgentEmbeddedBrowserTools.click(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_type":

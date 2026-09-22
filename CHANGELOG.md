@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.400.0-rc1 - 2026-09-22
+
+### Added
+
+- **新工具 `embedded_browser_extract`：不写脚本就能按选择器批量取数据。** 这类任务以前模型只能用 eval 写脚本去探（百度“杭州一日游第一个非广告结果”那次连调了 4 次 eval）。现在一次调用就能完成：对每个匹配 `selector` 的元素，按 `fields` 取出需要的字段。
+  - 字段写法是 `名字=子选择器@来源`。来源可以是文字（默认）、`exists`（有没有匹配）、`count`（匹配几个），或者任意属性（`href`、`src`、`class`、`data-*`）。子选择器留空表示元素本身。例如 `title=h3`、`link=h3 a@href`、`ad=.ec-tuiguang@exists`、`id=@data-id`。
+  - `href` / `src` 返回绝对地址。每个字段最多 2000 字符，最多 200 个元素、20 个字段。
+  - 只读，不需要审批。密码类输入框的值不会返回，规则和 read_page 一致；拦截页照样会标 `blocked_by_site`。
+- 浏览器指引写明：读列表类内容（搜索结果、广告标记、链接目标）用 `embedded_browser_extract`，eval 只在前面几个工具都做不到时才用。指引块哈希已重录。完整工具表估算 51,461 token，仍在 51,600 的上限内。
+- 新文件 `Xedit/AgentEmbeddedBrowserExtract.swift`。`AgentEmbeddedBrowser.swift` 已经 2000 多行，所以没往里加。
+- 测试：新增 `AgentEmbeddedBrowserExtractTests`，共 4 项：字段语法解析（包括属性选择器里的 `@` 不会被误认成来源）；模拟搜索结果页一次取出标题、真实链接和广告标记，并跳过广告取第一条；非法选择器报错，密码框的值不外泄；工具登记为只读。
+
 ## 1.399.0-rc1 - 2026-09-22
 
 ### Changed

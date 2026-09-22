@@ -277,6 +277,7 @@ nonisolated enum AgentToolDisplay {
         "embedded_browser_navigate": "内置浏览器打开网页",
         "embedded_browser_read_page": "内置浏览器读取网页",
         "embedded_browser_snapshot": "内置浏览器读取控件",
+        "embedded_browser_extract": "内置浏览器提取数据",
         "embedded_browser_click": "内置浏览器点击",
         "embedded_browser_type": "内置浏览器输入",
         "embedded_browser_press_key": "内置浏览器按键",
