@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.403.0-rc4 - 2026-09-23
+
+### Fixed
+
+- **有待确认的会话时，Dock 图标上没有数字徽标。** 侧边栏已经标出“此会话有请求、确认或回答正在等你处理”，Dock 却一直空着。负责 Dock 数字的 `AgentDockBadgeCoordinator` 有三个漏洞：
+  - 只在会话列表（`agentSessions`）变化时才去订阅各个会话的运行态。运行态被淘汰后按需重建、后台周期任务新建运行态时，会话列表并不变化，新运行态上出现的待审批就没人计数。现在同时订阅 `agentRuntimes`。
+  - 运行态订阅按会话 id 记账，同一个 id 换成新对象后，订阅仍挂在被淘汰的旧对象上，永远不会触发。现在同时核对对象身份，换了就重新订阅。
+  - 统计只包括编辑器窗口和 `current`，不包括 headless AppState。只开 Agent 窗口时，Agent 窗口就是靠这个 AppState 撑着的。编辑器窗口接管 `current` 后，它的会话就掉出了统计。现在和退出前的检查用同一份 AppState 列表。
+- 实测排除了“系统通知设置屏蔽了徽标”这个猜测：没有申请通知授权的最小程序，设置 `dockTile.badgeLabel` 后 Dock 照样显示数字。
+- 新增调试日志：徽标数字每次变化，都会在统一日志 `com.willdeep.app` / `dock-badge` 里记一行旧值、新值、统计的 AppState 数和订阅的运行态数。查看方式：`/usr/bin/log show --predicate 'subsystem == "com.willdeep.app" AND category == "dock-badge"' --info --last 1h`。
+- 测试：新增 `AgentDockBadgeCoordinatorTests`，共 4 项，是这个协调器的第一批端到端测试：基线、运行态换成新对象、只新增运行态、headless AppState。修复前“运行态换成新对象”和“只新增运行态”两项失败。
+
 ## 1.403.0-rc3 - 2026-09-22
 
 ### Fixed

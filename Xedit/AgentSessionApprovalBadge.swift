@@ -10,6 +10,9 @@
 import SwiftUI
 import AppKit
 import Combine
+import os
+
+private let dockBadgeLog = Logger(subsystem: "com.willdeep.app", category: "dock-badge")
 
 /// One session that is blocked on the user. Feeds the sidebar quick-jump
 /// strip and the Dock icon menu; the process monitor merges approval records
@@ -192,6 +195,9 @@ final class AgentDockBadgeCoordinator: ObservableObject {
     private var trackedAppStates: [ObjectIdentifier: AppState] = [:]
     private var appStateSubscriptions: [ObjectIdentifier: AnyCancellable] = [:]
     private var kernelSubscriptions: [ObjectIdentifier: AnyCancellable] = [:]
+    private var runtimeListSubscriptions: [ObjectIdentifier: AnyCancellable] = [:]
+    /// Which runtime object each subscription above is attached to.
+    private var watchedRuntimeObjects: [ObjectIdentifier: [AgentSession.ID: ObjectIdentifier]] = [:]
     private var runtimeSubscriptions: [ObjectIdentifier: [AgentSession.ID: AnyCancellable]] = [:]
     private var refreshTask: Task<Void, Never>?
     private var lastBadgeLabel: String?
@@ -209,14 +215,27 @@ final class AgentDockBadgeCoordinator: ObservableObject {
             appStateSubscriptions.removeValue(forKey: id)
             kernelSubscriptions[id]?.cancel()
             kernelSubscriptions.removeValue(forKey: id)
+            runtimeListSubscriptions[id]?.cancel()
+            runtimeListSubscriptions.removeValue(forKey: id)
             runtimeSubscriptions[id]?.values.forEach { $0.cancel() }
             runtimeSubscriptions.removeValue(forKey: id)
+            watchedRuntimeObjects.removeValue(forKey: id)
         }
 
         trackedAppStates = uniqueAppStates
 
         for (id, appState) in uniqueAppStates where appStateSubscriptions[id] == nil {
             appStateSubscriptions[id] = appState.$agentSessions
+                .sink { [weak self] _ in
+                    Task { @MainActor in
+                        self?.scheduleRefresh()
+                    }
+                }
+            // A runtime can appear or be swapped (evicted, then rebuilt on
+            // demand; a routine run) without the session list changing.
+            // Without this, its approvals were never subscribed to and the
+            // Dock stayed blank while the sidebar showed the session waiting.
+            runtimeListSubscriptions[id] = appState.$agentRuntimes
                 .sink { [weak self] _ in
                     Task { @MainActor in
                         self?.scheduleRefresh()
@@ -236,6 +255,9 @@ final class AgentDockBadgeCoordinator: ObservableObject {
     func clear() {
         appStateSubscriptions.values.forEach { $0.cancel() }
         kernelSubscriptions.values.forEach { $0.cancel() }
+        runtimeListSubscriptions.values.forEach { $0.cancel() }
+        runtimeListSubscriptions.removeAll()
+        watchedRuntimeObjects.removeAll()
         runtimeSubscriptions.values.flatMap(\.values).forEach { $0.cancel() }
         appStateSubscriptions.removeAll()
         kernelSubscriptions.removeAll()
@@ -300,7 +322,11 @@ final class AgentDockBadgeCoordinator: ObservableObject {
                 partial += entry.value
             }
         }
-        updateDockBadge(label: count > 0 ? String(count) : nil)
+        updateDockBadge(
+            label: count > 0 ? String(count) : nil,
+            windows: trackedAppStates.count,
+            runtimes: runtimeSubscriptions.values.reduce(0) { $0 + $1.count }
+        )
         publishPendingEntries(blockedByAppState: blockedByAppState)
     }
 
@@ -342,21 +368,34 @@ final class AgentDockBadgeCoordinator: ObservableObject {
                 subscriptions.removeValue(forKey: runtimeID)
             }
 
-            for (runtimeID, runtime) in appState.agentRuntimes where subscriptions[runtimeID] == nil {
+            var watched = watchedRuntimeObjects[appStateID] ?? [:]
+            for runtimeID in Array(watched.keys) where subscriptions[runtimeID] == nil {
+                watched.removeValue(forKey: runtimeID)
+            }
+            // Keyed by session id, but the object behind an id can be
+            // replaced; a subscription to the evicted one would never fire.
+            for (runtimeID, runtime) in appState.agentRuntimes
+            where subscriptions[runtimeID] == nil || watched[runtimeID] != ObjectIdentifier(runtime) {
+                subscriptions[runtimeID]?.cancel()
                 subscriptions[runtimeID] = runtime.objectWillChange
                     .sink { [weak self] _ in
                         Task { @MainActor in
                             self?.scheduleRefresh()
                         }
                     }
+                watched[runtimeID] = ObjectIdentifier(runtime)
             }
+            watchedRuntimeObjects[appStateID] = watched
 
             runtimeSubscriptions[appStateID] = subscriptions
         }
     }
 
-    private func updateDockBadge(label: String?) {
+    private func updateDockBadge(label: String?, windows: Int = 0, runtimes: Int = 0) {
         guard label != lastBadgeLabel else { return }
+        dockBadgeLog.info(
+            "dock badge \(self.lastBadgeLabel ?? "-", privacy: .public) -> \(label ?? "-", privacy: .public) (app states: \(windows), runtimes watched: \(runtimes))"
+        )
         lastBadgeLabel = label
         NSApp.dockTile.badgeLabel = label
     }

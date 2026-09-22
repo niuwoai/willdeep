@@ -228,12 +228,10 @@ final class EditorAppStateRegistry: ObservableObject {
         init(_ window: NSWindow) { self.window = window }
     }
 
+    /// Same set as the termination check: the headless fallback backs the
+    /// Agent window when no editor is open, and it stays alive after an
+    /// editor window takes over `current` — its sessions still count.
     private func syncDockBadgeTracking() {
-        var appStates = Array(activeEditors.values)
-        if let current,
-           !appStates.contains(where: { $0 === current }) {
-            appStates.append(current)
-        }
-        AgentDockBadgeCoordinator.shared.track(appStates: appStates)
+        AgentDockBadgeCoordinator.shared.track(appStates: appStatesForTerminationCheck)
     }
 }
