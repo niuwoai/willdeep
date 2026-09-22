@@ -170,7 +170,7 @@ enum AgentContextBuilder {
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
         "de0913b455cef3e8",
-        "ae56f65c469f00f8",
+        "443358d67431bddf",
         "194138f1960f9dfa",
         "596d1256f025a84e",
     ]
@@ -743,7 +743,7 @@ enum AgentContextBuilder {
     Browser and UI QA:
     - Pick the lightest surface: web_fetch for a public URL you only need to read; embedded_browser_* when the page needs JavaScript, interaction or a rendered view; chrome_* only when the user's own logged-in Chrome session is needed; computer_use_* for native apps.
     - chrome_* can list/activate tabs, navigate, take fresh DOM snapshots, wait, click/type/hover/select options by ref, press keys with native focus/edit fallbacks, scroll, and capture the active tab.
-    - embedded_browser_* navigates, reads the page, snapshots elements, clicks/types by CSS selector, waits, evaluates JavaScript, captures screenshots, and inspects console/network/storage/performance.
+    - embedded_browser_* navigates, reads the page, snapshots elements, clicks/types by CSS selector, presses keys, scrolls, uploads workspace files, waits, evaluates JavaScript, captures screenshots, and inspects console/network/storage/performance.
     - When a site blocks automation — captcha, security verification (e.g. 百度安全验证), login wall, rate limit; page reads flag these with `blocked_by_site` — stop and tell the user what you saw, then let them take over or pick another source. Never get around it with spoofed user agents, proxies, third-party scraping relays, curl replays or OCR.
     - Pure screenshot capture is read-only and does not need a WillDeep confirmation card.
     - For UI development, call visual_qa_screenshot when the user explicitly asks for screenshot, color, theme, layout, accessibility, visual regression, or "看一眼页面" style QA, or after a fresh browser screenshot when visual verification is needed before finalizing. visual_qa_screenshot is separately approval-gated because `allow_vl=true` may send the image to the configured Image Understanding provider. Use `allow_vl=false` when local palette/OCR/theme signals are enough.

@@ -92,8 +92,13 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     private var pendingNavigation: WKNavigation?
     /// Main-frame navigation counters, so `click` can tell that it triggered
     /// a page change (link, form submit, JS location change, popup).
-    private var provisionalNavigationCount = 0
-    private var committedNavigationCount = 0
+    private(set) var provisionalNavigationCount = 0
+    private(set) var committedNavigationCount = 0
+    /// Files `embedded_browser_upload_file` staged for the next file chooser
+    /// the page opens (sites that hide the input behind a custom button).
+    /// Consumed once; ignored after `pendingOpenPanelDeadline`.
+    var pendingOpenPanelFiles: [URL] = []
+    var pendingOpenPanelDeadline: Date?
     /// JavaScript dialogs and file choosers the page opened. The Agent has
     /// no way to answer them, so they are dismissed (confirm → Cancel) and
     /// reported instead of silently swallowed.
@@ -542,12 +547,35 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
           };
         })()
         """
-        let provisionalBefore = provisionalNavigationCount
-        let committedBefore = committedNavigationCount
-        let dialogsBefore = recentDialogs.count
+        let marker = interactionMarker()
         var payload = try await evaluateObject(script)
         guard payload["ok"] as? Bool == true else { return payload }
         if payload["covered_by"] is NSNull { payload["covered_by"] = nil }
+        return await finishInteraction(payload, since: marker)
+    }
+
+    struct InteractionMarker {
+        let provisional: Int
+        let committed: Int
+        let dialogs: Int
+    }
+
+    /// Snapshot taken before an action that may open a page or a dialog.
+    func interactionMarker() -> InteractionMarker {
+        InteractionMarker(
+            provisional: provisionalNavigationCount,
+            committed: committedNavigationCount,
+            dialogs: recentDialogs.count
+        )
+    }
+
+    /// Shared tail of click / press_key / upload: wait for a page the action
+    /// opened, flag a block page, and list dialogs it triggered.
+    func finishInteraction(_ input: [String: Any], since marker: InteractionMarker) async -> [String: Any] {
+        var payload = input
+        let provisionalBefore = marker.provisional
+        let committedBefore = marker.committed
+        let dialogsBefore = marker.dialogs
         if await waitForClickNavigation(provisionalBefore: provisionalBefore, committedBefore: committedBefore) {
             let settled = await waitForNavigationToSettle()
             payload["navigated"] = true
@@ -570,7 +598,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     /// navigation (link, form submit, JS location change, popup opened in
     /// place). If one starts, wait for its commit so the next read sees the
     /// new document instead of the old one that is already `complete`.
-    private func waitForClickNavigation(provisionalBefore: Int, committedBefore: Int) async -> Bool {
+    func waitForClickNavigation(provisionalBefore: Int, committedBefore: Int) async -> Bool {
         let clock = ContinuousClock()
         let startDeadline = clock.now + Self.clickNavigationStartWindow
         while provisionalNavigationCount == provisionalBefore,
@@ -1246,6 +1274,19 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         runOpenPanelWith parameters: WKOpenPanelParameters,
         initiatedByFrame frame: WKFrameInfo
     ) async -> [URL]? {
+        let staged = pendingOpenPanelFiles
+        let deadline = pendingOpenPanelDeadline
+        pendingOpenPanelFiles = []
+        pendingOpenPanelDeadline = nil
+        if !staged.isEmpty, let deadline, deadline > Date() {
+            let files = parameters.allowsMultipleSelection ? staged : Array(staged.prefix(1))
+            recordDialog(
+                kind: "file_chooser",
+                message: "The page asked for a file upload.",
+                answer: "provided " + files.map(\.lastPathComponent).joined(separator: ", ")
+            )
+            return files
+        }
         recordDialog(kind: "file_chooser", message: "The page asked for a file upload.", answer: "cancelled")
         return nil
     }
@@ -1349,7 +1390,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         return try await evaluateObject(script)
     }
 
-    private func evaluateObject(_ script: String) async throws -> [String: Any] {
+    func evaluateObject(_ script: String) async throws -> [String: Any] {
         let webView = ensureWebView()
         let value = try await awaitWebKitCallback(timeout: Self.scriptTimeout, what: "page script") { finish in
             webView.evaluateJavaScript(script) { value, error in
@@ -1369,7 +1410,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     /// Bridges a WebKit completion handler to async/await with a deadline
     /// and cooperative cancellation. The continuation resumes exactly once:
     /// whichever of completion, timeout or the user's Stop arrives first.
-    private func awaitWebKitCallback(
+    func awaitWebKitCallback(
         timeout: Duration,
         what: String,
         start: (@escaping @MainActor (Result<Any, any Error>) -> Void) -> Void
@@ -1465,7 +1506,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         return stripped
     }
 
-    private static func javaScriptLiteral(_ value: String) throws -> String {
+    static func javaScriptLiteral(_ value: String) throws -> String {
         let data = try JSONSerialization.data(withJSONObject: [value], options: [])
         guard let array = String(data: data, encoding: .utf8),
               array.count >= 2 else {
@@ -1966,7 +2007,7 @@ enum AgentEmbeddedBrowserTools {
         return controller
     }
 
-    private static func prettyJSONString(_ value: Any) -> String {
+    static func prettyJSONString(_ value: Any) -> String {
         guard JSONSerialization.isValidJSONObject(value),
               let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
               let string = String(data: data, encoding: .utf8) else {

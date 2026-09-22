@@ -1,10 +1,27 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-22 | Current version: v1.396.0-rc5
+> Last updated: 2026-09-22 | Current version: v1.397.0-rc1
 
 内置配置管理插件 willdeep-config（1.396.0-rc1）：在 App 里查看、编辑、校验和备份 WillDeep 的 TOML 配置，随安装包提供，无需另装。
 
 Agent 用内置浏览器时，侧栏浏览器会在工具执行前自动打开（1.395.0-rc4），后台会话不抢当前侧栏；`embedded_browser_navigate` 等页面加载完再返回。内置浏览器的 UA 带上 Safari 标记，百度等站点不再在 http 与 https 之间来回跳。
+
+浏览器能力（1.396.0-rc2 至 1.397.0-rc1）：
+
+- **读取与交互**
+  - "页面可读"以 `readyState` 和正文稳定为准，读到空内容会带提示。
+  - 点击会派发完整的指针事件，触发跳转时等新页面加载好再返回；新窗口链接在当前页打开；网页弹出的对话框会被关掉并报告给 Agent。
+  - 输入对 React 受控输入框和富文本编辑器都有效，也能选择下拉选项。
+  - 新增按键（`embedded_browser_press_key`）、滚动（`embedded_browser_scroll`）和上传工作区文件（`embedded_browser_upload_file`）。
+  - 截图会作为图片交给模型。
+- **安全边界**
+  - "总是允许"按单个工具保存，navigate 还要绑定域名；eval、CDP 调试命令和文件上传每次都单独审批。
+  - navigate 只打开 http(s)、`about:blank` 和工作区内的文件，内网地址拒绝。
+  - 读取页面时不返回密码类输入框的值；网页内容进入上下文时标成不可信数据。
+  - Chrome 本地桥需要每次启动时生成的随机 token。
+- **防失控**
+  - 能识别验证码、安全验证这类拦截页，要求 Agent 停下向用户汇报。
+  - 工具连续失败后，失败提示从"换个方法继续"改为"停下汇报"。
 
 用量统计合并 willdeep CLI 的用量（1.395.0-rc1）：读取 CLI 写在 `~/.willdeep/usage/` 的本地用量账本，Token 活动、总览、模型拆分、请求页都算上 CLI 的模型调用，热力图旁可切「全部 / 桌面 / CLI」。热力图的「请求」统一为模型调用次数，跨零点的回合不再显示「0 次请求」。设计见 `docs/USAGE_LEDGER_DESIGN.md`。
 
@@ -785,7 +802,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **主线审核解释修复整合（1.185.0-rc6）** —— 将 `main` 上已验证的 Coding Plan 审核解释模型路由、`someim-auto-flash` 回退与 provider 错误详情展示纳入当前发布线；贴图生成、浏览器和 Computer Use 改进与这一修复共同交付，版本与构建号同步递增。
 - **执行器即时状态刷新（1.185.0-rc8）** —— Composer 执行器在选择 Claude Code 或 Codex 后立即更新图标、名称、选中标记和配色；切换会话时会重新读取该会话的已保存选择，不再出现实际已切换但 pill 仍显示 WillDeep 的错觉。
 - **执行器身份与任务图标（1.185.0-rc7）** —— Composer 的内置执行器显示为 WillDeep，使用锤子图标清楚表达“实际干活 / 执行任务”；菜单摘要与悬浮提示不再用“我们”指代产品。
-- **Codex 风格 Computer Use / 浏览器授权（1.185.0-rc2）** —— Computer Use、Chrome 与内置浏览器的普通写操作使用紧凑三按钮授权卡；“允许此对话”只写入当前 Agent runtime 并按工具族隔离，“始终允许”按工具族持久化，danger 级调试操作继续走严格确认，避免便捷授权扩大高风险操作边界。
+- **Codex 风格 Computer Use / 浏览器授权（1.185.0-rc2）** —— Computer Use、Chrome 与内置浏览器的普通写操作使用紧凑三按钮授权卡；“允许此对话”只写入当前 Agent runtime 并按工具族隔离，“始终允许”按工具族持久化，danger 级调试操作继续走严格确认，避免便捷授权扩大高风险操作边界。（1.396.0-rc3 起浏览器的“始终允许”收窄为单个工具、navigate 再绑定域名，旧的整族规则不再生效。）
 - **视觉验收响应式 OCR（1.185.0-rc3）** —— 贴图生成代码的 OCR 覆盖率使用归一化字符片段比较，忽略浏览器窄视口造成的自然换行差异，同时继续拒绝缺失或无关文案，避免完成门禁在响应式页面上误杀。
 - **贴图生成直接执行语义（1.185.0-rc4）** —— `/screenshot-to-code` 会退出会话遗留的 Plan 模式并清理旧计划，再进入生产代码修改、运行、浏览器截图与视觉验收闭环，避免显式执行命令被旧计划门禁切成只读规划。
 - **贴图生成浏览器专家直挂（1.185.0-rc5）** —— `/screenshot-to-code` 会按目标框架确定性挂载专家：Web 目标直接启用 Web Programming 与 Browser Ops 并打开内置 Browser，SwiftUI/AppKit/UIKit 保持原生实现与 Computer Use 验收路径。

@@ -1612,6 +1612,39 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "embedded_browser_press_key",
+            description: "Press a key in the in-app Embedded Browser, on the focused element or on a CSS selector. Dispatches keydown/keyup and, unless the page cancels it, applies the key's default action: Enter submits a form input or activates a button/link (and waits for the page it opens), Tab / Shift+Tab move focus, Escape blurs, Backspace/Delete edit text, Space toggles checkboxes, ArrowUp/ArrowDown change a <select>, single characters are inserted into editable fields, and PageDown/PageUp/Space/Home/End scroll a non-editable page. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "key", type: .string, description: "KeyboardEvent key such as Enter, Tab, Escape, ArrowDown, PageDown, Backspace, or a single character.", required: true),
+                AgentToolParameter(name: "selector", type: .string, description: "Optional CSS selector to focus first; defaults to the focused element.", required: false),
+                AgentToolParameter(name: "code", type: .string, description: "Optional KeyboardEvent code such as Enter or KeyA.", required: false),
+                AgentToolParameter(name: "alt_key", type: .boolean, description: "Hold Alt/Option.", required: false),
+                AgentToolParameter(name: "ctrl_key", type: .boolean, description: "Hold Control.", required: false),
+                AgentToolParameter(name: "meta_key", type: .boolean, description: "Hold Command/Meta.", required: false),
+                AgentToolParameter(name: "shift_key", type: .boolean, description: "Hold Shift.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_scroll",
+            description: "Scroll the in-app Embedded Browser page or a scrollable element, or bring an element into view. Waits briefly afterwards so lazy-loaded content can render; returns scroll position with at_top / at_bottom. Requires approval because it changes the visible browser state.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "direction", type: .string, description: "up, down, left, right, top, bottom, or into_view (needs selector).", required: true),
+                AgentToolParameter(name: "pages", type: .integer, description: "1 through 8 viewport pages for up/down/left/right; defaults to 1.", required: false),
+                AgentToolParameter(name: "selector", type: .string, description: "Optional CSS selector: a scrollable container to scroll, or an element to scroll into view.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "embedded_browser_upload_file",
+            description: "Upload workspace files to a page in the in-app Embedded Browser. Target the page's <input type=file>, or the page's own upload button (the files are handed to the file chooser it opens). Only files inside the session workspace, never credential/key files, at most 10 files and 25 MB in total. Every call needs its own approval because it sends local files to a website.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "selector", type: .string, description: "CSS selector of the file input or the upload button.", required: true),
+                AgentToolParameter(name: "paths", type: .stringArray, description: "Workspace-relative (or absolute, inside the workspace) file paths to upload.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "embedded_browser_wait_for",
             description: "Wait until the in-app Embedded Browser side panel matches a condition, polling the current page without blocking the UI. Use after navigation, click, or form submit. Supports condition values: selector, text, url_contains, title_contains. Read-only.",
             risk: .read,

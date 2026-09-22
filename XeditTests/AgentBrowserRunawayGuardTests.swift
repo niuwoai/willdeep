@@ -106,7 +106,7 @@ struct AgentBrowserRunawayGuardTests {
         }
     }
 
-    @Test("浏览器指引写明拦截即停、工具怎么选，且不再宣称内置浏览器能 hover/按键")
+    @Test("浏览器指引写明拦截即停、工具怎么选，内置浏览器能力如实列出（有按键/滚动/上传，没有 hover）")
     func browserGuidanceIsAccurate() {
         let block = AgentContextBuilder.browserUICapabilityBlock
         #expect(block.contains("blocked_by_site"))
@@ -114,7 +114,8 @@ struct AgentBrowserRunawayGuardTests {
         #expect(block.contains("web_fetch for a public URL"))
         let embeddedLine = block.split(separator: "\n").first { $0.contains("embedded_browser_* navigates") }
         #expect(embeddedLine != nil)
-        #expect(embeddedLine.map { !$0.contains("hover") && !$0.contains("press keys") } == true)
+        #expect(embeddedLine.map { !$0.contains("hover") } == true)
+        #expect(embeddedLine.map { $0.contains("presses keys") && $0.contains("scrolls") && $0.contains("uploads workspace files") } == true)
     }
 
     @Test("浏览类调用不计入触发计划的写操作")

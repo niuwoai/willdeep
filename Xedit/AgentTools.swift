@@ -694,6 +694,16 @@ enum AgentToolRunner {
                 result = try await AgentEmbeddedBrowserTools.click(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_type":
                 result = try await AgentEmbeddedBrowserTools.typeText(arguments: activeArguments, runtimeID: activeContext.runtimeID)
+            case "embedded_browser_press_key":
+                result = try await AgentEmbeddedBrowserTools.pressKey(arguments: activeArguments, runtimeID: activeContext.runtimeID)
+            case "embedded_browser_scroll":
+                result = try await AgentEmbeddedBrowserTools.scroll(arguments: activeArguments, runtimeID: activeContext.runtimeID)
+            case "embedded_browser_upload_file":
+                result = try await AgentEmbeddedBrowserTools.uploadFile(
+                    arguments: activeArguments,
+                    runtimeID: activeContext.runtimeID,
+                    workspaceRoots: [activeContext.rootDirectory].compactMap { $0 } + activeContext.workspaceRoots
+                )
             case "embedded_browser_wait_for":
                 result = try await AgentEmbeddedBrowserTools.waitFor(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_eval":

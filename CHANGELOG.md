@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.397.0-rc1 - 2026-09-22
+
+### Added
+
+- **`embedded_browser_press_key`：在内置浏览器里按键。** 作用于当前焦点元素，或先聚焦 selector 指定的元素。先派发 keydown / keypress / keyup；页面没有拦截的话，再补上这个键的默认动作（合成的键盘事件浏览器不信任，默认动作不会自动发生）：
+  - 在表单输入框里按 Enter 会提交表单，在按钮或链接上按 Enter 会触发它；提交后像 click 一样等新页面加载好。
+  - Tab / Shift+Tab 移动焦点，Escape 让元素失去焦点，Backspace / Delete 删除文字。
+  - 空格切换 checkbox / radio，上下方向键切换下拉选项。
+  - 单个字符插入到可编辑元素里。用 selector 新聚焦的文本框，光标先移到末尾，行为和人接着打字一样。
+  - 焦点不在可编辑元素上时，PageDown / PageUp / 空格 / Home / End / 方向键滚动页面。
+
+  结果里的 `action` 说明实际发生了什么；如果页面自己拦截了这个键，`action` 是 `prevented_by_page`，工具不会再补默认动作。参数和 Chrome 的 `chrome_press_key` 一致。
+- **`embedded_browser_scroll`：滚动页面或可滚动的容器。**
+  - `direction` 支持 up / down / left / right（配合 `pages`，1 到 8 屏）、top、bottom，以及 `into_view`（把 selector 指定的元素滚到视野中央）。
+  - selector 指向的元素本身不能滚动时，改为把它滚进视野。
+  - 返回滚动位置和 `at_top` / `at_bottom`；滚完等 300 毫秒，让懒加载的内容渲染出来。
+- **`embedded_browser_upload_file`：把工作区文件上传到网页。**
+  - 目标是 `<input type=file>` 时，用 DataTransfer 直接写入文件，并触发 input / change 事件。
+  - 目标是网站自己做的上传按钮时，先备好文件再点击按钮，在页面打开文件选择框时把文件交出去（经 WKUIDelegate 的 `runOpenPanel`）。已用独立小程序实测：经 WKWebView 脚本触发的点击也会走到这个回调。
+  - 限制：只允许会话工作区里的普通文件（解开符号链接和 `..` 之后判断）；拒绝 `.env`、`id_rsa`、`*.pem`、`*.key` 这类凭据文件；最多 10 个文件、总共 25 MB。
+  - 因为这等于把本地文件发给网站，**每次调用都要单独批准**，不随"本会话允许浏览器操作"放行，也不能存成"总是允许"。
+- 三个新工具都补上了中文显示名、审计摘要（按键记 key，滚动记 direction，上传记路径）；浏览器能力块写上了这些新能力，只更新了浏览器块的哈希快照，核心前缀不变。
+- 测试：新增 `AgentEmbeddedBrowserInputTests`（8 项：Enter 提交表单并等新页面、各种按键的默认动作、页面拦截时不补默认动作、各方向滚动与滚到元素、上传到 file input 并触发 change、通过自定义按钮上传、上传文件校验的各种拒绝情况、上传每次单独审批）；`AgentBrowserRunawayGuardTests` 里对能力块的断言改为"列出按键、滚动、上传，不宣称 hover"。
+
 ## 1.396.0-rc5 - 2026-09-22
 
 ### Fixed

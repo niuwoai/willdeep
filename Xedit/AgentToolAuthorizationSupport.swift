@@ -85,6 +85,15 @@ enum AgentSandboxAuditLog {
         if let method = arguments["method"]?.stringValue() {
             parts.append("method=\(method)")
         }
+        if let key = arguments["key"]?.stringValue() {
+            parts.append("key=\(key)")
+        }
+        if let direction = arguments["direction"]?.stringValue() {
+            parts.append("direction=\(direction)")
+        }
+        if let paths = arguments["paths"]?.stringArrayValue(), !paths.isEmpty {
+            parts.append("paths=\(paths.joined(separator: ","))")
+        }
         if let javascript = arguments["javascript"]?.stringValue() {
             let digest = SHA256.hash(data: Data(javascript.utf8))
                 .prefix(6).map { String(format: "%02x", $0) }.joined()
@@ -609,6 +618,8 @@ enum AgentToolAuthorization {
     nonisolated static let browserToolsRequiringPerCallApproval: Set<String> = [
         "embedded_browser_eval",
         "chrome_debugger_command",
+        // Sends local files to a website: each upload is its own decision.
+        "embedded_browser_upload_file",
     ]
 
     /// Durable ("always allow") rule for a browser tool. Earlier builds saved
