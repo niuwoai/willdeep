@@ -342,6 +342,12 @@ enum AgentToolRunner {
             ) {
                 throw AgentToolError.invalidArgument(drift)
             }
+            if let drift = AgentToolAuthorization.embeddedBrowserProfileDriftMessage(
+                arguments: arguments,
+                currentProfile: await AgentEmbeddedBrowserController.profile(for: context.runtimeID)
+            ) {
+                throw AgentToolError.invalidArgument(drift)
+            }
         }
         let resolution = resolvesSecretsForTool(name)
             ? AgentSecretStore.resolve(arguments)

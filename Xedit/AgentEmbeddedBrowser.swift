@@ -34,6 +34,10 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     @Published private(set) var lastHTTPStatus: Int?
 
     private var webView: WKWebView?
+    /// Which data store the web view uses; change it with `switchProfile`.
+    @Published private(set) var profile: AgentEmbeddedBrowserProfile = .personal
+    /// Profile new tabs of a session start with: the last one chosen there.
+    private static var runtimeProfiles: [UUID: AgentEmbeddedBrowserProfile] = [:]
     private var consoleEvents: [[String: Any]] = []
     private let consoleEventLimit = 300
     private var requestEvents: [[String: Any]] = []
@@ -123,6 +127,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             return existing
         }
         let controller = AgentEmbeddedBrowserController()
+        controller.profile = runtimeProfiles[runtimeID] ?? .personal
         runtimeControllers[runtimeID, default: [:]][resolvedTabID] = controller
         return controller
     }
@@ -140,6 +145,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             controllers.values.forEach { $0.resetForResourceReaper() }
         }
         activeTabIDs.removeValue(forKey: runtimeID)
+        runtimeProfiles.removeValue(forKey: runtimeID)
     }
 
     static func release(tabID: UUID, for runtimeID: UUID) {
@@ -178,6 +184,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             return webView
         }
         let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = AgentEmbeddedBrowserDataStores.store(for: profile)
         configuration.userContentController.addUserScript(Self.diagnosticsUserScript())
         configuration.userContentController.add(
             self,
@@ -196,6 +203,33 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             webView.load(URLRequest(url: url))
         }
         return webView
+    }
+
+    /// The session's current profile, without creating a controller.
+    static func profile(for runtimeID: UUID?) -> AgentEmbeddedBrowserProfile {
+        if let controller = existingController(for: runtimeID) { return controller.profile }
+        return runtimeID.flatMap { runtimeProfiles[$0] } ?? .personal
+    }
+
+    /// Rebuilds the web view on the other data store and reopens the page
+    /// that was showing, so sign-ins never leak between the two.
+    func switchProfile(to newProfile: AgentEmbeddedBrowserProfile, runtimeID: UUID?) {
+        if let runtimeID { Self.runtimeProfiles[runtimeID] = newProfile }
+        guard newProfile != profile else { return }
+        let reopen = currentURL
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView?.uiDelegate = nil
+        webView?.configuration.userContentController.removeScriptMessageHandler(
+            forName: Self.diagnosticsMessageHandlerName
+        )
+        webView?.removeFromSuperview()
+        webView = nil
+        profile = newProfile
+        let fresh = ensureWebView(loadInitialPage: false)
+        if let url = URL(string: reopen), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            fresh.load(URLRequest(url: url))
+        }
     }
 
     func resetForResourceReaper() {
@@ -365,6 +399,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             "last_screenshot_path": lastScreenshotPath ?? NSNull(),
             "http_status": lastHTTPStatus ?? NSNull(),
             "last_dialog": recentDialogs.last ?? NSNull(),
+            "profile": profile.rawValue,
         ]
     }
 

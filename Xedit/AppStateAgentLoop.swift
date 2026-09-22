@@ -1583,6 +1583,11 @@ extension AppState {
                     arguments: argsDict,
                     currentURL: AgentEmbeddedBrowserController.currentURL(for: runtime.id)
                 )
+                argsDict = AgentToolAuthorization.stampingEmbeddedBrowserProfile(
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    profile: AgentEmbeddedBrowserController.profile(for: runtime.id)
+                )
                 // A click that sends, deletes or pays is confirmed even on an
                 // allowed site; the host reads the target's label itself.
                 argsDict = await AgentEmbeddedBrowserController.stampingTargetLabel(

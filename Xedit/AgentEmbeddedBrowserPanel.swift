@@ -99,6 +99,16 @@ struct AgentEmbeddedBrowserPanel: View {
             .help(L10n.AgentEmbeddedBrowser.go)
 
             Button {
+                controller.switchProfile(to: isIsolated ? .personal : .isolated, runtimeID: runtimeID)
+            } label: {
+                Image(systemName: isIsolated ? "person.crop.circle.badge.xmark" : "person.crop.circle")
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help(isIsolated ? L10n.AgentEmbeddedBrowser.profileIsolated : L10n.AgentEmbeddedBrowser.profilePersonal)
+            
+            Button {
                 isChromeImportPresented = true
             } label: {
                 Image(systemName: "person.crop.circle.badge.plus")
@@ -106,7 +116,9 @@ struct AgentEmbeddedBrowserPanel: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .help(L10n.AgentEmbeddedBrowser.importChrome)
+            // Importing sign-ins into the isolated store would defeat its point.
+            .disabled(isIsolated)
+            .help(isIsolated ? L10n.AgentEmbeddedBrowser.importChromeIsolated : L10n.AgentEmbeddedBrowser.importChrome)
 
             Button {
                 captureScreenshot()
@@ -127,10 +139,20 @@ struct AgentEmbeddedBrowserPanel: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(controller.title.isEmpty ? L10n.AgentEmbeddedBrowser.untitled : controller.title)
-                .font(.system(size: 11, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
+            HStack(spacing: 6) {
+                if isIsolated {
+                    Text(L10n.AgentEmbeddedBrowser.profileIsolatedBadge)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.5), lineWidth: 1))
+                }
+                Text(controller.title.isEmpty ? L10n.AgentEmbeddedBrowser.untitled : controller.title)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
             Text(footerDetail)
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
@@ -141,6 +163,8 @@ struct AgentEmbeddedBrowserPanel: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
+
+    private var isIsolated: Bool { controller.profile == .isolated }
 
     private var footerDetail: String {
         if let screenshotError {

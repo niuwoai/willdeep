@@ -1164,6 +1164,10 @@ nonisolated enum L10n {
         static let forward = String(localized: "agent-embedded-browser.forward", defaultValue: "Forward")
         static let go = String(localized: "agent-embedded-browser.go", defaultValue: "Go")
         static let importChrome = String(localized: "agent-embedded-browser.import-chrome", defaultValue: "Import logins from Chrome")
+        static let importChromeIsolated = String(localized: "agent-embedded-browser.import-chrome-isolated", defaultValue: "The isolated browser keeps no sign-ins, so Chrome logins can't be imported into it.")
+        static let profilePersonal = String(localized: "agent-embedded-browser.profile-personal", defaultValue: "My browser: uses your sign-ins. Click to switch to the isolated browser (no sign-ins, ordinary actions run without asking).")
+        static let profileIsolated = String(localized: "agent-embedded-browser.profile-isolated", defaultValue: "Isolated browser: none of your sign-ins, ordinary actions run without asking. Click to switch back to My browser.")
+        static let profileIsolatedBadge = String(localized: "agent-embedded-browser.profile-isolated-badge", defaultValue: "Isolated")
         static func lastScreenshot(_ a1: String) -> String {
             let template = String(localized: "agent-embedded-browser.last-screenshot", defaultValue: "Last screenshot: %@")
             return String(format: template, a1)

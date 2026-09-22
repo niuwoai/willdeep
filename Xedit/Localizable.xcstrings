@@ -998,6 +998,41 @@
         }
       }
     },
+    "agent-embedded-browser.import-chrome-isolated" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The isolated browser keeps no sign-ins, so Chrome logins can't be imported into it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El navegador aislado no guarda sesiones, así que no se pueden importar los inicios de sesión de Chrome."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le navigateur isolé ne garde aucune connexion : impossible d'y importer les connexions de Chrome."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独立ブラウザにはログイン情報を保存しないため、Chrome のログインは取り込めません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独立浏览器不保存登录态，所以不能导入 Chrome 的登录。"
+          }
+        }
+      }
+    },
     "agent-embedded-browser.last-screenshot" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1029,6 +1064,111 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近截图：%@"
+          }
+        }
+      }
+    },
+    "agent-embedded-browser.profile-isolated" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Isolated browser: none of your sign-ins, ordinary actions run without asking. Click to switch back to My browser."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navegador aislado: sin tus sesiones; las acciones normales se ejecutan sin preguntar. Haz clic para volver a Mi navegador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navigateur isolé : aucune de vos connexions, les actions ordinaires s'exécutent sans demander. Cliquez pour revenir à Mon navigateur."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独立ブラウザ：ログイン情報なし。通常の操作は確認なしで実行します。クリックでマイブラウザに戻します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独立浏览器：不带你的登录态，普通操作不需要确认。点按切换回我的浏览器。"
+          }
+        }
+      }
+    },
+    "agent-embedded-browser.profile-isolated-badge" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Isolated"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aislado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Isolé"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独立"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独立浏览器"
+          }
+        }
+      }
+    },
+    "agent-embedded-browser.profile-personal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My browser: uses your sign-ins. Click to switch to the isolated browser (no sign-ins, ordinary actions run without asking)."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mi navegador: usa tus sesiones. Haz clic para cambiar al navegador aislado (sin sesiones; las acciones normales se ejecutan sin preguntar)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mon navigateur : utilise vos connexions. Cliquez pour passer au navigateur isolé (sans connexion, les actions ordinaires s'exécutent sans demander)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイブラウザ：ログイン情報を使用。クリックで独立ブラウザに切り替えます（ログインなし、通常の操作は確認不要）。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我的浏览器：带你的登录态。点按切换到独立浏览器（不带登录态，普通操作不需要确认）。"
           }
         }
       }

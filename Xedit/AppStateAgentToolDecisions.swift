@@ -707,6 +707,11 @@ extension AppState {
             return .staticAllowlist
         }
 
+        // The isolated browser holds none of the user's sign-ins.
+        if AgentToolAuthorization.isolatedBrowserAllowsWithoutAsking(toolName: toolName, arguments: arguments) {
+            return .staticAllowlist
+        }
+
         // Delegated coding agents can modify many files in one call. Smart
         // review and Workspace Access both let workspace-scoped delegated
         // work pass WillDeep's outer gate; the delegated runner keeps its own
