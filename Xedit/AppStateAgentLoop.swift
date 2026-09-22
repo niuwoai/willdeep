@@ -1576,6 +1576,13 @@ extension AppState {
                 let isMonitorCall = call.toolName == AgentMonitorTool.name
                 (call.toolName, argsDict) = AgentMonitorTool.authorizationForm(
                     toolName: call.toolName, arguments: argsDict)
+                // Embedded browser site grants are judged against the page
+                // the call will act on; execution re-checks it.
+                argsDict = AgentToolAuthorization.stampingEmbeddedBrowserPageHost(
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    currentURL: AgentEmbeddedBrowserController.currentURL(for: runtime.id)
+                )
                 if isMonitorCall, denyMonitorInReadOnlyTurn(
                     call, messageID: assistantID, arguments: argsDict, runtime: runtime,
                     planProgressReconciliation: isPlanProgressReconciliationActive) {

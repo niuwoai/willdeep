@@ -603,9 +603,8 @@ enum AgentToolAuthorization {
             // remain per-action confirmations.
             return nil
         }
-        // Arbitrary page JavaScript and raw CDP commands can read cookies and
-        // tokens on logged-in pages, so they never ride on a family grant:
-        // each call is approved on its own.
+        // Raw CDP commands can read every cookie, httpOnly ones included, and
+        // uploads send local files away: each call is approved on its own.
         if browserToolsRequiringPerCallApproval.contains(toolName) {
             return nil
         }
@@ -618,24 +617,64 @@ enum AgentToolAuthorization {
         return nil
     }
 
+    /// `embedded_browser_eval` is not here: page script cannot read httpOnly
+    /// cookies, and acting as the signed-in user is the same risk a click
+    /// already carries. See docs/EMBEDDED_BROWSER_SITE_AUTHORIZATION.md.
     nonisolated static let browserToolsRequiringPerCallApproval: Set<String> = [
-        "embedded_browser_eval",
         "chrome_debugger_command",
         // Sends local files to a website: each upload is its own decision.
         "embedded_browser_upload_file",
     ]
 
-    /// Durable ("always allow") rule for a browser tool. Earlier builds saved
-    /// the whole family (`browser:embedded` / `browser:chrome`), so one
-    /// approved navigation silently authorized eval, click and type on every
-    /// site forever. Rules are now one tool wide, and navigation rules are
-    /// also bound to the destination host. Legacy family rules no longer
-    /// match anything.
+    /// Hidden argument the host stamps on every embedded browser call except
+    /// navigate: the host of the page the call will act on, captured when the
+    /// call is registered. Site grants are judged against it, and execution
+    /// refuses to run if the page has since moved to another host.
+    nonisolated static let embeddedBrowserPageHostArgument = "_willdeep_page_host"
+
+    static func stampingEmbeddedBrowserPageHost(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        currentURL: String
+    ) -> [String: AgentJSONValue] {
+        guard toolName.hasPrefix("embedded_browser_"), !toolName.hasSuffix("_navigate") else {
+            return arguments
+        }
+        var stamped = arguments
+        // Always overwritten: a model-supplied value must never pick the site.
+        stamped[embeddedBrowserPageHostArgument] = .string(embeddedBrowserPageHost(currentURL) ?? "")
+        return stamped
+    }
+
+    /// Host of an http(s) page; blank pages and local files have none, so
+    /// they never mint or match a site grant.
+    static func embeddedBrowserPageHost(_ rawURL: String) -> String? {
+        guard let url = URL(string: rawURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host?.lowercased(), !host.isEmpty else {
+            return nil
+        }
+        return host
+    }
+
+    /// Durable ("always allow") rule for a browser tool.
+    ///
+    /// Embedded browser rules are one site wide
+    /// (`browser:embedded:site:www.baidu.com`): navigate is bound to its
+    /// destination, every other tool to the stamped page host. Chrome rules
+    /// stay one tool wide because the host has no synchronous view of the
+    /// active Chrome tab. The pre-1.396 whole-family rules match nothing.
     static func browserPersistentSignature(
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> String? {
         guard let family = interactiveSurfaceSignature(toolName: toolName) else { return nil }
+        if toolName.hasPrefix("embedded_browser_") {
+            let host = toolName.hasSuffix("_navigate")
+                ? browserNavigationHost(arguments["url"]?.stringValue() ?? "")
+                : arguments[embeddedBrowserPageHostArgument]?.stringValue().flatMap { $0.isEmpty ? nil : $0 }
+            return host.map { "\(family):site:\($0)" }
+        }
         guard toolName.hasSuffix("_navigate") else {
             return "\(family):\(toolName)"
         }
@@ -643,6 +682,35 @@ enum AgentToolAuthorization {
             return nil
         }
         return "\(family):\(toolName):\(host)"
+    }
+
+    /// Per-tool embedded browser rules saved by 1.396.0-rc3 … 1.398. They keep
+    /// matching so nobody has to approve again; new rules are site rules.
+    static func legacyEmbeddedBrowserToolSignature(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> String? {
+        guard toolName.hasPrefix("embedded_browser_"),
+              let family = interactiveSurfaceSignature(toolName: toolName) else { return nil }
+        guard toolName.hasSuffix("_navigate") else {
+            return "\(family):\(toolName)"
+        }
+        return browserNavigationHost(arguments["url"]?.stringValue() ?? "")
+            .map { "\(family):\(toolName):\($0)" }
+    }
+
+    /// Execution-time check for a stamped call: the page must still be on the
+    /// host the call was authorized for. Returns the refusal message, if any.
+    static func embeddedBrowserHostDriftMessage(
+        arguments: [String: AgentJSONValue],
+        currentURL: String
+    ) -> String? {
+        guard let stamped = arguments[embeddedBrowserPageHostArgument]?.stringValue(),
+              !stamped.isEmpty else { return nil }
+        let current = embeddedBrowserPageHost(currentURL) ?? ""
+        guard current != stamped else { return nil }
+        let now = current.isEmpty ? "a page without a site" : current
+        return "The embedded browser moved from \(stamped) to \(now) after this call was authorized, so it was not run. Call the tool again; it will be authorized for the page that is open now."
     }
 
     static func browserNavigationHost(_ rawURL: String) -> String? {
@@ -832,6 +900,9 @@ enum AgentToolAuthorization {
         }
         if let signature = signature(toolName: toolName, arguments: arguments) {
             result.append(signature)
+        }
+        if let legacy = legacyEmbeddedBrowserToolSignature(toolName: toolName, arguments: arguments) {
+            result.append(legacy)
         }
         var seen: Set<String> = []
         return result.filter { seen.insert($0).inserted }

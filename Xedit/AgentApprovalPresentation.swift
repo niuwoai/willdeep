@@ -256,9 +256,20 @@ nonisolated enum AgentCompactAuthorizationCopy {
     }
 
     private static func perCallNote(_ toolName: String) -> String? {
-        AgentToolAuthorization.browserToolsRequiringPerCallApproval.contains(toolName)
-            ? L10n.ToolCard.browserPerCallAuthorizationNote
-            : nil
+        switch toolName {
+        case "chrome_debugger_command": return L10n.ToolCard.browserDebuggerAuthorizationNote
+        case "embedded_browser_upload_file": return L10n.ToolCard.browserUploadAuthorizationNote
+        default: return nil
+        }
+    }
+
+    /// Label for the always-allow button of a site-scoped browser rule, so
+    /// the user sees which site the rule covers.
+    static func alwaysAllowLabel(signature: String) -> String? {
+        let prefix = "browser:embedded:site:"
+        guard signature.hasPrefix(prefix) else { return nil }
+        let host = String(signature.dropFirst(prefix.count))
+        return host.isEmpty ? nil : L10n.ToolCard.browserAlwaysAllowOnSite(host)
     }
 }
 

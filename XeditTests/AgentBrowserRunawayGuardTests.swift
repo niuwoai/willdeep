@@ -118,25 +118,38 @@ struct AgentBrowserRunawayGuardTests {
         #expect(embeddedLine.map { $0.contains("presses keys") && $0.contains("scrolls") && $0.contains("uploads workspace files") } == true)
     }
 
-    @Test("读页面先用 read_page / snapshot；eval 每次都要确认，要一次取全")
+    @Test("读页面先用 read_page / snapshot，eval 一次取全，浏览器按网站授权")
     func browserGuidanceSteersReadsAwayFromEval() {
         let block = AgentContextBuilder.browserUICapabilityBlock
         let readLine = block.split(separator: "\n").first { $0.contains("To read a page") }
         #expect(readLine.map { $0.contains("embedded_browser_read_page") && $0.contains("embedded_browser_snapshot") } == true)
-        #expect(readLine.map { $0.contains("asks the user every single time") && $0.contains("in one script") } == true)
+        #expect(readLine.map { $0.contains("in one script") && $0.contains("authorized per site") && !$0.contains("every single time") } == true)
         let eval = AgentToolRegistry.all.first { $0.name == "embedded_browser_eval" }
-        #expect(eval?.description.contains("gather everything you need in one script") == true)
+        #expect(eval?.description.contains("Gather everything you need in one script") == true)
+        #expect(eval?.description.contains("approve every call") == false)
     }
 
     @Test("逐次确认的浏览器工具在授权卡上说明为什么没有一直允许，其他工具不带说明")
     func perCallBrowserToolsExplainMissingAlwaysAllow() {
+        #expect(AgentCompactAuthorizationCopy.descriptor(toolName: "chrome_debugger_command", arguments: [:])?.note
+            == L10n.ToolCard.browserDebuggerAuthorizationNote)
+        #expect(AgentCompactAuthorizationCopy.descriptor(toolName: "embedded_browser_upload_file", arguments: [:])?.note
+            == L10n.ToolCard.browserUploadAuthorizationNote)
         for toolName in AgentToolAuthorization.browserToolsRequiringPerCallApproval {
-            let descriptor = AgentCompactAuthorizationCopy.descriptor(toolName: toolName, arguments: [:])
-            #expect(descriptor?.note == L10n.ToolCard.browserPerCallAuthorizationNote, "\(toolName)")
+            #expect(AgentCompactAuthorizationCopy.descriptor(toolName: toolName, arguments: [:])?.note != nil, "\(toolName)")
         }
-        for toolName in ["embedded_browser_navigate", "embedded_browser_click", "chrome_click"] {
+        for toolName in ["embedded_browser_navigate", "embedded_browser_click", "embedded_browser_eval", "chrome_click"] {
             #expect(AgentCompactAuthorizationCopy.descriptor(toolName: toolName, arguments: [:])?.note == nil, "\(toolName)")
         }
+    }
+
+    @Test("网站规则的始终允许按钮写明网站；其他规则仍用通用文案")
+    func siteRuleButtonNamesTheSite() {
+        #expect(AgentCompactAuthorizationCopy.alwaysAllowLabel(signature: "browser:embedded:site:www.baidu.com")
+            == L10n.ToolCard.browserAlwaysAllowOnSite("www.baidu.com"))
+        #expect(L10n.ToolCard.browserAlwaysAllowOnSite("www.baidu.com").contains("www.baidu.com"))
+        #expect(AgentCompactAuthorizationCopy.alwaysAllowLabel(signature: "browser:chrome:chrome_click") == nil)
+        #expect(AgentCompactAuthorizationCopy.alwaysAllowLabel(signature: "browser:embedded:site:") == nil)
     }
 
     @Test("浏览类调用不计入触发计划的写操作")

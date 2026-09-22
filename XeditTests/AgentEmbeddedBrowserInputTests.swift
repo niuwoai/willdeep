@@ -261,7 +261,7 @@ struct AgentEmbeddedBrowserInputTests {
         #expect(AgentToolAuthorization.interactiveSurfaceSignature(toolName: "embedded_browser_press_key") == "browser:embedded")
         #expect(AgentToolAuthorization.suggestedPersistentSignature(
             toolName: "embedded_browser_scroll",
-            arguments: ["direction": .string("down")]
-        ) == "browser:embedded:embedded_browser_scroll")
+            arguments: ["direction": .string("down"), AgentToolAuthorization.embeddedBrowserPageHostArgument: .string("example.com")]
+        ) == "browser:embedded:site:example.com")
     }
 }

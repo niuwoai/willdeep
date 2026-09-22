@@ -1670,7 +1670,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_eval",
-            description: "Run explicit JavaScript in the in-app Embedded Browser page context and return a JSON/stringified result. This can inspect or mutate web apps, so prefer embedded_browser_snapshot/read_page/console/network first. The user must approve every call (there is no always-allow), so gather everything you need in one script.",
+            description: "Run explicit JavaScript in the in-app Embedded Browser page context and return a JSON/stringified result. This can inspect or mutate web apps, so prefer embedded_browser_snapshot/read_page/console/network first. Gather everything you need in one script. Authorized per site like the other embedded_browser_* actions.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "javascript", type: .string, description: "JavaScript body to execute inside an async function. Return a JSON-serializable value when possible.", required: true),

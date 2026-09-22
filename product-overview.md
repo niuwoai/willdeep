@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-22 | Current version: v1.398.0-rc6
+> Last updated: 2026-09-22 | Current version: v1.399.0-rc1
 
 内置配置管理插件 willdeep-config（1.396.0-rc1）：在 App 里查看、编辑、校验和备份 WillDeep 的 TOML 配置，随安装包提供，无需另装。
 
@@ -15,7 +15,7 @@ Agent 用内置浏览器时，侧栏浏览器会在工具执行前自动打开�
   - 新增按键（`embedded_browser_press_key`）、滚动（`embedded_browser_scroll`）和上传工作区文件（`embedded_browser_upload_file`）。
   - 截图会作为图片交给模型。
 - **安全边界**
-  - "总是允许"按单个工具保存，navigate 还要绑定域名；eval、CDP 调试命令和文件上传每次都单独审批。
+  - 内置浏览器的"总是允许"按网站保存（1.399.0-rc1 起）：在一个网站上允许一次，这个网站上的打开、点击、输入、执行脚本都不再询问；页面在批准后跳到别的网站，调用会被拒绝并要求重新发起。Chrome 仍按单个工具保存。CDP 调试命令和文件上传每次都单独审批。详见 `docs/EMBEDDED_BROWSER_SITE_AUTHORIZATION.md`。
   - navigate 只打开 http(s)、`about:blank` 和工作区内的文件，内网地址拒绝。
   - 读取页面时不返回密码类输入框的值；网页内容进入上下文时标成不可信数据。
   - Chrome 本地桥需要每次启动时生成的随机 token。

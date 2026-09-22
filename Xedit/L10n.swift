@@ -1575,7 +1575,12 @@ nonisolated enum L10n {
         static let browserAuthorizationTitle = String(localized: "tool-card.authorization.browser.title", defaultValue: "Browser")
         static let browserChromeAuthorizationQuestion = String(localized: "tool-card.authorization.browser.chrome-question", defaultValue: "Allow WillDeep to control Chrome?")
         static let browserEmbeddedAuthorizationQuestion = String(localized: "tool-card.authorization.browser.embedded-question", defaultValue: "Allow WillDeep to control Browser?")
-        static let browserPerCallAuthorizationNote = String(localized: "tool-card.authorization.browser.per-call-note", defaultValue: "Running a script can read cookies and sign-in data on the page, so it can't be set to always allow and asks every time.")
+        static let browserDebuggerAuthorizationNote = String(localized: "tool-card.authorization.browser.debugger-note", defaultValue: "Debugger commands can read every cookie, including httpOnly sign-in cookies, so they can't be set to always allow and ask every time.")
+        static let browserUploadAuthorizationNote = String(localized: "tool-card.authorization.browser.upload-note", defaultValue: "Uploading sends a local file to the website, so it can't be set to always allow and asks every time.")
+        static func browserAlwaysAllowOnSite(_ a1: String) -> String {
+            let template = String(localized: "tool-card.authorization.browser.always-allow-site", defaultValue: "Always Allow on %@")
+            return String(format: template, a1)
+        }
         static let computerUseAuthorizationTitle = String(localized: "tool-card.authorization.computer-use.title", defaultValue: "Computer Use")
         static let computerUseAuthorizationQuestion = String(localized: "tool-card.authorization.computer-use.question", defaultValue: "Allow WillDeep to control this Mac?")
         static func alwaysAllowHelp(_ a1: String) -> String {

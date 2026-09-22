@@ -322,7 +322,10 @@ struct AgentToolCallCard: View {
         Button {
             appState.alwaysAllowAgentToolCall(id: call.id)
         } label: {
-            compactAuthorizationActionLabel(L10n.ToolCard.alwaysAllow)
+            compactAuthorizationActionLabel(
+                alwaysAllowSignature.flatMap(AgentCompactAuthorizationCopy.alwaysAllowLabel(signature:))
+                    ?? L10n.ToolCard.alwaysAllow
+            )
         }
         .buttonStyle(
             AgentApprovalPrimaryButtonStyle(

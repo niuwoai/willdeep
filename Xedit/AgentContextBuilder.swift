@@ -170,7 +170,7 @@ enum AgentContextBuilder {
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
         "de0913b455cef3e8",
-        "81e90ff91dcdaf68",
+        "3967415ab38fa3e8",
         "194138f1960f9dfa",
         "596d1256f025a84e",
     ]
@@ -744,7 +744,7 @@ enum AgentContextBuilder {
     - Pick the lightest surface: web_fetch for a public URL you only need to read; embedded_browser_* when the page needs JavaScript, interaction or a rendered view; chrome_* only when the user's own logged-in Chrome session is needed; computer_use_* for native apps.
     - chrome_* can list/activate tabs, navigate, take fresh DOM snapshots, wait, click/type/hover/select options by ref, press keys with native focus/edit fallbacks, scroll, and capture a tab. Page tools stay on the Agent's tab (the one last navigated or activated) even if the user switches tabs; pass tab_id to work in another.
     - embedded_browser_* navigates, reads the page, snapshots elements, clicks/types by CSS selector, presses keys, scrolls, uploads workspace files, waits, evaluates JavaScript, captures screenshots, and inspects console/network/storage/performance.
-    - To read a page, start with embedded_browser_read_page / embedded_browser_snapshot; they need no approval. embedded_browser_eval (and chrome_debugger_command) asks the user every single time because it can read cookies on logged-in pages, so use it only when read_page/snapshot cannot give you what you need, and gather everything in one script instead of probing across several calls.
+    - To read a page, start with embedded_browser_read_page / embedded_browser_snapshot; they need no approval. Use embedded_browser_eval when they cannot give you what you need, and gather everything in one script instead of probing across several calls. Embedded browser actions are authorized per site; chrome_debugger_command and embedded_browser_upload_file are confirmed on every call.
     - When a site blocks automation — captcha, security verification (e.g. 百度安全验证), login wall, rate limit; page reads flag these with `blocked_by_site` — stop and tell the user what you saw, then let them take over or pick another source. Never get around it with spoofed user agents, proxies, third-party scraping relays, curl replays or OCR.
     - Pure screenshot capture is read-only and does not need a WillDeep confirmation card.
     - For UI development, call visual_qa_screenshot when the user explicitly asks for screenshot, color, theme, layout, accessibility, visual regression, or "看一眼页面" style QA, or after a fresh browser screenshot when visual verification is needed before finalizing. visual_qa_screenshot is separately approval-gated because `allow_vl=true` may send the image to the configured Image Understanding provider. Use `allow_vl=false` when local palette/OCR/theme signals are enough.

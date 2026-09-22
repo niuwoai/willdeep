@@ -78998,6 +78998,41 @@
         }
       }
     },
+    "tool-card.authorization.browser.always-allow-site" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Always Allow on %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permitir siempre en %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toujours autoriser sur %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ で常に許可"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 上始终允许"
+          }
+        }
+      }
+    },
     "tool-card.authorization.browser.chrome-question" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -79029,6 +79064,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允许 WillDeep 操作 Chrome？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.browser.debugger-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Debugger commands can read every cookie, including httpOnly sign-in cookies, so they can't be set to always allow and ask every time."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los comandos del depurador pueden leer todas las cookies, incluidas las de inicio de sesión httpOnly, por eso no se pueden permitir siempre y se pregunta cada vez."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les commandes du débogueur peuvent lire tous les cookies, y compris les cookies de connexion httpOnly : elles ne peuvent donc pas être toujours autorisées et une confirmation est demandée à chaque fois."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デバッガーコマンドは httpOnly のログイン Cookie を含むすべての Cookie を読み取れるため、常に許可には設定できず、毎回確認します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调试命令能读取包括 httpOnly 登录 Cookie 在内的全部 Cookie，所以不能设为始终允许，每次都会确认。"
           }
         }
       }
@@ -79068,41 +79138,6 @@
         }
       }
     },
-    "tool-card.authorization.browser.per-call-note" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Running a script can read cookies and sign-in data on the page, so it can't be set to always allow and asks every time."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ejecutar un script puede leer las cookies y los datos de inicio de sesión de la página, por eso no se puede permitir siempre y se pregunta cada vez."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exécuter un script peut lire les cookies et les données de connexion de la page : il ne peut donc pas être toujours autorisé et une confirmation est demandée à chaque fois."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "スクリプトの実行はページの Cookie やログイン情報を読み取れるため、常に許可には設定できず、毎回確認します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "执行脚本能读取页面的 Cookie 和登录信息，所以不能设为一直允许，每次都会确认。"
-          }
-        }
-      }
-    },
     "tool-card.authorization.browser.title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -79134,6 +79169,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "浏览器"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.browser.upload-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uploading sends a local file to the website, so it can't be set to always allow and asks every time."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subir envía un archivo local al sitio web, por eso no se puede permitir siempre y se pregunta cada vez."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le téléversement envoie un fichier local au site web : il ne peut donc pas être toujours autorisé et une confirmation est demandée à chaque fois."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アップロードはローカルファイルをウェブサイトに送信するため、常に許可には設定できず、毎回確認します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传会把本地文件发给网站，所以不能设为始终允许，每次都会确认。"
           }
         }
       }

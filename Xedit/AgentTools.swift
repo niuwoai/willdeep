@@ -334,6 +334,15 @@ enum AgentToolRunner {
                 "Saved Terminal recording shortcuts are user-run only. Ask the user to press Run in the visible Terminal panel."
             )
         }
+        if name.hasPrefix("embedded_browser_") {
+            let currentURL = await AgentEmbeddedBrowserController.currentURL(for: context.runtimeID)
+            if let drift = AgentToolAuthorization.embeddedBrowserHostDriftMessage(
+                arguments: arguments,
+                currentURL: currentURL
+            ) {
+                throw AgentToolError.invalidArgument(drift)
+            }
+        }
         let resolution = resolvesSecretsForTool(name)
             ? AgentSecretStore.resolve(arguments)
             : AgentSecretResolution(value: .object(arguments), secretValues: [])

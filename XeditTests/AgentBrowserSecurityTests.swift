@@ -18,26 +18,38 @@ import WebKit
 struct AgentBrowserSecurityTests {
     // MARK: - Durable approval scope
 
-    @Test("持久规则按工具收窄，navigate 再绑定目标域名")
-    func persistentSignaturesAreToolAndHostScoped() {
+    @Test("内置浏览器的持久规则按网站：navigate 取目标域名，其余工具取发起时页面的域名；Chrome 仍按工具")
+    func persistentSignaturesAreSiteScoped() {
+        let host = AgentToolAuthorization.embeddedBrowserPageHostArgument
         #expect(
             AgentToolAuthorization.suggestedPersistentSignature(
                 toolName: "embedded_browser_navigate",
                 arguments: ["url": .string("https://www.baidu.com/s?wd=x")]
-            ) == "browser:embedded:embedded_browser_navigate:www.baidu.com"
+            ) == "browser:embedded:site:www.baidu.com"
         )
         #expect(
             AgentToolAuthorization.suggestedPersistentSignature(
                 toolName: "embedded_browser_navigate",
                 arguments: ["url": .string("Example.COM/path")]
-            ) == "browser:embedded:embedded_browser_navigate:example.com"
+            ) == "browser:embedded:site:example.com"
         )
-        #expect(
-            AgentToolAuthorization.suggestedPersistentSignature(
-                toolName: "embedded_browser_click",
+        for toolName in ["embedded_browser_click", "embedded_browser_type", "embedded_browser_eval"] {
+            #expect(
+                AgentToolAuthorization.suggestedPersistentSignature(
+                    toolName: toolName,
+                    arguments: ["selector": .string("button"), host: .string("www.baidu.com")]
+                ) == "browser:embedded:site:www.baidu.com", "\(toolName)"
+            )
+            // No page (blank tab, local file): nothing to scope a rule to.
+            #expect(AgentToolAuthorization.suggestedPersistentSignature(
+                toolName: toolName,
+                arguments: ["selector": .string("button"), host: .string("")]
+            ) == nil, "\(toolName)")
+            #expect(AgentToolAuthorization.suggestedPersistentSignature(
+                toolName: toolName,
                 arguments: ["selector": .string("button")]
-            ) == "browser:embedded:embedded_browser_click"
-        )
+            ) == nil, "\(toolName)")
+        }
         #expect(
             AgentToolAuthorization.suggestedPersistentSignature(
                 toolName: "chrome_type",
@@ -52,17 +64,83 @@ struct AgentBrowserSecurityTests {
         )
     }
 
-    @Test("eval 与 CDP 调试命令不能持久放行，也不随本会话浏览器授权放行")
-    func evalAndDebuggerAlwaysAsk() {
-        for toolName in ["embedded_browser_eval", "chrome_debugger_command"] {
+    @Test("宿主写入发起时页面的域名，覆盖模型自带的值；navigate 与 Chrome 不写")
+    func pageHostIsStampedByTheHost() {
+        let key = AgentToolAuthorization.embeddedBrowserPageHostArgument
+        let stamped = AgentToolAuthorization.stampingEmbeddedBrowserPageHost(
+            toolName: "embedded_browser_click",
+            arguments: ["selector": .string("a"), key: .string("attacker.example")],
+            currentURL: "https://WWW.Baidu.com/s?wd=x"
+        )
+        #expect(stamped[key]?.stringValue() == "www.baidu.com")
+        for blank in ["about:blank", "", "file:///tmp/a.html"] {
+            let noSite = AgentToolAuthorization.stampingEmbeddedBrowserPageHost(
+                toolName: "embedded_browser_eval", arguments: [:], currentURL: blank
+            )
+            #expect(noSite[key]?.stringValue() == "", "\(blank)")
+        }
+        #expect(AgentToolAuthorization.stampingEmbeddedBrowserPageHost(
+            toolName: "embedded_browser_navigate", arguments: [:], currentURL: "https://a.example/"
+        )[key] == nil)
+        #expect(AgentToolAuthorization.stampingEmbeddedBrowserPageHost(
+            toolName: "chrome_click", arguments: [:], currentURL: "https://a.example/"
+        )[key] == nil)
+    }
+
+    @Test("批准后页面跳到别的域名，执行前拒绝；同域名或没写域名的调用照常执行")
+    func hostDriftIsRefusedAtExecution() {
+        let key = AgentToolAuthorization.embeddedBrowserPageHostArgument
+        let arguments: [String: AgentJSONValue] = [key: .string("www.baidu.com")]
+        #expect(AgentToolAuthorization.embeddedBrowserHostDriftMessage(
+            arguments: arguments, currentURL: "https://www.baidu.com/s?wd=y"
+        ) == nil)
+        let drift = AgentToolAuthorization.embeddedBrowserHostDriftMessage(
+            arguments: arguments, currentURL: "https://evil.example/"
+        )
+        #expect(drift?.contains("evil.example") == true)
+        #expect(AgentToolAuthorization.embeddedBrowserHostDriftMessage(
+            arguments: arguments, currentURL: "about:blank"
+        ) != nil)
+        #expect(AgentToolAuthorization.embeddedBrowserHostDriftMessage(
+            arguments: [key: .string("")], currentURL: "https://evil.example/"
+        ) == nil)
+        #expect(AgentToolAuthorization.embeddedBrowserHostDriftMessage(
+            arguments: [:], currentURL: "https://evil.example/"
+        ) == nil)
+    }
+
+    @Test("1.396–1.398 存下的按工具规则继续匹配")
+    func perToolRulesFromEarlierBuildsStillMatch() {
+        let key = AgentToolAuthorization.embeddedBrowserPageHostArgument
+        let click = AgentToolAuthorization.matchingSignatures(
+            toolName: "embedded_browser_click",
+            arguments: ["selector": .string("a"), key: .string("www.baidu.com")]
+        )
+        #expect(click.contains("browser:embedded:site:www.baidu.com"))
+        #expect(click.contains("browser:embedded:embedded_browser_click"))
+        let navigate = AgentToolAuthorization.matchingSignatures(
+            toolName: "embedded_browser_navigate",
+            arguments: ["url": .string("https://www.baidu.com/")]
+        )
+        #expect(navigate.contains("browser:embedded:site:www.baidu.com"))
+        #expect(navigate.contains("browser:embedded:embedded_browser_navigate:www.baidu.com"))
+    }
+
+    @Test("只有 CDP 调试命令和上传逐次确认：不能持久放行，也不随本会话浏览器授权放行")
+    func debuggerAndUploadAlwaysAsk() {
+        #expect(!AgentToolAuthorization.browserToolsRequiringPerCallApproval.contains("embedded_browser_eval"))
+        for toolName in ["chrome_debugger_command", "embedded_browser_upload_file"] {
             #expect(AgentToolAuthorization.interactiveSurfaceSignature(toolName: toolName) == nil)
             #expect(AgentToolAuthorization.suggestedPersistentSignature(
                 toolName: toolName,
-                arguments: ["javascript": .string("return 1"), "method": .string("Runtime.evaluate")]
+                arguments: [
+                    "method": .string("Network.getAllCookies"),
+                    AgentToolAuthorization.embeddedBrowserPageHostArgument: .string("www.baidu.com"),
+                ]
             ) == nil)
             #expect(AgentToolAuthorization.matchingSignatures(
                 toolName: toolName,
-                arguments: ["javascript": .string("return 1")]
+                arguments: [AgentToolAuthorization.embeddedBrowserPageHostArgument: .string("www.baidu.com")]
             ).isEmpty)
         }
     }
@@ -87,27 +165,55 @@ struct AgentBrowserSecurityTests {
         #expect(!otherHost.contains("browser:embedded:embedded_browser_navigate:www.baidu.com"))
     }
 
-    @Test("本会话浏览器授权不覆盖 eval")
-    func conversationGrantExcludesEval() async {
+    @Test("一条网站规则放行该网站上的打开、点击、输入和脚本，换一个网站仍要确认")
+    func siteRuleCoversEveryEmbeddedActionOnThatSiteOnly() {
         let appState = AppState()
-        let evalApproval = await appState.autoApprovalSource(
-            toolName: "embedded_browser_eval",
-            arguments: ["javascript": .string("return document.cookie")],
-            risk: .write,
-            rootDirectory: nil,
-            approvalMode: .requestEveryTime,
-            conversationAllowedToolSignatures: ["browser:embedded"]
-        )
-        let clickApproval = await appState.autoApprovalSource(
-            toolName: "embedded_browser_click",
-            arguments: ["selector": .string("button")],
-            risk: .write,
-            rootDirectory: nil,
-            approvalMode: .requestEveryTime,
-            conversationAllowedToolSignatures: ["browser:embedded"]
-        )
-        #expect(evalApproval == nil)
-        #expect(clickApproval == .user)
+        appState.agentAlwaysAllowedCommands = [
+            AgentAlwaysAllowedCommand(commandSignature: "browser:embedded:site:www.baidu.com"),
+        ]
+        let key = AgentToolAuthorization.embeddedBrowserPageHostArgument
+        #expect(appState.isAgentToolCallAlwaysAllowed(
+            toolName: "embedded_browser_navigate",
+            arguments: ["url": .string("https://www.baidu.com/s?wd=x")],
+            risk: .write
+        ))
+        for toolName in ["embedded_browser_click", "embedded_browser_type", "embedded_browser_eval", "embedded_browser_scroll"] {
+            #expect(appState.isAgentToolCallAlwaysAllowed(
+                toolName: toolName, arguments: [key: .string("www.baidu.com")], risk: .write
+            ), "\(toolName)")
+            #expect(!appState.isAgentToolCallAlwaysAllowed(
+                toolName: toolName, arguments: [key: .string("evil.example")], risk: .write
+            ), "\(toolName)")
+            #expect(!appState.isAgentToolCallAlwaysAllowed(
+                toolName: toolName, arguments: [key: .string("")], risk: .write
+            ), "\(toolName)")
+        }
+        #expect(!appState.isAgentToolCallAlwaysAllowed(
+            toolName: "embedded_browser_navigate",
+            arguments: ["url": .string("https://evil.example/")],
+            risk: .write
+        ))
+        #expect(!appState.isAgentToolCallAlwaysAllowed(
+            toolName: "embedded_browser_upload_file",
+            arguments: [key: .string("www.baidu.com"), "path": .string("a.txt")],
+            risk: .write
+        ))
+    }
+
+    @Test("本会话浏览器授权也覆盖 eval")
+    func conversationGrantCoversEval() async {
+        let appState = AppState()
+        for toolName in ["embedded_browser_eval", "embedded_browser_click"] {
+            let approval = await appState.autoApprovalSource(
+                toolName: toolName,
+                arguments: ["javascript": .string("return document.title"), "selector": .string("button")],
+                risk: .write,
+                rootDirectory: nil,
+                approvalMode: .requestEveryTime,
+                conversationAllowedToolSignatures: ["browser:embedded"]
+            )
+            #expect(approval == .user, "\(toolName)")
+        }
     }
 
     // MARK: - Navigation policy
