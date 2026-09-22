@@ -13,6 +13,7 @@
 
 import Foundation
 import Testing
+import SwiftUI
 import WebKit
 @testable import WillDeep
 
@@ -65,6 +66,39 @@ struct AgentEmbeddedBrowserProfileTests {
 
         AgentEmbeddedBrowserController.release(for: runtimeID)
         #expect(AgentEmbeddedBrowserController.profile(for: runtimeID) == .personal)
+    }
+
+    /// Regression: the panel's representable holds the same controller before
+    /// and after a switch, so SwiftUI skipped `updateNSView` and the rebuilt
+    /// web view stayed out of any window — blank panel, `innerHeight == 0`,
+    /// and a 0×0 snapshot that failed to encode as PNG.
+    @Test("切换配置后面板挂上的是新 WebView，而不是留空")
+    func switchingProfileAttachesNewWebViewToPanel() async throws {
+        let runtimeID = UUID()
+        defer { AgentEmbeddedBrowserController.release(for: runtimeID) }
+        let controller = AgentEmbeddedBrowserController.controller(for: runtimeID)
+        controller.ensureWebView(loadInitialPage: false)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 640),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView = NSHostingView(rootView: AgentEmbeddedBrowserPanel(runtimeID: runtimeID, width: 480))
+        window.contentView?.layoutSubtreeIfNeeded()
+        let before = controller.ensureWebView(loadInitialPage: false)
+        #expect(before.window === window)
+
+        controller.switchProfile(to: .isolated, runtimeID: runtimeID)
+        let after = controller.ensureWebView(loadInitialPage: false)
+        for _ in 0..<20 where after.window == nil {
+            try await Task.sleep(for: .milliseconds(20))
+            window.contentView?.layoutSubtreeIfNeeded()
+        }
+        #expect(after.window === window)
+        #expect(after.bounds.height > 0)
+        #expect(before.superview == nil)
     }
 
     @Test("宿主给所有内置浏览器调用写入配置（含 navigate），Chrome 不写")

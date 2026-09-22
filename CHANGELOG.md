@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.403.0-rc2 - 2026-09-22
+
+### Fixed
+
+- **切换“我的浏览器 / 独立浏览器”后，浏览器面板一片空白。** 1.403.0-rc1 切换配置时会重建 WebView，但面板没把新的 WebView 挂上去，新 WebView 一直不在任何窗口里。连带出现三个现象：
+  - 面板空白，地址栏和底部标题却照常更新；
+  - 页面里 `window.innerHeight` 为 0，`innerText` 读出来几乎是空的；
+  - 截图报 “Could not encode embedded browser screenshot as PNG”。
+  
+  原因：面板里的 WebView 容器只持有 controller，切换前后是同一个引用，SwiftUI 判定没变化，就不调用 `updateNSView`。现在 controller 每次重建 WebView 都会递增 `webViewGeneration`，并把它作为容器的字段传进去，重建后一定会重新挂载。
+- WebView 不在屏幕上（没挂进窗口或尺寸为 0）时，截图改为报“浏览器不在屏幕上，没有可截的内容”，不再报 PNG 编码失败。
+- 测试：`AgentEmbeddedBrowserProfileTests` 新增 1 项，把面板放进真实窗口后切换配置，断言新 WebView 在窗口里、高度大于 0、旧 WebView 已卸下。修复前这项测试失败。
+
 ## 1.403.0-rc1 - 2026-09-22
 
 ### Added

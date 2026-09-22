@@ -36,6 +36,10 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     private var webView: WKWebView?
     /// Which data store the web view uses; change it with `switchProfile`.
     @Published private(set) var profile: AgentEmbeddedBrowserProfile = .personal
+    /// Bumped whenever `switchProfile` replaces the web view. The panel's
+    /// representable carries it as a field: holding the same controller
+    /// alone, SwiftUI skips `updateNSView` and the new view never mounts.
+    @Published private(set) var webViewGeneration = 0
     /// Profile new tabs of a session start with: the last one chosen there.
     private static var runtimeProfiles: [UUID: AgentEmbeddedBrowserProfile] = [:]
     private var consoleEvents: [[String: Any]] = []
@@ -227,6 +231,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         webView = nil
         profile = newProfile
         let fresh = ensureWebView(loadInitialPage: false)
+        webViewGeneration += 1
         if let url = URL(string: reopen), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
             fresh.load(URLRequest(url: url))
         }
@@ -1188,6 +1193,13 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         }
         guard let image = captured as? NSImage else {
             throw AgentToolError.invalidArgument("WKWebView did not return a screenshot.")
+        }
+        // A web view outside any window, or laid out at zero size, snapshots
+        // to an empty image; say that instead of a PNG encoding failure.
+        guard webView.window != nil, image.size.width > 0, image.size.height > 0 else {
+            throw AgentToolError.invalidArgument(
+                "Embedded browser is not on screen (web view detached or zero-sized), so there is nothing to capture."
+            )
         }
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff),

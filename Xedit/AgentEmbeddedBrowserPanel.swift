@@ -33,7 +33,7 @@ struct AgentEmbeddedBrowserPanel: View {
         VStack(spacing: 0) {
             toolbar
             Divider()
-            AgentEmbeddedBrowserWebView(controller: controller)
+            AgentEmbeddedBrowserWebView(controller: controller, webViewGeneration: controller.webViewGeneration)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             footer
@@ -202,6 +202,9 @@ struct AgentEmbeddedBrowserPanel: View {
 
 private struct AgentEmbeddedBrowserWebView: NSViewRepresentable {
     let controller: AgentEmbeddedBrowserController
+    /// Only read so SwiftUI sees a changed field and calls `updateNSView`
+    /// after the controller rebuilds its web view.
+    let webViewGeneration: Int
 
     func makeNSView(context: Context) -> AgentEmbeddedBrowserHostView {
         let host = AgentEmbeddedBrowserHostView()
