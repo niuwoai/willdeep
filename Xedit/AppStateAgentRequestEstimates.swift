@@ -256,7 +256,8 @@ extension AppState {
             capabilities: AgentPromptCapabilities(
                 activeExperts: agentActiveExperts,
                 computerUseGranted: AgentComputerUseBridge.accessibilityEverGranted,
-                sandboxEnabled: activeRuntime.map { !$0.localSandboxDisabled } ?? true
+                sandboxEnabled: activeRuntime.map { !$0.localSandboxDisabled } ?? true,
+                browserPackLoaded: activeRuntime?.loadedToolPacks.contains(.browserWeb) ?? false
             )
         )
         let settings = AgentMemorySettingsStore.loadSettings()

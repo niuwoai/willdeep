@@ -40,6 +40,15 @@ nonisolated enum AgentPlanOnDemandPolicy {
     /// no longer a small edit.
     static let succeededWriteCallThreshold = 3
 
+    /// Whether a succeeded call counts toward the write threshold. Browser
+    /// tools are write-tier for approval (they load pages and click), but
+    /// navigating a page to look something up is evidence gathering, not
+    /// execution: a single Baidu lookup tripped "PLAN REQUESTED" at round 4.
+    static func countsAsExecutionWrite(toolName: String, risk: AgentToolRisk) -> Bool {
+        guard risk != .read else { return false }
+        return !toolName.hasPrefix("embedded_browser_") && !toolName.hasPrefix("chrome_")
+    }
+
     static func shouldRequestPlan(
         toolRound: Int,
         succeededWriteCalls: Int,

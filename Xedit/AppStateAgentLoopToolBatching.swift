@@ -288,7 +288,7 @@ extension AppState {
                 appendToolMessage(
                     for: runtime,
                     toolCallID: entry.externalID,
-                    payload: "Tool error: \(errorMessage)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)\(dispatchHint)",
+                    payload: "Tool error: \(errorMessage)\n\n\(recordToolFailureGuidance(runtime: runtime, toolName: entry.toolName))\(dispatchHint)",
                     source: .systemNotice,
                     outcomeStatus: .failed,
                     errorMessage: errorMessage

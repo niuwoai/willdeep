@@ -8,6 +8,7 @@
 //   - tool-level signatures and MCP read-only heuristics.
 //
 
+import CryptoKit
 import Foundation
 import WillDeepCore
 
@@ -64,6 +65,35 @@ enum AgentSandboxAuditLog {
         }
     }
 
+    /// Browser rows used to record only the tool name, so an audit could not
+    /// tell which site was opened or which script ran. Typed text is never
+    /// logged (it may be a resolved secret) — only its length.
+    static func browserSummary(toolName: String, arguments: [String: AgentJSONValue]) -> String {
+        var parts = [toolName]
+        if let url = arguments["url"]?.stringValue() {
+            parts.append("url=\(url)")
+        }
+        if let selector = arguments["selector"]?.stringValue() {
+            parts.append("selector=\(selector.prefix(120))")
+        }
+        if let ref = arguments["ref"]?.stringValue() {
+            parts.append("ref=\(ref)")
+        }
+        if let text = arguments["text"]?.stringValue() {
+            parts.append("text_chars=\(text.count)")
+        }
+        if let method = arguments["method"]?.stringValue() {
+            parts.append("method=\(method)")
+        }
+        if let javascript = arguments["javascript"]?.stringValue() {
+            let digest = SHA256.hash(data: Data(javascript.utf8))
+                .prefix(6).map { String(format: "%02x", $0) }.joined()
+            let head = javascript.replacingOccurrences(of: "\n", with: " ").prefix(160)
+            parts.append("js_chars=\(javascript.count) js_sha256=\(digest) js=\(head)")
+        }
+        return parts.joined(separator: " ")
+    }
+
     private static func summary(toolName: String, arguments: [String: AgentJSONValue]) -> String {
         if toolName == "run_command", let command = arguments["command"]?.stringValue() {
             return command
@@ -86,6 +116,9 @@ enum AgentSandboxAuditLog {
         }
         if toolName == "lark_cli" {
             return AgentLarkCLI.commandPreview(arguments: arguments["arguments"]?.stringArrayValue() ?? [])
+        }
+        if toolName.hasPrefix("embedded_browser_") || toolName.hasPrefix("chrome_") {
+            return browserSummary(toolName: toolName, arguments: arguments)
         }
         if toolName.hasPrefix("computer_use_") {
             let targetPID = arguments["pid"]?.intValue().map(String.init)

@@ -259,6 +259,7 @@ enum AgentCollapsedToolActivitySummary {
         var gitStatusCount = 0
         var commandCount = 0
         var terminalOperationCount = 0
+        var browserOperationCount = 0
         var fallbackCallCount = 0
 
         for call in calls {
@@ -308,6 +309,8 @@ enum AgentCollapsedToolActivitySummary {
                 screenshotCount += 1
             case _ where AgentTerminalToolNames.isVisibleTerminalOperation(call.toolName):
                 terminalOperationCount += 1
+            case _ where call.toolName.hasPrefix("embedded_browser_") || call.toolName.hasPrefix("chrome_"):
+                browserOperationCount += 1
             default:
                 fallbackCallCount += 1
             }
@@ -373,6 +376,13 @@ enum AgentCollapsedToolActivitySummary {
             systemImage: "terminal",
             singular: "已执行1次终端操作",
             plural: "已执行%d次终端操作",
+            to: &items
+        )
+        appendCount(
+            browserOperationCount,
+            systemImage: "globe",
+            singular: "已执行1次浏览器操作",
+            plural: "已执行%d次浏览器操作",
             to: &items
         )
         appendCount(

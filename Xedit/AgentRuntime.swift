@@ -479,6 +479,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// large tree, and repeating the same paragraph after every result is how
     /// a hint becomes wallpaper.
     var currentTurnEmittedReadOnlyHandoffHint = false
+    /// Failed tool calls this turn, by tool name. Feeds the failure-suffix
+    /// circuit breaker (`AgentToolFailureGuidance`): past a few failures the
+    /// host stops saying "try another approach" and asks for a report.
+    var currentTurnToolFailureCounts: [String: Int] = [:]
     /// The runtime's own read of what this turn's request is, rendered as a
     /// system-prompt paragraph. Lives here rather than being appended to the
     /// user's message because the user's message is *shown* — steering markup

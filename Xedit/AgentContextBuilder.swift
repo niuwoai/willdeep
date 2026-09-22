@@ -13,8 +13,8 @@ import Foundation
 /// still shares the core across sessions, while a plain chat no longer pays
 /// for browser, web-dev, or computer-use protocol text it cannot use.
 nonisolated struct AgentPromptCapabilities: Equatable, Sendable {
-    /// chrome_* / embedded_browser_* guidance — the tools only exist while
-    /// the browserOps or webCoding expert is active.
+    /// chrome_* / embedded_browser_* guidance — on while the browser_web
+    /// pack is loaded or the browserOps / webCoding expert is active.
     var browserUI = false
     /// Dev-server / show_widget web programming workflow (webCoding expert).
     var webCoding = false
@@ -45,8 +45,17 @@ nonisolated struct AgentPromptCapabilities: Equatable, Sendable {
         self.sandbox = sandbox
     }
 
-    init(activeExperts: Set<AgentExpert>, computerUseGranted: Bool, sandboxEnabled: Bool = false) {
-        browserUI = activeExperts.contains(.browserOps) || activeExperts.contains(.webCoding)
+    /// `browserPackLoaded`: in lazy-registry mode loading the `browser_web`
+    /// pack is enough to expose the browser tools, so the guidance must ride
+    /// with the pack too — otherwise the model gets the tools without the
+    /// rules for using them (or spends a round activating an expert).
+    init(
+        activeExperts: Set<AgentExpert>,
+        computerUseGranted: Bool,
+        sandboxEnabled: Bool = false,
+        browserPackLoaded: Bool = false
+    ) {
+        browserUI = browserPackLoaded || activeExperts.contains(.browserOps) || activeExperts.contains(.webCoding)
         webCoding = activeExperts.contains(.webCoding)
         computerUse = computerUseGranted
         sandbox = sandboxEnabled
@@ -161,7 +170,7 @@ enum AgentContextBuilder {
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
         "de0913b455cef3e8",
-        "9f59cf6a76a09f84",
+        "ae56f65c469f00f8",
         "194138f1960f9dfa",
         "596d1256f025a84e",
     ]
@@ -732,7 +741,10 @@ enum AgentContextBuilder {
 
     static let browserUICapabilityBlock = """
     Browser and UI QA:
-    - chrome_* / embedded_browser_* tools can list/activate tabs, navigate, take fresh DOM snapshots, wait, click/type/hover/select options by ref, press keys with native focus/edit fallbacks, scroll, and capture the active Chrome tab when configured.
+    - Pick the lightest surface: web_fetch for a public URL you only need to read; embedded_browser_* when the page needs JavaScript, interaction or a rendered view; chrome_* only when the user's own logged-in Chrome session is needed; computer_use_* for native apps.
+    - chrome_* can list/activate tabs, navigate, take fresh DOM snapshots, wait, click/type/hover/select options by ref, press keys with native focus/edit fallbacks, scroll, and capture the active tab.
+    - embedded_browser_* navigates, reads the page, snapshots elements, clicks/types by CSS selector, waits, evaluates JavaScript, captures screenshots, and inspects console/network/storage/performance.
+    - When a site blocks automation — captcha, security verification (e.g. 百度安全验证), login wall, rate limit; page reads flag these with `blocked_by_site` — stop and tell the user what you saw, then let them take over or pick another source. Never get around it with spoofed user agents, proxies, third-party scraping relays, curl replays or OCR.
     - Pure screenshot capture is read-only and does not need a WillDeep confirmation card.
     - For UI development, call visual_qa_screenshot when the user explicitly asks for screenshot, color, theme, layout, accessibility, visual regression, or "看一眼页面" style QA, or after a fresh browser screenshot when visual verification is needed before finalizing. visual_qa_screenshot is separately approval-gated because `allow_vl=true` may send the image to the configured Image Understanding provider. Use `allow_vl=false` when local palette/OCR/theme signals are enough.
     """

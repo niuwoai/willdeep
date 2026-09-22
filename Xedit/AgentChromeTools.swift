@@ -54,7 +54,11 @@ enum AgentChromeTools {
             type: "page.read",
             payload: ["maxChars": maxChars]
         )
-        return AgentToolResult(summary: "Read active Chrome tab", payload: prettyJSONString(data))
+        guard var page = data as? [String: Any] else {
+            return AgentToolResult(summary: "Read active Chrome tab", payload: prettyJSONString(data))
+        }
+        AgentEmbeddedBrowserController.flagBlockedPage(&page, httpStatus: nil)
+        return AgentToolResult(summary: "Read active Chrome tab", payload: prettyJSONString(page))
     }
 
     static func readSelection(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {

@@ -1566,13 +1566,13 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_status",
-            description: "Inspect the visible in-app Embedded Browser side panel state: current URL, title, loading state, navigation availability, last error, and latest screenshot path. Read-only. Requires the Browser Ops expert.",
+            description: "Inspect the visible in-app Embedded Browser side panel state: current URL, title, loading state, navigation availability, last error, and latest screenshot path. Read-only.",
             risk: .read,
             parameters: []
         ),
         AgentToolDescriptor(
             name: "embedded_browser_navigate",
-            description: "Navigate the visible in-app Embedded Browser side panel to a URL or domain, opening the panel if needed, and wait up to ten seconds for the page to become readable (`settled` in the result says whether it did; `still_loading_resources` means the DOM is readable while some subresources are still pending, so read it instead of waiting further). Requires approval because it loads external web content. Requires the Browser Ops expert.",
+            description: "Navigate the visible in-app Embedded Browser side panel to a URL or domain, opening the panel if needed, and wait up to ten seconds for the page to become readable (`settled` in the result says whether it did; `still_loading_resources` means the DOM is readable while some subresources are still pending, so read it instead of waiting further). Requires approval because it loads external web content.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "url", type: .string, description: "Absolute URL or bare domain to open, e.g. `https://example.com` or `example.com`.", required: true)
@@ -1580,7 +1580,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_read_page",
-            description: "Read the current page in the visible in-app Embedded Browser side panel. Returns title, URL, ready_state, readable text, link summaries, and basic form element summaries; waits briefly for a page that is still parsing, and adds a `note` when the page has no readable text yet. Read-only. Requires the Browser Ops expert.",
+            description: "Read the current page in the visible in-app Embedded Browser side panel. Returns title, URL, ready_state, readable text, link summaries, and basic form element summaries; waits briefly for a page that is still parsing, and adds a `note` when the page has no readable text yet. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum readable text characters to return. Defaults to 20000, capped at 100000.", required: false)
@@ -1588,7 +1588,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_snapshot",
-            description: "Snapshot visible interactive elements in the in-app Embedded Browser side panel. Returns refs, generated CSS selectors, stable selector guesses, text, roles, editability, clickability, and bounds. Use before clicking or typing so selectors are grounded in the current DOM. Read-only. Requires the Browser Ops expert.",
+            description: "Snapshot visible interactive elements in the in-app Embedded Browser side panel. Returns refs, generated CSS selectors, stable selector guesses, text, roles, editability, clickability, and bounds. Use before clicking or typing so selectors are grounded in the current DOM. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_elements", type: .integer, description: "Maximum interactive elements to return. Defaults to 100, capped at 300.", required: false)
@@ -1596,7 +1596,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_click",
-            description: "Click an element in the visible in-app Embedded Browser side panel using a CSS selector. Requires approval because it changes browser/page state. Requires the Browser Ops expert.",
+            description: "Click an element in the visible in-app Embedded Browser side panel using a CSS selector. Requires approval because it changes browser/page state.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the element to click, e.g. `button[type=submit]`.", required: true)
@@ -1604,7 +1604,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_type",
-            description: "Focus an element in the visible in-app Embedded Browser side panel and replace its text/value using a CSS selector. Requires approval because it can edit web apps. Requires the Browser Ops expert.",
+            description: "Focus an element in the visible in-app Embedded Browser side panel and replace its text/value using a CSS selector. Requires approval because it can edit web apps.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the input, textarea, editable element, or text-like target.", required: true),
@@ -1613,7 +1613,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_wait_for",
-            description: "Wait until the in-app Embedded Browser side panel matches a condition, polling the current page without blocking the UI. Use after navigation, click, or form submit. Supports condition values: selector, text, url_contains, title_contains. Read-only. Requires the Browser Ops expert.",
+            description: "Wait until the in-app Embedded Browser side panel matches a condition, polling the current page without blocking the UI. Use after navigation, click, or form submit. Supports condition values: selector, text, url_contains, title_contains. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "condition", type: .string, description: "One of: selector, text, url_contains, title_contains.", required: true),
@@ -1623,7 +1623,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_eval",
-            description: "Run explicit JavaScript in the in-app Embedded Browser page context and return a JSON/stringified result. This can inspect or mutate web apps, so prefer embedded_browser_snapshot/read_page/console/network first. Requires approval and the Browser Ops expert.",
+            description: "Run explicit JavaScript in the in-app Embedded Browser page context and return a JSON/stringified result. This can inspect or mutate web apps, so prefer embedded_browser_snapshot/read_page/console/network first. Requires approval.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "javascript", type: .string, description: "JavaScript body to execute inside an async function. Return a JSON-serializable value when possible.", required: true),
@@ -1632,7 +1632,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_console",
-            description: "Read captured console/debug/info/warn/error messages plus window error and unhandled promise rejection events from the in-app Embedded Browser side panel. Read-only. Requires the Browser Ops expert.",
+            description: "Read captured console/debug/info/warn/error messages plus window error and unhandled promise rejection events from the in-app Embedded Browser side panel. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum console events to return. Defaults to 100, capped at 300.", required: false),
@@ -1641,7 +1641,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_network",
-            description: "Read Performance Resource Timing data from the in-app Embedded Browser page: resource URLs, initiator types, protocol, transfer/encoded/decoded bytes, duration, DNS/connect/request/download timings, and estimated bytes per second. Read-only. Requires the Browser Ops expert.",
+            description: "Read Performance Resource Timing data from the in-app Embedded Browser page: resource URLs, initiator types, protocol, transfer/encoded/decoded bytes, duration, DNS/connect/request/download timings, and estimated bytes per second. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum resource timing entries to return. Defaults to 150, capped at 500.", required: false),
@@ -1650,7 +1650,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_requests",
-            description: "Read captured fetch/XMLHttpRequest AJAX/API calls from the in-app Embedded Browser side panel, including method, URL, status, timing, redacted request headers, and redacted response headers. Use this for API inspection that Resource Timing cannot expose. Read-only. Requires the Browser Ops expert.",
+            description: "Read captured fetch/XMLHttpRequest AJAX/API calls from the in-app Embedded Browser side panel, including method, URL, status, timing, redacted request headers, and redacted response headers. Use this for API inspection that Resource Timing cannot expose. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum captured requests to return. Defaults to 100, capped at 500.", required: false),
@@ -1659,7 +1659,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_export_har",
-            description: "Export a HAR 1.2 JSON file for the in-app Embedded Browser side panel. Captured fetch/XHR entries include redacted request and response headers; optional Resource Timing entries include timings and sizes but not headers because WebKit does not expose them. Read-only file export. Requires the Browser Ops expert.",
+            description: "Export a HAR 1.2 JSON file for the in-app Embedded Browser side panel. Captured fetch/XHR entries include redacted request and response headers; optional Resource Timing entries include timings and sizes but not headers because WebKit does not expose them. Read-only file export.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum captured request/resource entries per source. Defaults to 500, capped at 1000.", required: false),
@@ -1669,7 +1669,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_storage",
-            description: "Inspect same-origin cookies, localStorage, sessionStorage, and IndexedDB database names for the in-app Embedded Browser page. Values are omitted by default; when values are requested, sensitive-looking names are redacted and values are truncated. Read-only. Requires the Browser Ops expert.",
+            description: "Inspect same-origin cookies, localStorage, sessionStorage, and IndexedDB database names for the in-app Embedded Browser page. Values are omitted by default; when values are requested, sensitive-looking names are redacted and values are truncated. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "include_values", type: .boolean, description: "Include non-sensitive truncated storage/cookie values. Defaults to false.", required: false),
@@ -1679,7 +1679,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_performance",
-            description: "Read page performance diagnostics from the in-app Embedded Browser: navigation timing, paint entries, captured Web Vitals where supported, long tasks, memory where available, and resource summaries by initiator, slowest, and largest resources. Read-only. Requires the Browser Ops expert.",
+            description: "Read page performance diagnostics from the in-app Embedded Browser: navigation timing, paint entries, captured Web Vitals where supported, long tasks, memory where available, and resource summaries by initiator, slowest, and largest resources. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum resource entries used for summaries. Defaults to 150, capped at 500.", required: false)
@@ -1687,7 +1687,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_failed_resources",
-            description: "Aggregate failed browser resources for the in-app Embedded Browser: DOM resource load errors, failed or non-2xx/non-3xx fetch/XHR calls, and Resource Timing entries with HTTP status >= 400 when WebKit exposes responseStatus. Read-only. Requires the Browser Ops expert.",
+            description: "Aggregate failed browser resources for the in-app Embedded Browser: DOM resource load errors, failed or non-2xx/non-3xx fetch/XHR calls, and Resource Timing entries with HTTP status >= 400 when WebKit exposes responseStatus. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_entries", type: .integer, description: "Maximum failures per bucket. Defaults to 100, capped at 500.", required: false)
@@ -1695,7 +1695,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_capture_screenshot",
-            description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. This read-only capture runs without a WillDeep confirmation card. Requires the Browser Ops expert.",
+            description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. This read-only capture runs without a WillDeep confirmation card.",
             risk: .read,
             parameters: []
         ),

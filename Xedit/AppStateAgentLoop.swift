@@ -556,7 +556,8 @@ extension AppState {
             let promptCapabilities = AgentPromptCapabilities(
                 activeExperts: activeExperts,
                 computerUseGranted: AgentComputerUseBridge.accessibilityEverGranted,
-                sandboxEnabled: !runtime.localSandboxDisabled
+                sandboxEnabled: !runtime.localSandboxDisabled,
+                browserPackLoaded: runtime.loadedToolPacks.contains(.browserWeb)
             )
             var assembledPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,
@@ -781,7 +782,10 @@ extension AppState {
             if !didRequestContextRunwayHandoff, !didRequestPlanOnDemand {
                 let succeededWriteCalls = runtime.toolCalls
                     .dropFirst(planOnDemandToolCallBaseline)
-                    .filter { $0.status == .succeeded && $0.risk != .read }
+                    .filter {
+                        $0.status == .succeeded
+                            && AgentPlanOnDemandPolicy.countsAsExecutionWrite(toolName: $0.toolName, risk: $0.risk)
+                    }
                     .count
                 let hasActivePlan = runtime.currentPlan.map {
                     $0.status == .proposed || $0.status == .approved || $0.status == .executing
@@ -2771,7 +2775,7 @@ extension AppState {
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Tool error: \(errorMessage)\(sandboxNote)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)\(dispatchHint)",
+                        payload: "Tool error: \(errorMessage)\(sandboxNote)\n\n\(recordToolFailureGuidance(runtime: runtime, toolName: call.toolName))\(dispatchHint)",
                         source: .systemNotice,
                         outcomeStatus: .failed,
                         errorMessage: errorMessage

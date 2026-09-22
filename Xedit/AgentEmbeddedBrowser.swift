@@ -30,6 +30,8 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     @Published private(set) var lastScreenshotPath: String?
     @Published private(set) var canGoBack = false
     @Published private(set) var canGoForward = false
+    /// HTTP status of the last main-frame response; nil for non-HTTP pages.
+    @Published private(set) var lastHTTPStatus: Int?
 
     private var webView: WKWebView?
     private var consoleEvents: [[String: Any]] = []
@@ -168,6 +170,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         awaitingCommit = false
         lastError = nil
         lastScreenshotPath = nil
+        lastHTTPStatus = nil
         canGoBack = false
         canGoForward = false
         consoleEvents.removeAll()
@@ -306,6 +309,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             "can_go_forward": canGoForward,
             "last_error": lastError ?? NSNull(),
             "last_screenshot_path": lastScreenshotPath ?? NSNull(),
+            "http_status": lastHTTPStatus ?? NSNull(),
         ]
     }
 
@@ -335,6 +339,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         await waitForDocumentContent()
         var payload = try await evaluateObject(script)
         payload["is_loading"] = webView?.isLoading ?? false
+        payload["http_status"] = lastHTTPStatus ?? NSNull()
         if let note = AgentEmbeddedBrowserReadiness.emptyContentNote(
             readyState: payload["ready_state"] as? String ?? "",
             isEmpty: (payload["text"] as? String ?? "")
@@ -342,7 +347,38 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         ) {
             payload["note"] = note
         }
+        Self.flagBlockedPage(&payload, httpStatus: lastHTTPStatus)
         return payload
+    }
+
+    /// Marks a read result whose page is a captcha / security check.
+    static func flagBlockedPage(_ payload: inout [String: Any], httpStatus: Int?) {
+        guard let reason = AgentBlockedPageDetector.reason(
+            title: payload["title"] as? String ?? "",
+            url: payload["url"] as? String ?? "",
+            text: payload["text"] as? String ?? "",
+            httpStatus: httpStatus
+        ) else { return }
+        payload["blocked_by_site"] = true
+        payload["note"] = AgentBlockedPageDetector.stopNote(reason: reason)
+    }
+
+    /// Cheap title/url/text probe used by navigate so a block page is
+    /// reported without a separate read round.
+    func blockedPageReason() async -> String? {
+        guard let probe = try? await evaluateObject("""
+        (() => ({
+          title: document.title || '',
+          url: location.href,
+          text: (document.body ? document.body.innerText : '').slice(0, \(AgentBlockedPageDetector.shortPageTextLimit + 1))
+        }))()
+        """) else { return nil }
+        return AgentBlockedPageDetector.reason(
+            title: probe["title"] as? String ?? "",
+            url: probe["url"] as? String ?? "",
+            text: probe["text"] as? String ?? "",
+            httpStatus: lastHTTPStatus
+        )
     }
 
     func snapshot(maxElements: Int) async throws -> [String: Any] {
@@ -958,6 +994,16 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         updateState(from: webView)
     }
 
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse
+    ) async -> WKNavigationResponsePolicy {
+        if navigationResponse.isForMainFrame {
+            lastHTTPStatus = (navigationResponse.response as? HTTPURLResponse)?.statusCode
+        }
+        return .allow
+    }
+
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         awaitingCommit = false
         updateState(from: webView)
@@ -1518,6 +1564,61 @@ nonisolated enum AgentEmbeddedBrowserNavigationPolicy {
     }
 }
 
+/// Recognizes pages where a site is refusing automation. The 2026-09-22
+/// Baidu turn hit "百度安全验证" and, with nothing telling it to stop, spent
+/// ten minutes on spoofed curl, OCR, proxies and scraping relays.
+nonisolated enum AgentBlockedPageDetector {
+    /// Body text is only trusted as a signal on short pages: a real article
+    /// may mention "captcha" or "验证码" without being a block page.
+    static let shortPageTextLimit = 2_000
+
+    /// Phrases that only appear on interstitials; a title match is enough.
+    private static let strongTitleMarkers = [
+        "安全验证", "人机验证", "请完成验证", "访问验证",
+        "verify you are human", "are you a robot", "attention required",
+        "just a moment", "access denied",
+    ]
+    /// Words an ordinary article can use ("How CAPTCHAs work"); they count
+    /// only on a short page.
+    private static let weakMarkers = [
+        "captcha", "验证码", "访问频繁", "请求过于频繁", "unusual traffic", "too many requests",
+        "checking your browser", "enable javascript and cookies", "拖动滑块", "点击完成验证",
+    ]
+    private static let hostMarkers = ["wappass.baidu.com", "captcha."]
+    private static let pathMarkers = ["/captcha", "/challenge", "/sorry/"]
+    private static let blockingStatuses: Set<Int> = [403, 429, 503]
+
+    static func reason(title: String, url: String, text: String, httpStatus: Int?) -> String? {
+        let lowerTitle = title.lowercased()
+        if let marker = strongTitleMarkers.first(where: { lowerTitle.contains($0) }) {
+            return "page title looks like a block page (\"\(title)\", matched \"\(marker)\")"
+        }
+        if let components = URLComponents(string: url) {
+            let host = components.host?.lowercased() ?? ""
+            let path = components.path.lowercased()
+            if hostMarkers.contains(where: { host.contains($0) }) || pathMarkers.contains(where: { path.contains($0) }) {
+                return "URL is a verification or challenge page (\(url))"
+            }
+        }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isShort = trimmedText.count <= shortPageTextLimit
+        if let status = httpStatus, blockingStatuses.contains(status), isShort {
+            return "site answered HTTP \(status) with a short page"
+        }
+        if isShort {
+            let haystack = lowerTitle + "\n" + trimmedText.lowercased()
+            if let marker = (strongTitleMarkers + weakMarkers).first(where: { haystack.contains($0) }) {
+                return "short page asks for verification (matched \"\(marker)\")"
+            }
+        }
+        return nil
+    }
+
+    static func stopNote(reason: String) -> String {
+        "The site is blocking automated access: \(reason). Stop here and tell the user what you saw; let them take over in the browser panel or choose another source. Do not try to get around it with spoofed user agents, proxies, scraping relays, curl replays or OCR."
+    }
+}
+
 nonisolated enum AgentEmbeddedBrowserReadiness {
     /// `interactive` means the HTML is parsed and the DOM is readable even
     /// while subresources are still pending.
@@ -1564,6 +1665,10 @@ enum AgentEmbeddedBrowserTools {
         // `settled` can be true while a subresource is still pending; say so
         // instead of letting the model wait on `is_loading`.
         payload["still_loading_resources"] = settled && controller.isLoading
+        if let reason = await controller.blockedPageReason() {
+            payload["blocked_by_site"] = true
+            payload["note"] = AgentBlockedPageDetector.stopNote(reason: reason)
+        }
         return AgentToolResult(summary: "Navigated embedded browser", payload: prettyJSONString(payload))
     }
 
