@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.398.0-rc3 - 2026-09-22
+
+### Fixed
+
+- **CI 的 Tests 工作流不再卡在 Checkout。** 9 月 13 日插件拆成独立私有仓库、`PluginExamples/` 改成 submodule 之后，每个 job 都用默认 `GITHUB_TOKEN` 递归拉 submodule，而这个 token 只能读本仓库，于是 `willdeep-arcade` 等 12 个插件仓库全部报 `repository not found`（仓库都在，是没权限）。从那以后 main 上的 Tests 一次都没跑到测试那一步。
+  - Go agent tests、Ruby guards 的 quality 和 short-drama 组根本不用插件，改成不拉 submodule。在不拉 submodule 的干净检出上实测：这三项全绿。
+  - 只有 Ruby guards 的 interaction 组（`plugin_command_contract_test.rb` 要读插件源码）和 macOS 单测（构建时要拷贝内置插件）需要插件。这两处改用只读的细粒度 token `PLUGIN_SUBMODULES_TOKEN` 拉取，并设 `persist-credentials: false`，token 不会留在 `.git/config` 里，后面的步骤（包括 self-hosted runner 上的步骤）拿不到。
+  - 没配这个 secret 时，Checkout 前会先报一条明确的错误，不再给出误导人的 `repository not found`。
+  - **需要仓库管理员新建 secret `PLUGIN_SUBMODULES_TOKEN` 才能让这两个 job 通过**：用 fine-grained PAT，Resource owner 选 `niuwoai`，仓库只勾 `willdeep` 和 12 个 `willdeep-*` 插件仓库，权限只给 Contents: Read-only（Metadata: Read-only 会自动带上）。
+
 ## 1.398.0-rc2 - 2026-09-22
 
 ### Fixed

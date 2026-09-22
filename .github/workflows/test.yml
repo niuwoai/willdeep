@@ -21,18 +21,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group:
-          - quality
-          - interaction
-          - short-drama
+        # 只有 interaction 组（plugin_command_contract_test.rb）读插件源码；
+        # 其余组在不拉 submodule 的检出下全绿，不必拿跨仓库读权限。
+        include:
+          - group: quality
+            needs_plugins: false
+          - group: interaction
+            needs_plugins: true
+          - group: short-drama
+            needs_plugins: false
 
     steps:
+      - name: Require plugin submodule token
+        if: matrix.needs_plugins
+        env:
+          PLUGIN_SUBMODULES_TOKEN: ${{ secrets.PLUGIN_SUBMODULES_TOKEN }}
+        run: |
+          if [ -z "$PLUGIN_SUBMODULES_TOKEN" ]; then
+            echo "::error::缺少 PLUGIN_SUBMODULES_TOKEN：默认 GITHUB_TOKEN 读不到 PluginExamples/ 下的私有插件仓库。"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          # 插件已经拆成独立仓库，PluginExamples/ 下是 submodule。不拉的话
-          # 那里是 11 个空目录，构建会在拷贝内置插件那一步炸。
-          submodules: recursive
+          # 插件已经拆成独立私有仓库，PluginExamples/ 下是 submodule。默认
+          # GITHUB_TOKEN 读不到别的私有仓库，需要插件的组改用只读细粒度 token；
+          # persist-credentials: false 让 token 不留在 .git/config 给后续步骤。
+          submodules: ${{ matrix.needs_plugins && 'recursive' || 'false' }}
+          token: ${{ matrix.needs_plugins && secrets.PLUGIN_SUBMODULES_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -63,9 +81,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          # 插件已经拆成独立仓库，PluginExamples/ 下是 submodule。不拉的话
-          # 那里是 11 个空目录，构建会在拷贝内置插件那一步炸。
-          submodules: recursive
+          # Go agent 不依赖 PluginExamples/ 下的插件 submodule。
+          submodules: false
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -86,12 +104,24 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      - name: Require plugin submodule token
+        env:
+          PLUGIN_SUBMODULES_TOKEN: ${{ secrets.PLUGIN_SUBMODULES_TOKEN }}
+        run: |
+          if [ -z "$PLUGIN_SUBMODULES_TOKEN" ]; then
+            echo "::error::缺少 PLUGIN_SUBMODULES_TOKEN：默认 GITHUB_TOKEN 读不到 PluginExamples/ 下的私有插件仓库。"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          # 插件已经拆成独立仓库，PluginExamples/ 下是 submodule。不拉的话
-          # 那里是 11 个空目录，构建会在拷贝内置插件那一步炸。
+          # 插件已经拆成独立私有仓库，PluginExamples/ 下是 submodule，不拉的话
+          # 构建会在拷贝内置插件那一步炸。默认 GITHUB_TOKEN 读不到别的私有仓库，
+          # 改用只读细粒度 token；self-hosted runner 上尤其不能把它留在 .git/config。
           submodules: recursive
+          token: ${{ secrets.PLUGIN_SUBMODULES_TOKEN }}
+          persist-credentials: false
 
       - name: Select Xcode
         run: |
