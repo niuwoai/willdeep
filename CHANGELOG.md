@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.403.0-rc3 - 2026-09-22
+
+### Fixed
+
+- **网站单纯返回 403 时，不再说成“站点在阻止自动化访问”。** 以前内置浏览器只要看到 403 / 429 / 503 加一个很短的页面，就标记 `blocked_by_site`，并提示“The site is blocking automated access”，模型再把这句当事实转述给你。实际上，单纯的 403 只能说明网站拒绝了访问，原因页面里没写：可能是 IP 或地区限制、代理出口、没有登录，也可能是防爬规则。例子是 klook 返回的 403，标题只有 `klook.com`，页面里没有验证码。现在分开处理：
+  - 验证码、人机验证、challenge 页、`Just a moment` / `Attention Required` 这类页面，以及 429 限流：和以前一样，标记 `blocked_by_site`，要求停下来汇报。
+  - 403 / 503 加短页面，但没有任何验证特征：改为标记 `access_refused`。提示模型如实告诉你“网站返回了 HTTP 403”，列出可能的原因，不许说成识别到了自动化。同样禁止用伪造 UA、代理、抓取中转、curl 重放或 OCR 绕过；你可以在浏览器面板里打开看看网站显示了什么。
+  - navigate、点击 / 按键后的跳转、read_page 三个入口都统一走 `AgentBlockedPageDetector.verdict` 和 `annotate`。系统提示词没有改动。
+- 测试：更新 `AgentBrowserRunawayGuardTests` 的拦截页识别表格。单纯 403 不再算拦截，带 Cloudflare 验证标题的 403 仍然算。另外新增 1 项：klook 式 403 标记 `access_refused`，提示里包含状态码、不含“blocking automated access”；503 同样处理；长正文的 403 不做标记；429 和 challenge 页仍然算拦截。
+
 ## 1.403.0-rc2 - 2026-09-22
 
 ### Fixed

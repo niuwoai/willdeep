@@ -446,21 +446,25 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         return payload
     }
 
-    /// Marks a read result whose page is a captcha / security check.
+    /// Marks a read result whose page is a captcha / security check, or a
+    /// plain HTTP refusal.
     static func flagBlockedPage(_ payload: inout [String: Any], httpStatus: Int?) {
-        guard let reason = AgentBlockedPageDetector.reason(
+        AgentBlockedPageDetector.annotate(&payload, verdict: AgentBlockedPageDetector.verdict(
             title: payload["title"] as? String ?? "",
             url: payload["url"] as? String ?? "",
             text: payload["text"] as? String ?? "",
             httpStatus: httpStatus
-        ) else { return }
-        payload["blocked_by_site"] = true
-        payload["note"] = AgentBlockedPageDetector.stopNote(reason: reason)
+        ))
     }
 
     /// Cheap title/url/text probe used by navigate so a block page is
     /// reported without a separate read round.
     func blockedPageReason() async -> String? {
+        if case .blocked(let reason) = await accessVerdict() { return reason }
+        return nil
+    }
+
+    func accessVerdict() async -> AgentBlockedPageDetector.Verdict? {
         guard let probe = try? await evaluateObject("""
         (() => ({
           title: document.title || '',
@@ -468,7 +472,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
           text: (document.body ? document.body.innerText : '').slice(0, \(AgentBlockedPageDetector.shortPageTextLimit + 1))
         }))()
         """) else { return nil }
-        return AgentBlockedPageDetector.reason(
+        return AgentBlockedPageDetector.verdict(
             title: probe["title"] as? String ?? "",
             url: probe["url"] as? String ?? "",
             text: probe["text"] as? String ?? "",
@@ -628,10 +632,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             payload["url"] = currentURL
             payload["title"] = title
             payload["http_status"] = lastHTTPStatus ?? NSNull()
-            if let reason = await blockedPageReason() {
-                payload["blocked_by_site"] = true
-                payload["note"] = AgentBlockedPageDetector.stopNote(reason: reason)
-            }
+            AgentBlockedPageDetector.annotate(&payload, verdict: await accessVerdict())
         }
         if recentDialogs.count > dialogsBefore {
             payload["dialogs"] = Array(recentDialogs.suffix(recentDialogs.count - dialogsBefore))
@@ -1882,10 +1883,7 @@ enum AgentEmbeddedBrowserTools {
         // `settled` can be true while a subresource is still pending; say so
         // instead of letting the model wait on `is_loading`.
         payload["still_loading_resources"] = settled && controller.isLoading
-        if let reason = await controller.blockedPageReason() {
-            payload["blocked_by_site"] = true
-            payload["note"] = AgentBlockedPageDetector.stopNote(reason: reason)
-        }
+        AgentBlockedPageDetector.annotate(&payload, verdict: await controller.accessVerdict())
         return AgentToolResult(summary: "Navigated embedded browser", payload: prettyJSONString(payload))
     }
 

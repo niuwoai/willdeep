@@ -108,8 +108,48 @@ nonisolated enum AgentBlockedPageDetector {
     ]
     private static let hostMarkers = ["wappass.baidu.com", "captcha."]
     private static let pathMarkers = ["/captcha", "/challenge", "/sorry/"]
-    private static let blockingStatuses: Set<Int> = [403, 429, 503]
+    /// 429 is the site saying "slow down": a rate limit, counted as a block.
+    private static let rateLimitStatus = 429
+    /// A bare 403/503 on a short page says only that the site refused. IP or
+    /// region rules, a proxy exit, a missing sign-in or bot rules all look
+    /// the same, so it is reported as a refusal, not as bot detection.
+    private static let refusalStatuses: Set<Int> = [403, 503]
 
+    /// What a finished page says about access: a verification / rate-limit
+    /// page (`blocked`), a plain HTTP refusal (`refused`), or nothing.
+    enum Verdict: Equatable {
+        case blocked(reason: String)
+        case refused(httpStatus: Int)
+    }
+
+    static func verdict(title: String, url: String, text: String, httpStatus: Int?) -> Verdict? {
+        if let reason = reason(title: title, url: url, text: text, httpStatus: httpStatus) {
+            return .blocked(reason: reason)
+        }
+        let isShort = text.trimmingCharacters(in: .whitespacesAndNewlines).count <= shortPageTextLimit
+        if let status = httpStatus, refusalStatuses.contains(status), isShort {
+            return .refused(httpStatus: status)
+        }
+        return nil
+    }
+
+    /// Writes the verdict into a tool payload: `blocked_by_site` for a
+    /// verification page, `access_refused` for a plain refusal.
+    static func annotate(_ payload: inout [String: Any], verdict: Verdict?) {
+        switch verdict {
+        case .blocked(let reason):
+            payload["blocked_by_site"] = true
+            payload["note"] = stopNote(reason: reason)
+        case .refused(let status):
+            payload["access_refused"] = true
+            payload["note"] = refusalNote(httpStatus: status)
+        case nil:
+            break
+        }
+    }
+
+    /// Only verification / challenge / rate-limit pages; see `verdict` for
+    /// plain refusals.
     static func reason(title: String, url: String, text: String, httpStatus: Int?) -> String? {
         let lowerTitle = title.lowercased()
         if let marker = strongTitleMarkers.first(where: { lowerTitle.contains($0) }) {
@@ -124,8 +164,8 @@ nonisolated enum AgentBlockedPageDetector {
         }
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let isShort = trimmedText.count <= shortPageTextLimit
-        if let status = httpStatus, blockingStatuses.contains(status), isShort {
-            return "site answered HTTP \(status) with a short page"
+        if httpStatus == rateLimitStatus, isShort {
+            return "site answered HTTP \(rateLimitStatus) (too many requests) with a short page"
         }
         if isShort {
             let haystack = lowerTitle + "\n" + trimmedText.lowercased()
@@ -134,6 +174,10 @@ nonisolated enum AgentBlockedPageDetector {
             }
         }
         return nil
+    }
+
+    static func refusalNote(httpStatus: Int) -> String {
+        "The site refused access: HTTP \(httpStatus) with a short page and no captcha or verification prompt. The page does not say why; IP or region rules, the network exit (proxy/VPN), a missing sign-in or anti-bot rules all look like this. Tell the user the site returned HTTP \(httpStatus) and do not claim it detected automation. Do not retry with spoofed user agents, proxies, scraping relays, curl replays or OCR; the user can open the page in the browser panel to see what the site shows."
     }
 
     static func stopNote(reason: String) -> String {

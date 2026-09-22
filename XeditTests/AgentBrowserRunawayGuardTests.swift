@@ -54,7 +54,9 @@ struct AgentBrowserRunawayGuardTests {
             ("", "https://wappass.baidu.com/static/captcha", "", nil, true),
             ("Just a moment...", "https://example.org/", "Checking your browser before accessing", nil, true),
             ("Example", "https://example.org/", "Too many requests", 429, true),
-            ("Forbidden", "https://example.org/", "", 403, true),
+            ("Forbidden", "https://example.org/", "", 403, false),
+            ("klook.com", "https://www.klook.com/zh-CN/destination/c19190-hangzhou/", "", 403, false),
+            ("Attention Required! | Cloudflare", "https://example.org/", "", 403, true),
             ("杭州一日游_百度搜索", "https://www.baidu.com/s?wd=%E6%9D%AD", String(repeating: "西湖 灵隐寺 ", count: 400), 200, false),
             ("How CAPTCHAs work", "https://blog.example.org/post", String(repeating: "A captcha is a challenge. ", count: 200), 200, false),
             ("Example Domain", "https://example.com/", "This domain is for use in examples.", 200, false),
@@ -63,6 +65,37 @@ struct AgentBrowserRunawayGuardTests {
     func blockedPageDetection(title: String, url: String, text: String, status: Int?, blocked: Bool) {
         let reason = AgentBlockedPageDetector.reason(title: title, url: url, text: text, httpStatus: status)
         #expect((reason != nil) == blocked, "title=\(title) url=\(url) reason=\(reason ?? "nil")")
+    }
+
+    /// 2026-09-22: klook answered a bare 403 (title "klook.com", no captcha)
+    /// and the note told the model the site was "blocking automated access",
+    /// which it then repeated to the user as fact.
+    @Test("单纯 403/503 短页标 access_refused，如实报状态码，不说是在拦自动化")
+    func plainRefusalIsNotCalledBotDetection() {
+        #expect(AgentBlockedPageDetector.verdict(title: "klook.com", url: "https://www.klook.com/", text: "", httpStatus: 403)
+            == .refused(httpStatus: 403))
+        #expect(AgentBlockedPageDetector.verdict(title: "", url: "https://example.org/", text: "", httpStatus: 503)
+            == .refused(httpStatus: 503))
+        #expect(AgentBlockedPageDetector.verdict(title: "Forbidden", url: "https://example.org/",
+                                                 text: String(repeating: "正文 ", count: 1_500), httpStatus: 403) == nil)
+        if case .blocked = AgentBlockedPageDetector.verdict(title: "Example", url: "https://example.org/", text: "", httpStatus: 429) {
+        } else {
+            Issue.record("429 is a rate limit and stays a block")
+        }
+        if case .blocked = AgentBlockedPageDetector.verdict(title: "Just a moment...", url: "https://example.org/", text: "", httpStatus: 403) {
+        } else {
+            Issue.record("a challenge page with 403 stays a block")
+        }
+
+        var payload: [String: Any] = ["title": "klook.com", "url": "https://www.klook.com/", "text": ""]
+        AgentEmbeddedBrowserController.flagBlockedPage(&payload, httpStatus: 403)
+        #expect(payload["blocked_by_site"] == nil)
+        #expect(payload["access_refused"] as? Bool == true)
+        let note = payload["note"] as? String ?? ""
+        #expect(note.contains("HTTP 403"))
+        #expect(note.contains("do not claim it detected automation"))
+        #expect(!note.contains("is blocking automated access"))
+        #expect(note.contains("spoofed user agents"))
     }
 
     @Test("read_page 读到拦截页时标 blocked_by_site 并给出停下汇报的提示")
