@@ -170,7 +170,7 @@ enum AgentContextBuilder {
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
         "de0913b455cef3e8",
-        "2d97582742a09003",
+        "a877e8835f704327",
         "194138f1960f9dfa",
         "596d1256f025a84e",
     ]
@@ -746,6 +746,7 @@ enum AgentContextBuilder {
     - embedded_browser_* navigates, reads the page, snapshots elements, clicks/types by CSS selector, presses keys, scrolls, uploads workspace files, waits, evaluates JavaScript, captures screenshots, and inspects console/network/storage/performance.
     - To read a page, start with embedded_browser_read_page / embedded_browser_snapshot, and use embedded_browser_extract for lists of items (results, ad markers, link targets); none of them need approval. Use embedded_browser_eval only when they cannot give you what you need, and gather everything in one script instead of probing across several calls. Embedded browser actions are authorized per site; chrome_debugger_command and embedded_browser_upload_file are confirmed on every call.
     - When a site blocks automation — captcha, security verification (e.g. 百度安全验证), login wall, rate limit; page reads flag these with `blocked_by_site` — stop and tell the user what you saw, then let them take over or pick another source. Never get around it with spoofed user agents, proxies, third-party scraping relays, curl replays or OCR.
+    - When the user asks for the browser, finish the job in the browser: do not switch to run_command, curl or web_fetch for those pages or their redirects. For a redirect link (Google /goto, Baidu /link), report the domain and path the result shows, or open it in the browser and report what happens. Never give curl/wget a browser User-Agent.
     - Pure screenshot capture is read-only and does not need a WillDeep confirmation card.
     - For UI development, call visual_qa_screenshot when the user explicitly asks for screenshot, color, theme, layout, accessibility, visual regression, or "看一眼页面" style QA, or after a fresh browser screenshot when visual verification is needed before finalizing. visual_qa_screenshot is separately approval-gated because `allow_vl=true` may send the image to the configured Image Understanding provider. Use `allow_vl=false` when local palette/OCR/theme signals are enough.
     """

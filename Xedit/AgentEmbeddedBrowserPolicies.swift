@@ -203,3 +203,34 @@ nonisolated enum AgentEmbeddedBrowserReadiness {
             + "embedded_browser_capture_screenshot to see what the user sees."
     }
 }
+
+/// Refuses a shell `curl` / `wget` that dresses up as a browser in a turn that
+/// already drove the embedded browser. 2026-09-23: asked to use the browser,
+/// the model resolved Google's `/goto` redirects with `curl -A 'Mozilla/5.0
+/// … Chrome'` instead, which is an off-browser workaround the user never
+/// asked for — the approval card was the only thing that stopped it.
+nonisolated enum AgentBrowserUserAgentSpoofGuard {
+    /// Tools whose `command` argument runs in a shell.
+    static let shellTools: Set<String> = ["run_command", "terminal_send_command"]
+    static let browserToolPrefix = "embedded_browser_"
+
+    /// Browser-style User-Agent handed to curl or wget: `-A`, `--user-agent`,
+    /// wget's `-U`, or a `User-Agent:` header. Matches only a `Mozilla/`
+    /// value, so a plain tool UA such as `-A my-cli/1.0` still runs.
+    private static let spoofPattern = try! NSRegularExpression(
+        pattern: #"(?i)(?:^|[\s;&|(])(?:curl|wget)\b[^\n;&|]*?(?:(?:\s-A|\s-U|--user-agent)[\s=]*['"]?\s*mozilla/|user-agent\s*:\s*mozilla/)"#
+    )
+
+    static func spoofsBrowser(command: String) -> Bool {
+        let range = NSRange(command.startIndex..., in: command)
+        return spoofPattern.firstMatch(in: command, range: range) != nil
+    }
+
+    static func refusal(toolName: String, arguments: [String: AgentJSONValue], browserUsedThisTurn: Bool) -> String? {
+        guard browserUsedThisTurn,
+              shellTools.contains(toolName),
+              let command = arguments["command"]?.stringValue(),
+              spoofsBrowser(command: command) else { return nil }
+        return "Blocked: this turn is using the embedded browser, and this command fetches pages with a browser User-Agent from the shell. Finish the job in the browser: read what the page shows, or open the link with embedded_browser_navigate and report what happens (including a refusal). Do not retry with another shell tool, a different User-Agent, web_fetch or a proxy."
+    }
+}

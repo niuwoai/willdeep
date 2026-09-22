@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-22 | Current version: v1.403.0-rc4
+> Last updated: 2026-09-22 | Current version: v1.403.0-rc5
 
 内置配置管理插件 willdeep-config（1.396.0-rc1）：在 App 里查看、编辑、校验和备份 WillDeep 的 TOML 配置，随安装包提供，无需另装。
 

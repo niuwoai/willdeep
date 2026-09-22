@@ -151,6 +151,67 @@ struct AgentBrowserRunawayGuardTests {
         #expect(embeddedLine.map { $0.contains("presses keys") && $0.contains("scrolls") && $0.contains("uploads workspace files") } == true)
     }
 
+    @Test("指引写明：用户要用浏览器就在浏览器里做完，跳转链接不离开浏览器，curl 不许伪装浏览器 UA")
+    func browserGuidanceKeepsTheJobInTheBrowser() {
+        let block = AgentContextBuilder.browserUICapabilityBlock
+        let line = block.split(separator: "\n").first { $0.contains("finish the job in the browser") }
+        #expect(line.map { $0.contains("run_command") && $0.contains("curl") && $0.contains("web_fetch") } == true)
+        #expect(line.map { $0.contains("/goto") && $0.contains("redirect") } == true)
+        #expect(line.map { $0.contains("Never give curl/wget a browser User-Agent") } == true)
+    }
+
+    /// The exact command from 2026-09-23 plus its common variants.
+    @Test(
+        "识别 curl / wget 伪装浏览器 UA",
+        arguments: [
+            ("curl -sS -o /dev/null -D - -m 12 -A 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36' 'https://www.google.com/goto?url=CAES'", true),
+            ("curl -A \"Mozilla/5.0\" https://www.klook.com/", true),
+            ("curl --user-agent='Mozilla/5.0' https://example.com", true),
+            ("curl -H 'User-Agent: Mozilla/5.0 (X11)' https://example.com", true),
+            ("wget -U 'Mozilla/5.0' https://example.com", true),
+            ("wget --header='User-Agent: Mozilla/5.0' https://example.com", true),
+            ("cd /tmp && curl -sL -A 'Mozilla/5.0' https://example.com | head", true),
+            ("curl -sS https://example.com", false),
+            ("curl -A 'my-cli/1.0' https://api.example.com", false),
+            ("echo 'Mozilla/5.0' > ua.txt", false),
+            ("grep -r 'User-Agent: Mozilla' logs/", false),
+        ]
+    )
+    func detectsBrowserUserAgentSpoof(command: String, spoofs: Bool) {
+        #expect(AgentBrowserUserAgentSpoofGuard.spoofsBrowser(command: command) == spoofs, "\(command)")
+    }
+
+    @Test("只在本回合用过内置浏览器时拦截 shell 里伪装 UA 的 curl；其他工具、其他命令不受影响")
+    func spoofRefusalScope() {
+        let spoof: [String: AgentJSONValue] = ["command": .string("curl -A 'Mozilla/5.0' https://www.google.com/goto?url=x")]
+        let refusal = AgentBrowserUserAgentSpoofGuard.refusal(toolName: "run_command", arguments: spoof, browserUsedThisTurn: true)
+        #expect(refusal?.contains("Finish the job in the browser") == true)
+        #expect(AgentBrowserUserAgentSpoofGuard.refusal(toolName: "terminal_send_command", arguments: spoof, browserUsedThisTurn: true) != nil)
+        #expect(AgentBrowserUserAgentSpoofGuard.refusal(toolName: "run_command", arguments: spoof, browserUsedThisTurn: false) == nil)
+        #expect(AgentBrowserUserAgentSpoofGuard.refusal(toolName: "web_fetch", arguments: spoof, browserUsedThisTurn: true) == nil)
+        #expect(AgentBrowserUserAgentSpoofGuard.refusal(
+            toolName: "run_command", arguments: ["command": .string("curl -sS https://example.com")], browserUsedThisTurn: true
+        ) == nil)
+    }
+
+    @Test("「本回合用过浏览器」只看回合开始之后的调用")
+    func browserUseIsScopedToTheTurn() {
+        let runtime = AgentRuntime(session: AgentSession())
+        func call(_ name: String, at date: Date) -> AgentToolCall {
+            AgentToolCall(messageID: UUID(), externalID: UUID().uuidString, toolName: name, arguments: [:],
+                          risk: .read, status: .succeeded, startedAt: date)
+        }
+        let now = Date()
+        #expect(!runtime.usedEmbeddedBrowserThisTurn)
+        runtime.toolCalls = [call("embedded_browser_navigate", at: now.addingTimeInterval(-600))]
+        runtime.turnStartedAt = now.addingTimeInterval(-60)
+        #expect(!runtime.usedEmbeddedBrowserThisTurn, "a browser call from an earlier turn does not count")
+        runtime.toolCalls.append(call("run_command", at: now))
+        #expect(!runtime.usedEmbeddedBrowserThisTurn)
+        runtime.toolCalls.append(call("embedded_browser_eval", at: now))
+        #expect(runtime.usedEmbeddedBrowserThisTurn)
+    }
+
     @Test("读页面先用 read_page / snapshot，eval 一次取全，浏览器按网站授权")
     func browserGuidanceSteersReadsAwayFromEval() {
         let block = AgentContextBuilder.browserUICapabilityBlock

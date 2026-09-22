@@ -1748,6 +1748,29 @@ extension AppState {
                     continue
                 }
 
+                // Asked to use the browser, the model must not quietly fetch
+                // the same pages from the shell dressed up as Chrome.
+                if let refusal = AgentBrowserUserAgentSpoofGuard.refusal(
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    browserUsedThisTurn: runtime.usedEmbeddedBrowserThisTurn
+                ) {
+                    anyDenied = true
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Browser User-Agent from the shell"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: refusal,
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Browser User-Agent from the shell"
+                    )
+                    continue
+                }
+
                 // Design gate. Same shape as planning-only above and
                 // deliberately a separate branch: the two states want
                 // different things from the model, and collapsing them would

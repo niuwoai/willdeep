@@ -488,6 +488,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// circuit breaker (`AgentToolFailureGuidance`): past a few failures the
     /// host stops saying "try another approach" and asks for a report.
     var currentTurnToolFailureCounts: [String: Int] = [:]
+    /// Whether an embedded_browser_* call was made since the turn started.
+    var usedEmbeddedBrowserThisTurn: Bool {
+        guard let turnStartedAt else { return false }
+        return toolCalls.contains {
+            $0.toolName.hasPrefix(AgentBrowserUserAgentSpoofGuard.browserToolPrefix) && $0.startedAt >= turnStartedAt
+        }
+    }
     /// The runtime's own read of what this turn's request is, rendered as a
     /// system-prompt paragraph. Lives here rather than being appended to the
     /// user's message because the user's message is *shown* — steering markup

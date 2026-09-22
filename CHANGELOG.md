@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.403.0-rc5 - 2026-09-23
+
+### Fixed
+
+- **让 Agent 用浏览器干活，它却换成 curl 冒充浏览器去取网页。** 例子：用户让它用侧栏浏览器找 Google“杭州一日游”的第一个非广告结果。Google 结果页的链接是加密跳转 `/goto?url=…`，它为了拿到真实网址，发起了 `curl -D - -A 'Mozilla/5.0 … Chrome/128' 'https://www.google.com/goto?url=…'`，想在浏览器之外读跳转的 `Location`。当时是智能审核把它拦下来交给用户确认。原因是浏览器指引里，“不准用伪造 UA 或 curl 重放”只在“网站拦截了自动化”这个前提下才适用，也没有一条规则写着“用户指定用浏览器，就全程在浏览器里做”。这次改了两层：
+  - **浏览器指引加了一条**（只在浏览器工具包加载时出现，稳定核心不变，核心的前缀缓存不受影响）：用户要用浏览器，就在浏览器里把事做完，不为了这些页面或它们的跳转改用 `run_command`、curl 或 `web_fetch`。搜索结果的跳转链接（Google `/goto`、百度 `/link`），就报结果上能看到的站点和路径，或者在浏览器里打开并如实报告结果，包括被拒绝的情况。任何时候都不准给 curl/wget 设置浏览器样式的 User-Agent。
+  - **加了一道硬拦截** `AgentBrowserUserAgentSpoofGuard`：同一回合里调用过 `embedded_browser_*` 之后，如果 `run_command` / `terminal_send_command` 里的 curl 或 wget 带了 `Mozilla/…` 样式的 UA（`-A`、`--user-agent`、wget 的 `-U`、`User-Agent:` 请求头都算），直接拒绝，不弹确认卡，并告诉模型回到浏览器里做。普通的 curl、自定义工具 UA（如 `-A my-cli/1.0`）、`grep 'User-Agent: Mozilla'` 这类命令不受影响；上一回合用过浏览器也不算。
+- 浏览器能力附录的快照哈希更新为 `a877e8835f704327`。另外三个附录和三档稳定核心的哈希都没变。
+- 测试：`AgentBrowserRunawayGuardTests` 新增 4 项：
+  - 指引的语义断言；
+  - UA 识别表格，共 11 例，包括截图里原样的那条命令；
+  - 拦截范围：只拦 shell 类工具、只在本回合用过浏览器时拦；
+  - “本回合用过浏览器”只看回合开始之后的调用。
+
 ## 1.403.0-rc4 - 2026-09-23
 
 ### Fixed
