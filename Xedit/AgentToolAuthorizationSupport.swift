@@ -558,6 +558,12 @@ enum AgentToolAuthorization {
             // remain per-action confirmations.
             return nil
         }
+        // Arbitrary page JavaScript and raw CDP commands can read cookies and
+        // tokens on logged-in pages, so they never ride on a family grant:
+        // each call is approved on its own.
+        if browserToolsRequiringPerCallApproval.contains(toolName) {
+            return nil
+        }
         if toolName.hasPrefix("chrome_") {
             return "browser:chrome"
         }
@@ -565,6 +571,39 @@ enum AgentToolAuthorization {
             return "browser:embedded"
         }
         return nil
+    }
+
+    nonisolated static let browserToolsRequiringPerCallApproval: Set<String> = [
+        "embedded_browser_eval",
+        "chrome_debugger_command",
+    ]
+
+    /// Durable ("always allow") rule for a browser tool. Earlier builds saved
+    /// the whole family (`browser:embedded` / `browser:chrome`), so one
+    /// approved navigation silently authorized eval, click and type on every
+    /// site forever. Rules are now one tool wide, and navigation rules are
+    /// also bound to the destination host. Legacy family rules no longer
+    /// match anything.
+    static func browserPersistentSignature(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> String? {
+        guard let family = interactiveSurfaceSignature(toolName: toolName) else { return nil }
+        guard toolName.hasSuffix("_navigate") else {
+            return "\(family):\(toolName)"
+        }
+        guard let host = browserNavigationHost(arguments["url"]?.stringValue() ?? "") else {
+            return nil
+        }
+        return "\(family):\(toolName):\(host)"
+    }
+
+    static func browserNavigationHost(_ rawURL: String) -> String? {
+        let trimmed = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        guard let host = URL(string: candidate)?.host?.lowercased(), !host.isEmpty else { return nil }
+        return host
     }
 
     /// Signature offered by the approval card as a durable rule.
@@ -660,6 +699,9 @@ enum AgentToolAuthorization {
     }
 
     static func signature(toolName: String, arguments: [String: AgentJSONValue]) -> String? {
+        if toolName.hasPrefix("chrome_") || toolName.hasPrefix("embedded_browser_") {
+            return browserPersistentSignature(toolName: toolName, arguments: arguments)
+        }
         if let signature = interactiveSurfaceSignature(toolName: toolName) {
             return signature
         }

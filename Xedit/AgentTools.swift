@@ -681,7 +681,11 @@ enum AgentToolRunner {
             case "embedded_browser_status":
                 result = try await AgentEmbeddedBrowserTools.status(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_navigate":
-                result = try await AgentEmbeddedBrowserTools.navigate(arguments: activeArguments, runtimeID: activeContext.runtimeID)
+                result = try await AgentEmbeddedBrowserTools.navigate(
+                    arguments: activeArguments,
+                    runtimeID: activeContext.runtimeID,
+                    allowedFileRoots: activeContext.workspaceRoots + [activeContext.rootDirectory].compactMap { $0 }
+                )
             case "embedded_browser_read_page":
                 result = try await AgentEmbeddedBrowserTools.readPage(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_snapshot":

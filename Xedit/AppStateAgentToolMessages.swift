@@ -1317,13 +1317,22 @@ extension AppState {
         } else {
             limited = sanitized
         }
+        let enveloped: String
+        if source == .toolOutput,
+           outcomeStatus == .succeeded,
+           let toolName,
+           AgentInjectionDefense.returnsWebContent(toolName: toolName) {
+            enveloped = AgentInjectionDefense.wrapWebContent(limited, toolName: toolName)
+        } else {
+            enveloped = limited
+        }
         // Images ride on the tool message so vision-capable providers
         // re-see them every turn (Anthropic re-attaches as tool_result
         // image blocks). Text-only providers ignore `images` and use the
         // sanitized text payload.
         let message = AgentMessage(
             role: .tool,
-            content: limited,
+            content: enveloped,
             images: images,
             toolCallID: toolCallID,
             toolCallStatus: outcomeStatus,

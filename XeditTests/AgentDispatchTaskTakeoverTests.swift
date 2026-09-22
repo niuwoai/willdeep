@@ -293,13 +293,18 @@ struct AgentDispatchTaskTakeoverTests {
         #expect(!first.isReady)
         #expect(!second.isReady)
 
+        // Agent navigation only opens file:// inside the workspace, so the
+        // page lives in a throwaway directory passed as the allowed root.
+        let pageDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-browser-takeover-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: pageDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: pageDirectory) }
+        let pageURL = pageDirectory.appendingPathComponent("ready.html")
+        try #"<p id="ready">Background ready</p>"#.write(to: pageURL, atomically: true, encoding: .utf8)
         _ = try await AgentEmbeddedBrowserTools.navigate(
-            arguments: [
-                "url": .string(
-                    "data:text/html,%3Cp%20id%3D%22ready%22%3EBackground%20ready%3C%2Fp%3E"
-                ),
-            ],
-            runtimeID: firstID
+            arguments: ["url": .string(pageURL.absoluteString)],
+            runtimeID: firstID,
+            allowedFileRoots: [pageDirectory]
         )
         let waitResult = try await AgentEmbeddedBrowserTools.waitFor(
             arguments: [

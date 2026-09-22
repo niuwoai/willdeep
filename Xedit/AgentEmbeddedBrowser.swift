@@ -55,6 +55,21 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     static let documentContentWaitTimeout: Duration = .seconds(3)
     /// DOM probes run `innerText`, so they poll slower than `isLoading`.
     private static let documentProbeInterval: Duration = .milliseconds(250)
+    /// Page-script helpers shared by every read. `wdSafeValue` never returns
+    /// the value of password / secret / hidden fields — `embedded_browser_type`
+    /// resolves secret placeholders, so the next read would otherwise hand the
+    /// real secret back to the model. Mirrors `isSensitiveInput` in the Chrome
+    /// extension's content.js, plus hidden inputs (CSRF tokens).
+    static let sensitiveValueScript = """
+    const wdIsSensitiveInput = (el) => {
+      if (!el || el.tagName !== 'INPUT') return false;
+      const type = String(el.getAttribute('type') || '').toLowerCase();
+      if (type === 'password' || type === 'hidden') return true;
+      const name = `${el.getAttribute('name') || ''} ${el.id || ''} ${el.getAttribute('autocomplete') || ''}`.toLowerCase();
+      return /(password|passwd|secret|token|otp|one.?time|credit.?card|cvv)/.test(name);
+    };
+    const wdSafeValue = (el) => (el && !wdIsSensitiveInput(el) && 'value' in el) ? String(el.value || '') : '';
+    """
 
     /// Set by `navigate(to:)` until the new document commits, so readiness
     /// probes never mistake the previous page's DOM for the new one.
@@ -172,7 +187,13 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         address = rawValue
         lastError = nil
         awaitingCommit = true
-        webView.load(URLRequest(url: url))
+        if url.isFileURL {
+            // Grant read access to the page's folder only, so relative
+            // CSS/JS/images load without exposing the rest of the disk.
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            webView.load(URLRequest(url: url))
+        }
         updateState(from: webView)
     }
 
@@ -291,18 +312,22 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     func readPage(maxChars: Int) async throws -> [String: Any] {
         let script = """
         (() => {
+          \(Self.sensitiveValueScript)
           const text = (document.body ? document.body.innerText : document.documentElement.innerText || '').slice(0, \(maxChars));
           const links = Array.from(document.querySelectorAll('a[href]')).slice(0, 50).map((a) => ({
             text: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0, 120),
             href: a.href
           }));
-          const forms = Array.from(document.querySelectorAll('input, textarea, select, button')).slice(0, 80).map((el) => ({
+          const forms = Array.from(document.querySelectorAll('input, textarea, select, button'))
+            .filter((el) => String(el.getAttribute('type') || '').toLowerCase() !== 'hidden')
+            .slice(0, 80).map((el) => ({
             tag: el.tagName.toLowerCase(),
             type: el.getAttribute('type') || '',
             name: el.getAttribute('name') || '',
             id: el.id || '',
             placeholder: el.getAttribute('placeholder') || '',
-            text: (el.innerText || el.value || '').slice(0, 80)
+            text: (el.innerText || wdSafeValue(el)).slice(0, 80),
+            ...(wdIsSensitiveInput(el) ? { has_value: !!el.value } : {})
           }));
           return { title: document.title || '', url: location.href, ready_state: document.readyState, text, links, forms };
         })()
@@ -324,6 +349,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         let limit = max(10, min(maxElements, 300))
         let script = """
         (() => {
+          \(Self.sensitiveValueScript)
           const selectorFor = (el) => {
             if (!el || !el.tagName) return '';
             if (el.id) return `#${CSS.escape(el.id)}`;
@@ -372,7 +398,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
               type: el.getAttribute('type') || '',
               name: el.getAttribute('name') || '',
               id: el.id || '',
-              text: (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 160),
+              text: (el.innerText || wdSafeValue(el) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 160),
               href: el.href || '',
               editable,
               clickable,
@@ -397,6 +423,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         let selectorLiteral = try Self.javaScriptLiteral(selector)
         let script = """
         (() => {
+          \(Self.sensitiveValueScript)
           const selector = \(selectorLiteral);
           const element = document.querySelector(selector);
           if (!element) return { ok: false, error: `No element matched selector: ${selector}` };
@@ -407,7 +434,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
             selector,
             tag: element.tagName.toLowerCase(),
             id: element.id || '',
-            text: (element.innerText || element.value || element.getAttribute('aria-label') || '').trim().slice(0, 160)
+            text: (element.innerText || wdSafeValue(element) || element.getAttribute('aria-label') || '').trim().slice(0, 160)
           };
         })()
         """
@@ -1016,11 +1043,12 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         let valueLiteral = try Self.javaScriptLiteral(value)
         let script = """
         (() => {
+          \(Self.sensitiveValueScript)
           const condition = \(conditionLiteral);
           const value = \(valueLiteral);
           if (condition === 'selector') {
             const element = document.querySelector(value);
-            return { matched: !!element, condition, value, text: element ? (element.innerText || element.value || '').trim().slice(0, 160) : '' };
+            return { matched: !!element, condition, value, text: element ? (element.innerText || wdSafeValue(element) || '').trim().slice(0, 160) : '' };
           }
           if (condition === 'text') {
             const text = document.body ? document.body.innerText : document.documentElement.innerText || '';
@@ -1425,6 +1453,71 @@ nonisolated enum AgentEmbeddedBrowserAutomationPolicy {
     }
 }
 
+/// Where `embedded_browser_navigate` may take the Agent. The user's own
+/// address bar is not restricted; this only bounds model-chosen URLs, which a
+/// prompt-injected page can steer.
+nonisolated enum AgentEmbeddedBrowserNavigationPolicy {
+    enum Decision: Equatable {
+        case allow(URL)
+        case reject(String)
+    }
+
+    static func evaluate(rawURL: String, allowedFileRoots: [URL]) -> Decision {
+        let trimmed = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .reject("Invalid browser URL: empty.") }
+        let candidate: URL?
+        if let parsed = URL(string: trimmed), parsed.scheme != nil {
+            candidate = parsed
+        } else {
+            candidate = URL(string: "https://\(trimmed)")
+        }
+        guard let url = candidate, let scheme = url.scheme?.lowercased() else {
+            return .reject("Invalid browser URL: \(trimmed)")
+        }
+        switch scheme {
+        case "http", "https":
+            guard let host = url.host, !host.isEmpty else {
+                return .reject("Invalid browser URL: \(trimmed)")
+            }
+            if isLoopback(host) {
+                // Local dev servers are the main reason to render in-app.
+                return .allow(url)
+            }
+            if AgentWebTools.isBlockedHost(host) {
+                return .reject(
+                    "embedded_browser_navigate does not open private-network hosts (\(host)): routers, NAS and internal services are off limits to the Agent. Ask the user to open it themselves if it is really needed."
+                )
+            }
+            return .allow(url)
+        case "about":
+            return url.absoluteString.lowercased() == "about:blank"
+                ? .allow(url)
+                : .reject("Only about:blank is allowed among about: URLs.")
+        case "file":
+            let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+            let inside = allowedFileRoots.contains { root in
+                let rootPath = root.standardizedFileURL.resolvingSymlinksInPath().path
+                return path == rootPath || path.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
+            }
+            return inside
+                ? .allow(url)
+                : .reject("file:// URLs may only point inside the session workspace. Serve the file from the workspace or a local dev server instead.")
+        default:
+            return .reject("embedded_browser_navigate only opens http(s) URLs, about:blank, or file:// URLs inside the workspace; \(scheme): is not allowed.")
+        }
+    }
+
+    static func isLoopback(_ rawHost: String) -> Bool {
+        var host = rawHost.lowercased()
+        if host.hasPrefix("["), host.hasSuffix("]") {
+            host = String(host.dropFirst().dropLast())
+        }
+        if host == "localhost" || host.hasSuffix(".localhost") || host == "::1" { return true }
+        let octets = host.split(separator: ".")
+        return octets.count == 4 && octets.first == "127" && octets.allSatisfy { UInt8($0) != nil }
+    }
+}
+
 nonisolated enum AgentEmbeddedBrowserReadiness {
     /// `interactive` means the HTML is parsed and the DOM is readable even
     /// while subresources are still pending.
@@ -1450,10 +1543,21 @@ enum AgentEmbeddedBrowserTools {
         return AgentToolResult(summary: "Embedded browser status", payload: prettyJSONString(payload))
     }
 
-    static func navigate(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
-        let url = try requiredString("url", arguments: arguments)
+    static func navigate(
+        arguments: [String: AgentJSONValue],
+        runtimeID: UUID? = nil,
+        allowedFileRoots: [URL] = []
+    ) async throws -> AgentToolResult {
+        let rawURL = try requiredString("url", arguments: arguments)
+        let url: URL
+        switch AgentEmbeddedBrowserNavigationPolicy.evaluate(rawURL: rawURL, allowedFileRoots: allowedFileRoots) {
+        case .allow(let allowed):
+            url = allowed
+        case .reject(let reason):
+            throw AgentToolError.invalidArgument(reason)
+        }
         let controller = controller(for: runtimeID, loadInitialPage: false)
-        try controller.navigate(to: url)
+        try controller.navigate(to: url.absoluteString)
         let settled = await controller.waitForNavigationToSettle()
         var payload = controller.statusPayload()
         payload["settled"] = settled

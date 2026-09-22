@@ -12,6 +12,33 @@ import Foundation
 enum AgentChromeTools {
     private static let defaultEndpoint = "http://127.0.0.1:8797"
     private static let requestTimeout: TimeInterval = 10
+    /// Must match `ChromeBridgeTokenHeader` in willdeep-agent's
+    /// chrome_native_host.go. The native host writes a fresh token to
+    /// `bridgeTokenURL` (0600) each time it binds the bridge port.
+    static let bridgeTokenHeader = "X-WillDeep-Bridge-Token"
+
+    static var bridgeTokenURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/WillDeep/ChromeNativeHost", isDirectory: true)
+            .appendingPathComponent("bridge-token", isDirectory: false)
+    }
+
+    /// Read on every request: the host rotates the token whenever Chrome
+    /// relaunches it, so a cached copy would go stale.
+    static func bridgeToken(at url: URL = bridgeTokenURL) -> String? {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.isEmpty ? nil : token
+    }
+
+    private static func applyBridgeToken(to request: inout URLRequest) throws {
+        guard let token = bridgeToken() else {
+            throw AgentToolError.invalidArgument(
+                "Chrome bridge is not running (no bridge token at \(bridgeTokenURL.path)). Open Chrome with the WillDeep Browser extension enabled, click the extension icon once to connect, then retry."
+            )
+        }
+        request.setValue(token, forHTTPHeaderField: bridgeTokenHeader)
+    }
 
     static func status(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let envelope = try await get(path: "/chrome/health")
@@ -213,6 +240,7 @@ enum AgentChromeTools {
         request.httpMethod = "GET"
         request.timeoutInterval = requestTimeout
         AgentNetworkSupport.applyStandardHeaders(to: &request)
+        try applyBridgeToken(to: &request)
         return try await send(request)
     }
 
@@ -224,6 +252,7 @@ enum AgentChromeTools {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
         AgentNetworkSupport.applyStandardHeaders(to: &request)
+        try applyBridgeToken(to: &request)
         return try await send(request)
     }
 

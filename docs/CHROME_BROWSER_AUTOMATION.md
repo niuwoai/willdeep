@@ -68,8 +68,19 @@ GET  http://127.0.0.1:8797/chrome/health
 POST http://127.0.0.1:8797/chrome/request
 ```
 
-`WILLDEEP_CHROME_BRIDGE_PORT` can override the port. The request endpoint
-accepts:
+`WILLDEEP_CHROME_BRIDGE_PORT` can override the port.
+
+The bridge is authenticated (1.396.0-rc3). Each time the host wins the port it
+writes a fresh random token to
+`~/Library/Application Support/WillDeep/ChromeNativeHost/bridge-token` (mode
+0600, atomic rename; `WILLDEEP_CHROME_BRIDGE_TOKEN_FILE` overrides the path).
+Every request must carry it in `X-WillDeep-Bridge-Token`. The bridge also
+rejects requests with an `Origin` header (web pages), a `Host` other than
+`127.0.0.1:<port>` / `localhost:<port>` (DNS rebinding), and POST bodies that
+are not `application/json` (CORS-simple `text/plain` posts). A host that fails
+to bind the port — e.g. a second Chrome profile — does not touch the token.
+
+The request endpoint accepts:
 
 ```json
 {

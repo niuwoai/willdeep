@@ -7,6 +7,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
+	"net"
+	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -18,6 +21,7 @@ func TestChromeNativeHostPing(t *testing.T) {
 	})
 	var output bytes.Buffer
 
+	isolateChromeBridgeForTest(t)
 	if err := ServeChromeNativeHost(context.Background(), bytes.NewReader(input), &output); err != nil {
 		t.Fatalf("ServeChromeNativeHost: %v", err)
 	}
@@ -45,6 +49,7 @@ func TestChromeNativeHostRejectsUnknownType(t *testing.T) {
 	})
 	var output bytes.Buffer
 
+	isolateChromeBridgeForTest(t)
 	if err := ServeChromeNativeHost(context.Background(), bytes.NewReader(input), &output); err != nil {
 		t.Fatalf("ServeChromeNativeHost: %v", err)
 	}
@@ -161,4 +166,18 @@ func decodeChromeNativeHostTestResponse(t *testing.T, data []byte) ChromeNativeH
 		t.Fatalf("decode response: %v", err)
 	}
 	return response
+}
+
+// isolateChromeBridgeForTest keeps ServeChromeNativeHost from binding the real
+// bridge port or writing the token into the user's Application Support.
+func isolateChromeBridgeForTest(t *testing.T) {
+	t.Helper()
+	t.Setenv(chromeBridgeTokenFileEnvVar, filepath.Join(t.TempDir(), chromeBridgeTokenFileName))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
+	t.Setenv("WILLDEEP_CHROME_BRIDGE_PORT", strconv.Itoa(port))
 }

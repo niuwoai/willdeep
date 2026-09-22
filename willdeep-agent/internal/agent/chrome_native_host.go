@@ -3,7 +3,10 @@ package agent
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +15,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +31,13 @@ const (
 	defaultChromeBridgeHost          = "127.0.0.1"
 	defaultChromeBridgePort          = 8797
 	defaultChromeBridgeTimeout       = 8 * time.Second
+	// ChromeBridgeTokenHeader carries the per-launch secret the WillDeep app
+	// reads from the 0600 token file. Without it any local process — or a web
+	// page posting to 127.0.0.1 — could drive the user's logged-in Chrome.
+	ChromeBridgeTokenHeader     = "X-WillDeep-Bridge-Token"
+	chromeBridgeTokenBytes      = 32
+	chromeBridgeTokenFileName   = "bridge-token"
+	chromeBridgeTokenFileEnvVar = "WILLDEEP_CHROME_BRIDGE_TOKEN_FILE"
 )
 
 type ChromeNativeHostMessage struct {
@@ -53,6 +65,8 @@ type ChromeNativeBridge struct {
 	pendingMu sync.Mutex
 	pending   map[string]chan ChromeNativeHostMessage
 	nextID    atomic.Uint64
+
+	token string
 }
 
 type ChromeBridgeRequest struct {
@@ -119,10 +133,23 @@ func (b *ChromeNativeBridge) startHTTPBridge(ctx context.Context) (*http.Server,
 	if err != nil {
 		return nil, nil, err
 	}
+	// Publish the token only after winning the port: a second Chrome
+	// profile's host that failed to bind must not overwrite the secret of
+	// the host that is actually serving.
+	token, err := newChromeBridgeToken()
+	if err != nil {
+		_ = listener.Close()
+		return nil, nil, err
+	}
+	if err := writeChromeBridgeToken(chromeBridgeTokenPath(), token); err != nil {
+		_ = listener.Close()
+		return nil, nil, fmt.Errorf("write chrome bridge token: %w", err)
+	}
+	b.token = token
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /chrome/health", b.handleHealth)
 	mux.HandleFunc("POST /chrome/request", b.handleRequest)
-	server := &http.Server{Handler: mux}
+	server := &http.Server{Handler: b.guard(mux, listener.Addr())}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -316,6 +343,94 @@ func chromeNativeHostCapabilities() []string {
 		"tab.capture",
 		"debugger.command",
 	}
+}
+
+// guard rejects anything that is not the WillDeep app talking to the bridge:
+// browser-originated requests (any Origin header), DNS-rebinding hosts, and
+// callers without the per-launch token.
+func (b *ChromeNativeBridge) guard(next http.Handler, addr net.Addr) http.Handler {
+	allowedHosts := chromeBridgeAllowedHosts(addr)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != "" {
+			writeError(w, http.StatusForbidden, "chrome bridge does not accept browser-originated requests")
+			return
+		}
+		if _, ok := allowedHosts[strings.ToLower(r.Host)]; !ok {
+			writeError(w, http.StatusForbidden, "chrome bridge rejected host "+r.Host)
+			return
+		}
+		provided := r.Header.Get(ChromeBridgeTokenHeader)
+		if b.token == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(b.token)) != 1 {
+			writeError(w, http.StatusUnauthorized, "chrome bridge token missing or invalid")
+			return
+		}
+		if r.Method == http.MethodPost {
+			mediaType := strings.TrimSpace(strings.SplitN(r.Header.Get("Content-Type"), ";", 2)[0])
+			if !strings.EqualFold(mediaType, "application/json") {
+				writeError(w, http.StatusUnsupportedMediaType, "chrome bridge requires application/json")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func chromeBridgeAllowedHosts(addr net.Addr) map[string]struct{} {
+	port := strconv.Itoa(chromeBridgePort())
+	if tcp, ok := addr.(*net.TCPAddr); ok {
+		port = strconv.Itoa(tcp.Port)
+	}
+	return map[string]struct{}{
+		net.JoinHostPort(defaultChromeBridgeHost, port): {},
+		net.JoinHostPort("localhost", port):             {},
+	}
+}
+
+func newChromeBridgeToken() (string, error) {
+	raw := make([]byte, chromeBridgeTokenBytes)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate chrome bridge token: %w", err)
+	}
+	return hex.EncodeToString(raw), nil
+}
+
+// chromeBridgeTokenPath is where the WillDeep app looks for the token; it
+// sits next to the native-host launcher the app installs.
+func chromeBridgeTokenPath() string {
+	if override := strings.TrimSpace(os.Getenv(chromeBridgeTokenFileEnvVar)); override != "" {
+		return override
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	return filepath.Join(home, "Library", "Application Support", "WillDeep", "ChromeNativeHost", chromeBridgeTokenFileName)
+}
+
+// writeChromeBridgeToken writes via a 0600 temp file + rename so the app
+// never reads a half-written token and no other user can read it.
+func writeChromeBridgeToken(path, token string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), chromeBridgeTokenFileName+".*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.WriteString(token); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func chromeBridgePort() int {
