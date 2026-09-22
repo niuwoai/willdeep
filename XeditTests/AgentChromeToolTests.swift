@@ -64,6 +64,35 @@ struct AgentChromeToolTests {
         #expect(debuggerApproval == nil)
     }
 
+    @Test("每个 Chrome 页面/标签页工具都能用 tab_id 指定标签页，列表和切换工具除外")
+    func chromePageToolsAcceptTabID() throws {
+        let targeted = [
+            "chrome_read_page", "chrome_read_selection", "chrome_snapshot", "chrome_navigate",
+            "chrome_history", "chrome_click", "chrome_type", "chrome_hover", "chrome_select_option",
+            "chrome_press_key", "chrome_scroll", "chrome_wait_for", "chrome_capture_tab",
+            "chrome_debugger_command",
+        ]
+        for name in targeted {
+            let descriptor = try #require(AgentToolRegistry.descriptor(for: name))
+            let tabID = try #require(descriptor.parameters.first { $0.name == "tab_id" }, "\(name) has no tab_id")
+            #expect(tabID.type == .integer)
+            #expect(!tabID.required)
+            #expect(!descriptor.description.contains("active Chrome tab"), "\(name) still says active tab")
+        }
+        #expect(try #require(AgentToolRegistry.descriptor(for: "chrome_list_tabs")).description.contains("agent_target"))
+        #expect(try #require(AgentToolRegistry.descriptor(for: "chrome_activate_tab")).parameters.first { $0.name == "tab_id" }?.required == true)
+    }
+
+    @Test("tab_id 解析：整数通过，缺省为 nil，非整数报错")
+    func chromeTargetTabIDParsing() throws {
+        #expect(try AgentChromeTools.targetTabID(["tab_id": .number(42)]) == 42)
+        #expect(try AgentChromeTools.targetTabID([:]) == nil)
+        #expect(try AgentChromeTools.targetTabID(["tab_id": .null]) == nil)
+        #expect(throws: AgentToolError.self) {
+            _ = try AgentChromeTools.targetTabID(["tab_id": .string("current")])
+        }
+    }
+
     @Test
     func chromeSnapshotAndRefActionsExposeFreshRefContract() throws {
         let snapshot = try #require(AgentToolRegistry.descriptor(for: "chrome_snapshot"))

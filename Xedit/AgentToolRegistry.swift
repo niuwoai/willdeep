@@ -1427,95 +1427,105 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "chrome_read_page",
-            description: "Read the active tab in the user's default Chrome profile through the WillDeep Browser extension. Returns URL, title, selected text, capped page text, link summaries, and form summaries. Does not read cookies or hidden form values. Read-only.",
+            description: "Read the Agent's tab in the user's default Chrome profile through the WillDeep Browser extension (the tab last navigated/activated, even if the user switched tabs since; tab_id targets another). Returns URL, title, selected text, capped page text, link summaries, form summaries, and tab_id. Does not read cookies or hidden form values. Read-only.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum page text characters to return. Defaults to 20000, capped at 100000.", required: false)
+                AgentToolParameter(name: "max_chars", type: .integer, description: "Maximum page text characters to return. Defaults to 20000, capped at 100000.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_read_selection",
-            description: "Read only the current text selection from the active Chrome tab through the WillDeep Browser extension. Read-only.",
+            description: "Read only the current text selection from the Agent's Chrome tab through the WillDeep Browser extension. Read-only.",
             risk: .read,
-            parameters: []
+            parameters: [AgentChromeTools.tabIDParameter]
         ),
         AgentToolDescriptor(
             name: "chrome_snapshot",
-            description: "Capture a structured DOM snapshot of the active Chrome tab with fresh element refs, accessible names, roles, focus/checked state, unique selector hints, and viewport rectangles. Sensitive input values are omitted. Read-only; use its fresh refs for the next browser action.",
+            description: "Capture a structured DOM snapshot of the Agent's Chrome tab with fresh element refs, accessible names, roles, focus/checked state, unique selector hints, and viewport rectangles. Sensitive input values are omitted. Read-only; use its fresh refs for the next browser action on the same tab.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "max_elements", type: .integer, description: "Maximum visible interactive/heading elements, from 1 to 600. Defaults to 240.", required: false)
+                AgentToolParameter(name: "max_elements", type: .integer, description: "Maximum visible interactive/heading elements, from 1 to 600. Defaults to 240.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_list_tabs",
-            description: "List Chrome tabs across windows with tab IDs, active/pinned state, title, and URL. Read-only and does not inspect cookies or storage.",
+            description: "List Chrome tabs across windows with tab IDs, active/pinned state, title, and URL. `agent_target` marks the tab page tools act on when tab_id is omitted. Read-only and does not inspect cookies or storage.",
             risk: .read,
             parameters: []
         ),
         AgentToolDescriptor(
             name: "chrome_activate_tab",
-            description: "Activate one Chrome tab by an ID returned from chrome_list_tabs and focus its window. Requires approval because it changes the user's browser focus.",
+            description: "Activate one Chrome tab by an ID returned from chrome_list_tabs, focus its window, and make it the Agent's tab. Requires approval because it changes the user's browser focus.",
             risk: .write,
             parameters: [AgentToolParameter(name: "tab_id", type: .integer, description: "Chrome tab ID from chrome_list_tabs.", required: true)]
         ),
         AgentToolDescriptor(
             name: "chrome_navigate",
-            description: "Navigate the active Chrome tab to an HTTP or HTTPS URL through the WillDeep Browser extension. Bare domains are normalized to HTTPS. Requires approval.",
+            description: "Navigate the Agent's Chrome tab to an HTTP or HTTPS URL through the WillDeep Browser extension and wait for it to load. The first navigation claims the active tab as the Agent's tab; later ones stay there even if the user switches tabs. Bare domains are normalized to HTTPS. Requires approval.",
             risk: .write,
-            parameters: [AgentToolParameter(name: "url", type: .string, description: "HTTP(S) URL or bare domain to open.", required: true)]
+            parameters: [
+                AgentToolParameter(name: "url", type: .string, description: "HTTP(S) URL or bare domain to open.", required: true),
+                AgentChromeTools.tabIDParameter
+            ]
         ),
         AgentToolDescriptor(
             name: "chrome_history",
-            description: "Go back, go forward, or reload the active Chrome tab. Requires approval because it changes page state.",
+            description: "Go back, go forward, or reload the Agent's Chrome tab. Requires approval because it changes page state.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "direction", type: .string, description: "back, forward, or reload.", required: true),
-                AgentToolParameter(name: "bypass_cache", type: .boolean, description: "For reload only, bypass Chrome's cache when true.", required: false)
+                AgentToolParameter(name: "bypass_cache", type: .boolean, description: "For reload only, bypass Chrome's cache when true.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_click",
-            description: "Click an element in the active Chrome tab using a fresh chrome_snapshot ref or a unique CSS selector. Fresh refs are preferred; ambiguous selectors are rejected. Requires approval because it changes browser state.",
+            description: "Click an element in the Agent's Chrome tab using a fresh chrome_snapshot ref or a unique CSS selector. Fresh refs are preferred; ambiguous selectors are rejected. Requires approval because it changes browser state.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref returned by chrome_snapshot.", required: false),
-                AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false)
+                AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_type",
-            description: "Focus an element and replace its text/value using React-compatible native value setters and input/change events. Accepts a fresh chrome_snapshot ref or unique CSS selector. Requires approval because it can edit web apps.",
+            description: "Focus an element in the Agent's Chrome tab and replace its text/value using React-compatible native value setters and input/change events. Accepts a fresh chrome_snapshot ref or unique CSS selector. Requires approval because it can edit web apps.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh editable element ref returned by chrome_snapshot.", required: false),
                 AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false),
-                AgentToolParameter(name: "text", type: .string, description: "Text to put into the target element.", required: true)
+                AgentToolParameter(name: "text", type: .string, description: "Text to put into the target element.", required: true),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_hover",
-            description: "Hover over an element using a fresh DOM ref or unique selector and dispatch pointer/mouse events. Useful for menus, tooltips, and hover-only controls. Requires approval because it changes visible page state.",
+            description: "Hover over an element in the Agent's Chrome tab using a fresh DOM ref or unique selector and dispatch pointer/mouse events. Useful for menus, tooltips, and hover-only controls. Requires approval because it changes visible page state.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref returned by chrome_snapshot.", required: false),
-                AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false)
+                AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_select_option",
-            description: "Select one native HTML option by exact value or visible label using a fresh DOM ref or unique selector. Dispatches React-compatible input/change events. Requires approval.",
+            description: "Select one native HTML option in the Agent's Chrome tab by exact value or visible label using a fresh DOM ref or unique selector. Dispatches React-compatible input/change events. Requires approval.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh select-element ref returned by chrome_snapshot.", required: false),
                 AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false),
                 AgentToolParameter(name: "value", type: .string, description: "Exact option value. Do not pass together with label.", required: false),
-                AgentToolParameter(name: "label", type: .string, description: "Exact visible option label. Do not pass together with value.", required: false)
+                AgentToolParameter(name: "label", type: .string, description: "Exact visible option label. Do not pass together with value.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_press_key",
-            description: "Dispatch a keyboard key to the focused Chrome element or a fresh DOM ref/selector, with optional modifiers. Tab moves focus, Escape blurs, Backspace/Delete edit text controls, and Enter can activate or submit. Requires approval.",
+            description: "Dispatch a keyboard key in the Agent's Chrome tab to its focused element or a fresh DOM ref/selector, with optional modifiers. Tab moves focus, Escape blurs, Backspace/Delete edit text controls, and Enter can activate or submit. Requires approval.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "key", type: .string, description: "KeyboardEvent key such as Enter, Escape, ArrowDown, or a.", required: true),
@@ -1525,43 +1535,47 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "alt_key", type: .boolean, description: "Hold Alt/Option.", required: false),
                 AgentToolParameter(name: "ctrl_key", type: .boolean, description: "Hold Control.", required: false),
                 AgentToolParameter(name: "meta_key", type: .boolean, description: "Hold Command/Meta.", required: false),
-                AgentToolParameter(name: "shift_key", type: .boolean, description: "Hold Shift.", required: false)
+                AgentToolParameter(name: "shift_key", type: .boolean, description: "Hold Shift.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_scroll",
-            description: "Scroll the active page, or a scrollable element selected by fresh DOM ref/unique selector. Requires approval because it changes the visible browser state.",
+            description: "Scroll the Agent's Chrome tab, or a scrollable element selected by fresh DOM ref/unique selector. Requires approval because it changes the visible browser state.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "direction", type: .string, description: "up, down, left, or right.", required: true),
                 AgentToolParameter(name: "pages", type: .integer, description: "1 through 8 viewport pages; defaults to 1.", required: false),
                 AgentToolParameter(name: "ref", type: .string, description: "Optional fresh scrollable element ref.", required: false),
-                AgentToolParameter(name: "selector", type: .string, description: "Optional unique CSS selector fallback.", required: false)
+                AgentToolParameter(name: "selector", type: .string, description: "Optional unique CSS selector fallback.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_wait_for",
-            description: "Wait for the active Chrome page to match a selector, visible text, URL substring, or title substring. Read-only and capped at eight seconds; use after navigation, click, or form actions.",
+            description: "Wait for the Agent's Chrome tab to match a selector, visible text, URL substring, or title substring. Read-only and capped at eight seconds; use after navigation, click, or form actions.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "condition", type: .string, description: "selector, text, url_contains, or title_contains.", required: true),
                 AgentToolParameter(name: "value", type: .string, description: "Condition value to wait for.", required: true),
-                AgentToolParameter(name: "timeout_ms", type: .integer, description: "Timeout from 100 to 8000 milliseconds. Defaults to 8000.", required: false)
+                AgentToolParameter(name: "timeout_ms", type: .integer, description: "Timeout from 100 to 8000 milliseconds. Defaults to 8000.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_capture_tab",
-            description: "Capture the visible area of the active Chrome tab through the WillDeep Browser extension and return it as an image attachment. This read-only capture runs without a WillDeep confirmation card.",
+            description: "Capture the visible area of the Agent's Chrome tab through the WillDeep Browser extension and return it as an image attachment. Chrome can only capture the tab its window is showing: if the Agent's tab is in the background this fails with instructions (activate it first, or use chrome_read_page / chrome_snapshot, which work on background tabs) rather than switching tabs behind the user's back. This read-only capture runs without a WillDeep confirmation card.",
             risk: .read,
-            parameters: []
+            parameters: [AgentChromeTools.tabIDParameter]
         ),
         AgentToolDescriptor(
             name: "chrome_debugger_command",
-            description: "Run an explicit Chrome DevTools Protocol command against the active tab through chrome.debugger. This is high risk and should only be used when normal page tools are insufficient.",
+            description: "Run an explicit Chrome DevTools Protocol command against the Agent's Chrome tab through chrome.debugger. This is high risk and should only be used when normal page tools are insufficient.",
             risk: .danger,
             parameters: [
                 AgentToolParameter(name: "method", type: .string, description: "CDP method name, e.g. `Runtime.evaluate` or `Page.captureScreenshot`.", required: true),
-                AgentToolParameter(name: "params_json", type: .string, description: "JSON object string for CDP params. Defaults to `{}`.", required: false)
+                AgentToolParameter(name: "params_json", type: .string, description: "JSON object string for CDP params. Defaults to `{}`.", required: false),
+                AgentChromeTools.tabIDParameter
             ]
         ),
         AgentToolDescriptor(

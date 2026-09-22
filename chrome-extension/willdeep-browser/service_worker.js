@@ -100,37 +100,37 @@ async function handleRuntimeMessage(message) {
     case "native.ping":
       return nativePing();
     case "page.read":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "readPage", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "readPage", message.payload));
     case "page.selection":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "readSelection", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "readSelection", message.payload));
     case "page.snapshot":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "snapshot", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "snapshot", message.payload));
     case "page.click":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "clickSelector", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "clickSelector", message.payload));
     case "page.type":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "typeSelector", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "typeSelector", message.payload));
     case "page.hover":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "hoverSelector", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "hoverSelector", message.payload));
     case "page.select_option":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "selectOption", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "selectOption", message.payload));
     case "page.key":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "pressKey", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "pressKey", message.payload));
     case "page.scroll":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "scrollPage", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "scrollPage", message.payload));
     case "page.wait":
-      return withActiveTab((tab) => sendContentCommand(tab.id, "waitFor", message.payload));
+      return withAgentTab(message.payload, (tab) => sendContentCommand(tab.id, "waitFor", message.payload));
     case "tab.list":
       return listTabs();
     case "tab.activate":
       return activateTab(message.payload || {});
     case "tab.navigate":
-      return navigateActiveTab(message.payload || {});
+      return navigateAgentTab(message.payload || {});
     case "tab.history":
       return navigateHistory(message.payload || {});
     case "tab.capture":
-      return captureActiveTab();
+      return captureAgentTab(message.payload || {});
     case "debugger.command":
-      return withActiveTab((tab) => debuggerCommand(tab.id, message.payload));
+      return withAgentTab(message.payload, (tab) => debuggerCommand(tab.id, message.payload));
     case "update.status":
       return {
         ok: true,
@@ -250,12 +250,74 @@ function handleNativeMessage(message) {
     .catch((error) => nativePort?.postMessage({ reply_to: message.id, ok: false, error: String(error?.message || error) }));
 }
 
-async function withActiveTab(action) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) {
-    return { ok: false, error: "no active tab" };
+// The tab the Agent is working in. Every command used to re-query the active
+// tab, so a user switching tabs between a snapshot and a type sent the text
+// into whatever page they were looking at. Kept in storage.session so a
+// service-worker restart does not forget it.
+const AGENT_TAB_KEY = "willdeepAgentTabId";
+
+async function pinAgentTab(tabId) {
+  await chrome.storage.session.set({ [AGENT_TAB_KEY]: tabId });
+}
+
+async function pinnedAgentTabId() {
+  const stored = await chrome.storage.session.get(AGENT_TAB_KEY);
+  const tabId = stored?.[AGENT_TAB_KEY];
+  return Number.isInteger(tabId) ? tabId : null;
+}
+
+async function activeTab() {
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  return tab?.id ? tab : null;
+}
+
+// Resolution order: explicit tabId → pinned Agent tab → active tab (which
+// then becomes the pinned one). `retargeted` says the pinned tab was gone.
+async function resolveAgentTab(payload = {}) {
+  // The popup's own buttons act for the user on the page they are looking
+  // at; they must neither read the Agent's tab nor move its pin.
+  if (payload.useActiveTab === true) {
+    const tab = await activeTab();
+    if (!tab) throw new Error("no active tab");
+    return { tab, retargeted: false };
   }
-  return action(tab);
+  const explicit = Number(payload.tabId);
+  if (payload.tabId !== undefined && payload.tabId !== null && payload.tabId !== "") {
+    if (!Number.isInteger(explicit)) throw new Error("tabId must be an integer tab id from chrome_list_tabs");
+    const tab = await chrome.tabs.get(explicit).catch(() => null);
+    if (!tab) throw new Error(`tab ${explicit} no longer exists; call chrome_list_tabs`);
+    await pinAgentTab(tab.id);
+    return { tab, retargeted: false };
+  }
+  const pinnedId = await pinnedAgentTabId();
+  if (pinnedId !== null) {
+    const pinned = await chrome.tabs.get(pinnedId).catch(() => null);
+    if (pinned) return { tab: pinned, retargeted: false };
+  }
+  const tab = await activeTab();
+  if (!tab) throw new Error("no active tab");
+  await pinAgentTab(tab.id);
+  return { tab, retargeted: pinnedId !== null };
+}
+
+function describeTarget(tab, retargeted) {
+  const target = { tab_id: tab.id, tab_title: tab.title || "", tab_url: tab.url || tab.pendingUrl || "" };
+  if (retargeted) target.retargeted = "The previous Agent tab was closed; now working in the active tab.";
+  return target;
+}
+
+async function withAgentTab(payload, action) {
+  let resolved;
+  try {
+    resolved = await resolveAgentTab(payload || {});
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) };
+  }
+  const result = await action(resolved.tab);
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    return { ...result, ...describeTarget(resolved.tab, resolved.retargeted) };
+  }
+  return result;
 }
 
 async function ensureContentScript(tabId) {
@@ -276,13 +338,16 @@ async function sendContentCommand(tabId, command, payload = {}) {
 
 async function listTabs() {
   const tabs = await chrome.tabs.query({});
+  const agentTabId = await pinnedAgentTabId();
   return {
     ok: true,
+    agent_tab_id: agentTabId,
     tabs: tabs.map((tab) => ({
       id: tab.id,
       window_id: tab.windowId,
       active: Boolean(tab.active),
       pinned: Boolean(tab.pinned),
+      agent_target: tab.id === agentTabId,
       title: tab.title || "",
       url: tab.url || ""
     }))
@@ -294,22 +359,29 @@ async function activateTab(payload) {
   if (!Number.isInteger(tabId)) return { ok: false, error: "missing tabId" };
   const tab = await chrome.tabs.update(tabId, { active: true });
   if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true });
-  return { ok: true, tab: { id: tab.id, window_id: tab.windowId, title: tab.title || "", url: tab.url || "" } };
+  await pinAgentTab(tab.id);
+  return { ok: true, tab: { id: tab.id, window_id: tab.windowId, title: tab.title || "", url: tab.url || "" }, tab_id: tab.id };
 }
 
-async function navigateActiveTab(payload) {
+async function navigateAgentTab(payload) {
   const url = normalizeNavigationURL(payload.url);
-  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!active?.id) return { ok: false, error: "no active tab" };
-  await chrome.tabs.update(active.id, { url });
+  let resolved;
+  try {
+    resolved = await resolveAgentTab(payload);
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) };
+  }
+  const tabId = resolved.tab.id;
+  await chrome.tabs.update(tabId, { url });
   // tabs.update resolves before the navigation commits; returning then let a
   // follow-up page.read hit the old document's content script.
-  const settled = await waitForTabComplete(active.id, NAVIGATION_SETTLE_TIMEOUT_MS);
-  const tab = await chrome.tabs.get(active.id);
+  const settled = await waitForTabComplete(tabId, NAVIGATION_SETTLE_TIMEOUT_MS);
+  const tab = await chrome.tabs.get(tabId);
   return {
     ok: true,
     settled,
-    tab: { id: tab.id, title: tab.title || "", url: tab.url || tab.pendingUrl || url, status: tab.status || "" }
+    tab: { id: tab.id, title: tab.title || "", url: tab.url || tab.pendingUrl || url, status: tab.status || "" },
+    ...describeTarget(tab, resolved.retargeted)
   };
 }
 
@@ -339,13 +411,15 @@ function waitForTabComplete(tabId, timeoutMs) {
 
 async function navigateHistory(payload) {
   const direction = String(payload.direction || "reload").toLowerCase();
-  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!active?.id) return { ok: false, error: "no active tab" };
-  if (direction === "back") await chrome.tabs.goBack(active.id);
-  else if (direction === "forward") await chrome.tabs.goForward(active.id);
-  else if (direction === "reload") await chrome.tabs.reload(active.id, { bypassCache: Boolean(payload.bypassCache) });
-  else return { ok: false, error: "direction must be back, forward, or reload" };
-  return { ok: true, tab_id: active.id, direction };
+  if (!["back", "forward", "reload"].includes(direction)) {
+    return { ok: false, error: "direction must be back, forward, or reload" };
+  }
+  return withAgentTab(payload, async (tab) => {
+    if (direction === "back") await chrome.tabs.goBack(tab.id);
+    else if (direction === "forward") await chrome.tabs.goForward(tab.id);
+    else await chrome.tabs.reload(tab.id, { bypassCache: Boolean(payload.bypassCache) });
+    return { ok: true, direction };
+  });
 }
 
 function normalizeNavigationURL(value) {
@@ -357,17 +431,23 @@ function normalizeNavigationURL(value) {
   return url.href;
 }
 
-async function captureActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.windowId) {
-    return { ok: false, error: "no active tab" };
-  }
-  const dataURL = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
-  return {
-    ok: true,
-    tab: { id: tab.id, title: tab.title, url: tab.url },
-    image_data_url: dataURL
-  };
+async function captureAgentTab(payload) {
+  return withAgentTab(payload, async (tab) => {
+    // captureVisibleTab can only grab the tab a window is showing. Switching
+    // tabs behind the user's back would steal focus, so say what to do.
+    if (!tab.active) {
+      return {
+        ok: false,
+        error: `The Agent's tab ${tab.id} ("${tab.title || tab.url || ""}") is not the visible tab in its window. Call chrome_activate_tab with tab_id ${tab.id} first, or read it with chrome_read_page / chrome_snapshot, which work on background tabs.`
+      };
+    }
+    const dataURL = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+    return {
+      ok: true,
+      tab: { id: tab.id, title: tab.title, url: tab.url },
+      image_data_url: dataURL
+    };
+  });
 }
 
 async function debuggerCommand(tabId, payload = {}) {

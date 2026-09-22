@@ -85,6 +85,9 @@ enum AgentSandboxAuditLog {
         if let method = arguments["method"]?.stringValue() {
             parts.append("method=\(method)")
         }
+        if let tabID = arguments["tab_id"]?.intValue() {
+            parts.append("tab_id=\(tabID)")
+        }
         if let key = arguments["key"]?.stringValue() {
             parts.append("key=\(key)")
         }

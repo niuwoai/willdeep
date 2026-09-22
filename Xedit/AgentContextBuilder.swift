@@ -170,7 +170,7 @@ enum AgentContextBuilder {
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
         "de0913b455cef3e8",
-        "443358d67431bddf",
+        "ad54cdd6ca789919",
         "194138f1960f9dfa",
         "596d1256f025a84e",
     ]
@@ -742,7 +742,7 @@ enum AgentContextBuilder {
     static let browserUICapabilityBlock = """
     Browser and UI QA:
     - Pick the lightest surface: web_fetch for a public URL you only need to read; embedded_browser_* when the page needs JavaScript, interaction or a rendered view; chrome_* only when the user's own logged-in Chrome session is needed; computer_use_* for native apps.
-    - chrome_* can list/activate tabs, navigate, take fresh DOM snapshots, wait, click/type/hover/select options by ref, press keys with native focus/edit fallbacks, scroll, and capture the active tab.
+    - chrome_* can list/activate tabs, navigate, take fresh DOM snapshots, wait, click/type/hover/select options by ref, press keys with native focus/edit fallbacks, scroll, and capture a tab. Page tools stay on the Agent's tab (the one last navigated or activated) even if the user switches tabs; pass tab_id to work in another.
     - embedded_browser_* navigates, reads the page, snapshots elements, clicks/types by CSS selector, presses keys, scrolls, uploads workspace files, waits, evaluates JavaScript, captures screenshots, and inspects console/network/storage/performance.
     - When a site blocks automation — captcha, security verification (e.g. 百度安全验证), login wall, rate limit; page reads flag these with `blocked_by_site` — stop and tell the user what you saw, then let them take over or pick another source. Never get around it with spoofed user agents, proxies, third-party scraping relays, curl replays or OCR.
     - Pure screenshot capture is read-only and does not need a WillDeep confirmation card.

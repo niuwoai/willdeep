@@ -50,16 +50,18 @@ localize();
 checkHost();
 checkUpdateStatus();
 
+// Popup buttons act on the page the user is looking at, not on the tab the
+// Agent is working in, and must not move the Agent's pinned tab.
 document.getElementById("read-page").addEventListener("click", async () => {
-  showResult(await request("page.read"));
+  showResult(await request("page.read", { useActiveTab: true }));
 });
 
 document.getElementById("read-selection").addEventListener("click", async () => {
-  showResult(await request("page.selection"));
+  showResult(await request("page.selection", { useActiveTab: true }));
 });
 
 document.getElementById("capture-tab").addEventListener("click", async () => {
-  showResult(await request("tab.capture"));
+  showResult(await request("tab.capture", { useActiveTab: true }));
 });
 
 document.getElementById("update-banner").addEventListener("click", () => {

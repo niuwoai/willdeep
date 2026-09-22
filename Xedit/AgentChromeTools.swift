@@ -60,7 +60,8 @@ enum AgentChromeTools {
         let maxChars = arguments["max_chars"]?.intValue().map { max(1_000, min($0, 100_000)) } ?? 20_000
         let data = try await bridgeRequest(
             type: "page.read",
-            payload: ["maxChars": maxChars]
+            payload: ["maxChars": maxChars],
+            targeting: arguments
         )
         guard var page = data as? [String: Any] else {
             return AgentToolResult(summary: "Read active Chrome tab", payload: prettyJSONString(data))
@@ -70,13 +71,13 @@ enum AgentChromeTools {
     }
 
     static func readSelection(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let data = try await bridgeRequest(type: "page.selection", payload: [:])
+        let data = try await bridgeRequest(type: "page.selection", payload: [:], targeting: arguments)
         return AgentToolResult(summary: "Read Chrome selection", payload: prettyJSONString(data))
     }
 
     static func snapshot(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let maxElements = arguments["max_elements"]?.intValue().map { max(1, min($0, 600)) } ?? 240
-        let data = try await bridgeRequest(type: "page.snapshot", payload: ["maxElements": maxElements])
+        let data = try await bridgeRequest(type: "page.snapshot", payload: ["maxElements": maxElements], targeting: arguments)
         return AgentToolResult(summary: "Captured structured Chrome DOM snapshot", payload: prettyJSONString(data))
     }
 
@@ -96,9 +97,10 @@ enum AgentChromeTools {
         let data = try await bridgeRequest(
             type: "tab.navigate",
             payload: ["url": url],
-            timeout: navigationRequestTimeout
+            timeout: navigationRequestTimeout,
+            targeting: arguments
         )
-        return AgentToolResult(summary: "Navigated active Chrome tab", payload: prettyJSONString(data))
+        return AgentToolResult(summary: "Navigated the Agent's Chrome tab", payload: prettyJSONString(data))
     }
 
     static func history(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
@@ -108,7 +110,8 @@ enum AgentChromeTools {
         }
         let data = try await bridgeRequest(
             type: "tab.history",
-            payload: ["direction": direction, "bypassCache": arguments["bypass_cache"]?.boolValue() ?? false]
+            payload: ["direction": direction, "bypassCache": arguments["bypass_cache"]?.boolValue() ?? false],
+            targeting: arguments
         )
         return AgentToolResult(summary: "Changed Chrome navigation history", payload: prettyJSONString(data))
     }
@@ -117,7 +120,8 @@ enum AgentChromeTools {
         let target = try elementTargetPayload(arguments)
         let data = try await bridgeRequest(
             type: "page.click",
-            payload: target
+            payload: target,
+            targeting: arguments
         )
         return AgentToolResult(summary: "Clicked Chrome element", payload: prettyJSONString(data))
     }
@@ -128,14 +132,15 @@ enum AgentChromeTools {
         payload["text"] = text
         let data = try await bridgeRequest(
             type: "page.type",
-            payload: payload
+            payload: payload,
+            targeting: arguments
         )
         return AgentToolResult(summary: "Typed into Chrome element", payload: prettyJSONString(data))
     }
 
     static func hover(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let target = try elementTargetPayload(arguments)
-        let data = try await bridgeRequest(type: "page.hover", payload: target)
+        let data = try await bridgeRequest(type: "page.hover", payload: target, targeting: arguments)
         return AgentToolResult(summary: "Hovered over Chrome element", payload: prettyJSONString(data))
     }
 
@@ -151,7 +156,7 @@ enum AgentChromeTools {
         }
         if !value.isEmpty { payload["value"] = value }
         if !label.isEmpty { payload["label"] = label }
-        let data = try await bridgeRequest(type: "page.select_option", payload: payload)
+        let data = try await bridgeRequest(type: "page.select_option", payload: payload, targeting: arguments)
         return AgentToolResult(summary: "Selected Chrome option", payload: prettyJSONString(data))
     }
 
@@ -165,7 +170,7 @@ enum AgentChromeTools {
         ] {
             if let value = arguments[source] { payload[destination] = value.rawAny }
         }
-        let data = try await bridgeRequest(type: "page.key", payload: payload)
+        let data = try await bridgeRequest(type: "page.key", payload: payload, targeting: arguments)
         return AgentToolResult(summary: "Pressed a key in Chrome", payload: prettyJSONString(data))
     }
 
@@ -177,7 +182,7 @@ enum AgentChromeTools {
         var payload = try optionalElementTargetPayload(arguments)
         payload["direction"] = direction
         if let pages = arguments["pages"]?.intValue() { payload["pages"] = max(1, min(pages, 8)) }
-        let data = try await bridgeRequest(type: "page.scroll", payload: payload)
+        let data = try await bridgeRequest(type: "page.scroll", payload: payload, targeting: arguments)
         return AgentToolResult(summary: "Scrolled Chrome page", payload: prettyJSONString(data))
     }
 
@@ -190,13 +195,14 @@ enum AgentChromeTools {
         let timeoutMS = max(100, min(arguments["timeout_ms"]?.intValue() ?? 8_000, 8_000))
         let data = try await bridgeRequest(
             type: "page.wait",
-            payload: ["condition": condition, "value": value, "timeoutMs": timeoutMS]
+            payload: ["condition": condition, "value": value, "timeoutMs": timeoutMS],
+            targeting: arguments
         )
         return AgentToolResult(summary: "Waited for Chrome page condition", payload: prettyJSONString(data))
     }
 
     static func captureTab(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let data = try await bridgeRequest(type: "tab.capture", payload: [:])
+        let data = try await bridgeRequest(type: "tab.capture", payload: [:], targeting: arguments)
         guard var object = data as? [String: Any],
               let dataURL = object.removeValue(forKey: "image_data_url") as? String,
               let comma = dataURL.firstIndex(of: ","),
@@ -229,16 +235,41 @@ enum AgentChromeTools {
                 "method": method,
                 "params": paramsValue.rawAny,
                 "protocolVersion": "1.3",
-            ]
+            ],
+            targeting: arguments
         )
         return AgentToolResult(summary: "Ran Chrome debugger command", payload: prettyJSONString(data))
+    }
+
+    /// Shared optional parameter for every page/tab tool.
+    static let tabIDParameter = AgentToolParameter(
+        name: "tab_id",
+        type: .integer,
+        description: "Optional tab id from chrome_list_tabs. Omit it to keep working in the Agent's tab (the one last navigated or activated, marked agent_target) even if the user switched tabs; passing it makes that tab the Agent's tab.",
+        required: false
+    )
+
+    /// Optional `tab_id` from a page/tab tool's arguments. Without it the
+    /// extension uses the tab the Agent is already working in (pinned by
+    /// navigate / activate / first use), not whatever tab is in front.
+    static func targetTabID(_ arguments: [String: AgentJSONValue]) throws -> Int? {
+        guard let raw = arguments["tab_id"], raw != .null else { return nil }
+        guard let tabID = raw.intValue() else {
+            throw AgentToolError.invalidArgument("tab_id must be an integer tab id from chrome_list_tabs.")
+        }
+        return tabID
     }
 
     private static func bridgeRequest(
         type: String,
         payload: [String: Any],
-        timeout: TimeInterval = requestTimeout
+        timeout: TimeInterval = requestTimeout,
+        targeting arguments: [String: AgentJSONValue]? = nil
     ) async throws -> Any {
+        var payload = payload
+        if let arguments, let tabID = try targetTabID(arguments) {
+            payload["tabId"] = tabID
+        }
         let body: [String: Any] = [
             "type": type,
             "payload": payload,

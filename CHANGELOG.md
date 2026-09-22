@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.397.0-rc2 - 2026-09-22
+
+### Fixed
+
+- **Chrome 工具不再跟着你切换的标签页走。** 以前扩展每执行一条命令都重新查一次"当前活动标签页"：Agent 刚对 A 页做完 snapshot，你切到 B 页，接下来的 type 就把文字输进了 B 页；截图、导航、调试命令也一样。现在扩展会记住 Agent 正在操作的标签页（存在 `chrome.storage.session` 里，service worker 休眠重启也不会丢），每条命令按下面的顺序决定目标：
+  1. 显式传入的 `tab_id`（这个标签页同时成为 Agent 的标签页）；
+  2. 已锁定的 Agent 标签页；
+  3. 当前活动标签页，并把它锁定下来。
+
+  `chrome_activate_tab` 和 `chrome_navigate` 会更新锁定目标。
+- **14 个 Chrome 页面 / 标签页工具新增可选参数 `tab_id`**：read_page、read_selection、snapshot、navigate、history、click、type、hover、select_option、press_key、scroll、wait_for、capture_tab、debugger_command。
+  - 每个结果都带上 `tab_id`、`tab_title`、`tab_url`，模型能看到自己操作的是哪个页面。
+  - 锁定的标签页被关掉时，改用当前活动标签页，并在结果里用 `retargeted` 说明。
+  - 显式传了一个已经不存在的 `tab_id` 会直接报错，不会悄悄换成别的页面。
+  - `chrome_list_tabs` 返回 `agent_tab_id`，每个标签页带 `agent_target` 标记。
+- **截图不再在后台抢你的标签页。** Chrome 的截图 API 只能截窗口里正在显示的那个标签页。Agent 的标签页在后台时，`chrome_capture_tab` 会明确报错并给出办法：先 `chrome_activate_tab`，或者改用在后台标签页也能用的 read_page / snapshot。
+- **扩展 popup 里的"读取页面 / 读取选区 / 截图"按钮**仍然作用于你正在看的页面（带 `useActiveTab`），不会读 Agent 的标签页，也不会改变锁定目标。
+- 工具描述、浏览器能力块和审计摘要（新增 `tab_id=`）同步更新；能力块只更新了浏览器块的哈希快照。
+- **需要在 chrome://extensions 里重新加载 WillDeep Browser 扩展后才生效。**
+- 测试：
+  - 新增 Ruby 行为测试 `scripts/chrome_extension_agent_tab_test.rb`，已登记进 CI 的 interaction 守卫组。它用 Node 加载真实的 service_worker.js，注入模拟的 chrome API，走一遍 11 个场景：首次命令锁定活动标签页、用户中途切换标签页后输入仍落在 Agent 的页面、popup 读用户的页面且不改锁定、后台标签页截图被拒而不抢焦点、导航留在 Agent 的标签页并等加载完、显式 tabId 改锁定、未知 tabId 报错、列表标记、锁定的标签页被关掉后回退并说明、activate 锁定、前台标签页截图正常。输出 JSON 和 Markdown 两份报告。
+  - 反验：用修改前的 service_worker.js 跑同一套测试，11 项全部失败，其中复现了"用户切换标签页后，Agent 的输入落到了用户的页面上"。
+  - `AgentChromeToolTests` 新增两项：14 个工具都有可选的 `tab_id` 且描述不再写"active Chrome tab"；`tab_id` 的解析。
+
 ## 1.397.0-rc1 - 2026-09-22
 
 ### Added

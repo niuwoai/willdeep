@@ -33,6 +33,7 @@ def guard_groups(output_dir)
 
   computer_use_md, computer_use_json = report_paths(output_dir, "computer_use_helper_contract")
   chrome_md, chrome_json = report_paths(output_dir, "chrome_extension_contract")
+  chrome_tab_md, chrome_tab_json = report_paths(output_dir, "chrome_extension_agent_tab")
   widget_md, widget_json = report_paths(output_dir, "widget_side_panel")
   plugin_command_md, plugin_command_json = report_paths(output_dir, "plugin_command")
   roundtable_md, roundtable_json = report_paths(output_dir, "roundtable_interaction_contract")
@@ -102,6 +103,10 @@ def guard_groups(output_dir)
         command("computer_use_helper_contract_test.rb", computer_use_md, computer_use_json)
       ],
       ["chrome-extension", command("chrome_extension_contract_test.rb", chrome_md, chrome_json)],
+      [
+        "chrome-extension-agent-tab",
+        command("chrome_extension_agent_tab_test.rb", chrome_tab_md, chrome_tab_json)
+      ],
       ["widget-side-panel", command("widget_side_panel_contract_test.rb", widget_md, widget_json)],
       [
         "plugin-command",

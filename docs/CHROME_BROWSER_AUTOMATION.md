@@ -80,6 +80,26 @@ rejects requests with an `Origin` header (web pages), a `Host` other than
 are not `application/json` (CORS-simple `text/plain` posts). A host that fails
 to bind the port — e.g. a second Chrome profile — does not touch the token.
 
+Agent tab (1.397.0-rc2):
+
+- Page and tab commands no longer re-query "the active tab" each time. The
+  extension keeps the tab the Agent is working in (`willdeepAgentTabId` in
+  `chrome.storage.session`, so a service-worker restart keeps it) and targets,
+  in order: an explicit `payload.tabId` (which also becomes the Agent's tab),
+  the pinned Agent tab, or the active tab (which then gets pinned).
+  `tab.activate` and `tab.navigate` move the pin. A user switching tabs
+  mid-task therefore no longer redirects the Agent's clicks and typing.
+- Every targeted response carries `tab_id`, `tab_title`, `tab_url`; if the
+  pinned tab was closed the command falls back to the active tab and adds a
+  `retargeted` note. An unknown explicit `tabId` is an error, never a silent
+  fallback. `tab.list` reports `agent_tab_id` and an `agent_target` flag.
+- `tab.capture` can only grab the tab a window is showing, so a background
+  Agent tab is refused with instructions instead of switching the user's tab.
+- The popup's own buttons send `useActiveTab: true`: they act on the page the
+  user is looking at and never move the Agent's pin.
+- Behavior is covered by `scripts/chrome_extension_agent_tab_test.rb`, which
+  loads the real service worker in Node with a fake `chrome` API.
+
 Resilience (1.396.0-rc5):
 
 - A host that loses the port race retries the bind every 5 s, so closing the
