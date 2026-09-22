@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.401.0-rc1 - 2026-09-22
+
+### Added
+
+- **只读的页面脚本不再弹确认。** 如果 `embedded_browser_eval` 的脚本只是在读 DOM（`querySelectorAll`、`innerText`、`getAttribute` 之类），即使这个网站还没授权，也会直接执行。判定用新的 `AgentBrowserScriptClassifier`，这是一份确定性的黑名单，下面这些写法**不算只读**，照旧走网站授权：
+  - 发请求：`fetch`、`XMLHttpRequest`、`sendBeacon`、`WebSocket`、`new Image`、给 `src` 赋值等；
+  - 跳转：给 `location` 赋值或调用 `assign` / `replace`、`window.open`、`history.pushState`、`postMessage`；
+  - 页面动作：`.click()`、`.submit()`、`dispatchEvent`、`execCommand`、剪贴板 / 凭据等 `navigator` 能力；
+  - 改页面：给 `value` / `innerHTML` / `textContent` 等赋值，改 `style` / `classList`，`setAttribute`，`appendChild`、`remove()` 等增删节点；
+  - 写存储：写 `document.cookie`、`localStorage.setItem`、`indexedDB`、`caches`；
+  - 动态执行和混淆：`eval`、`Function`、字符串形式的 `setTimeout`、`import()`、`atob`、`\u` / `\x` 转义、`window['fe'+'tch']`、`constructor`、`Reflect` / `Proxy`、`Worker` / `Blob`。
+- 选了严格模式（每次都问）时照旧询问。脚本里带密钥占位符 `${secret:` 的不免确认，因为页面可以劫持 DOM 函数，看到解析后的值。
+- 失败时一律按“非只读”处理，不会因此放宽：任何一条规则编译失败、脚本为空、或脚本超过 20000 字符。
+- 设计记录 `docs/EMBEDDED_BROWSER_SITE_AUTHORIZATION.md` 改写成完整的 4 步计划（提取工具、只读脚本、网站授权 + 有后果的动作、独立浏览器）。
+- 测试：新增 `AgentBrowserScriptClassifierTests`。
+  - 百度任务里模型真实写的 4 段脚本都判为只读；比较、箭头函数、`Array.prototype.map.call`、读样式等常见写法不误伤。
+  - 31 种有副作用或混淆的写法都能拦下，并给出正确的原因。
+  - 空脚本、超长脚本不做分类；所有规则都能编译。
+  - 审批链路：只读脚本在没授权的网站上是 `staticAllowlist`；点击脚本、带密钥占位符的脚本仍然要确认；严格模式仍然询问。
+
 ## 1.400.0-rc1 - 2026-09-22
 
 ### Added

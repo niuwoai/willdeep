@@ -680,6 +680,17 @@ extension AppState {
             return nil
         }
 
+        // A page script that only reads the DOM needs no card, even on a site
+        // without a grant; anything else falls through to site authorization.
+        // A script carrying a secret placeholder is never free: the page can
+        // hook DOM functions and observe the resolved value.
+        if toolName == "embedded_browser_eval",
+           let javascript = arguments["javascript"]?.stringValue(),
+           !javascript.contains(AgentSecretStore.placeholderPrefix),
+           AgentBrowserScriptClassifier.isReadOnly(javascript) {
+            return .staticAllowlist
+        }
+
         // Delegated coding agents can modify many files in one call. Smart
         // review and Workspace Access both let workspace-scoped delegated
         // work pass WillDeep's outer gate; the delegated runner keeps its own
