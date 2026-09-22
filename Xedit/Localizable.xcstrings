@@ -79068,6 +79068,41 @@
         }
       }
     },
+    "tool-card.authorization.browser.consequential-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "\"%@\" looks like it sends, deletes, pays or signs in, so it is confirmed even on a site you allowed."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "\"%@\" parece enviar, eliminar, pagar o iniciar sesión, así que se confirma aunque hayas permitido este sitio."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "« %@ » semble envoyer, supprimer, payer ou se connecter : une confirmation est demandée même sur un site autorisé."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」は送信・削除・支払い・ログインなどの操作に見えるため、許可済みのサイトでも確認します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”看起来是发送、删除、付款或登录这类操作，所以即使已允许这个网站也要确认。"
+          }
+        }
+      }
+    },
     "tool-card.authorization.browser.debugger-note" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -161,10 +161,15 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     /// controller as a side effect. The @browser mention used to read the
     /// unused `shared` controller and so always reported "no page".
     static func currentURL(for runtimeID: UUID?) -> String {
-        guard let runtimeID else { return shared.currentURL }
-        guard let controllers = runtimeControllers[runtimeID] else { return "" }
+        existingController(for: runtimeID)?.currentURL ?? ""
+    }
+
+    /// The session's active browser controller, if one exists; never creates one.
+    static func existingController(for runtimeID: UUID?) -> AgentEmbeddedBrowserController? {
+        guard let runtimeID else { return shared }
+        guard let controllers = runtimeControllers[runtimeID] else { return nil }
         let tabID = activeTabIDs[runtimeID] ?? legacyTabID
-        return (controllers[tabID] ?? controllers.values.first)?.currentURL ?? ""
+        return controllers[tabID] ?? controllers.values.first
     }
 
     @discardableResult

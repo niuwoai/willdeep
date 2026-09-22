@@ -571,7 +571,13 @@ nonisolated enum AgentComputerUsePolicy {
     ) -> AgentComputerUseConsequence? {
         let purpose = arguments["purpose"]?.stringValue() ?? ""
         let label = arguments["target_label"]?.stringValue() ?? ""
-        let haystack = "\(purpose) \(label)".lowercased()
+        return consequence(describedBy: "\(purpose) \(label)")
+    }
+
+    /// Keyword inference shared by Computer Use and embedded browser clicks:
+    /// what a control labelled / described by `text` would commit to.
+    static func consequence(describedBy text: String) -> AgentComputerUseConsequence? {
+        let haystack = text.lowercased()
         guard !haystack.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }

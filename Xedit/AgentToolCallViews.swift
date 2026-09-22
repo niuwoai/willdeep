@@ -1765,7 +1765,10 @@ struct AgentToolCallCard: View {
     }
 
     private var conversationAllowSignature: String? {
-        guard call.risk == .write else { return nil }
+        guard call.risk == .write,
+              AgentToolAuthorization.embeddedBrowserActionConsequence(
+                  toolName: call.toolName, arguments: call.arguments
+              ) == nil else { return nil }
         return AgentToolAuthorization.interactiveSurfaceSignature(
             toolName: call.toolName
         )

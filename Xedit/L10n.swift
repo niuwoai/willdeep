@@ -1577,6 +1577,10 @@ nonisolated enum L10n {
         static let browserEmbeddedAuthorizationQuestion = String(localized: "tool-card.authorization.browser.embedded-question", defaultValue: "Allow WillDeep to control Browser?")
         static let browserDebuggerAuthorizationNote = String(localized: "tool-card.authorization.browser.debugger-note", defaultValue: "Debugger commands can read every cookie, including httpOnly sign-in cookies, so they can't be set to always allow and ask every time.")
         static let browserUploadAuthorizationNote = String(localized: "tool-card.authorization.browser.upload-note", defaultValue: "Uploading sends a local file to the website, so it can't be set to always allow and asks every time.")
+        static func browserConsequentialActionNote(_ a1: String) -> String {
+            let template = String(localized: "tool-card.authorization.browser.consequential-note", defaultValue: "\"%@\" looks like it sends, deletes, pays or signs in, so it is confirmed even on a site you allowed.")
+            return String(format: template, a1)
+        }
         static func browserAlwaysAllowOnSite(_ a1: String) -> String {
             let template = String(localized: "tool-card.authorization.browser.always-allow-site", defaultValue: "Always Allow on %@")
             return String(format: template, a1)

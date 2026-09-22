@@ -363,6 +363,9 @@ extension AppState {
             AgentToolAuthorization.interactiveSurfaceSignature(
                 toolName: pending.toolName
             ) == signature
+                && AgentToolAuthorization.embeddedBrowserActionConsequence(
+                    toolName: pending.toolName, arguments: pending.arguments
+                ) == nil
         }
         resolveAgentToolCallDecision(id: id, decision: .approved)
         // Same-surface queued calls unlock with the conversation grant.
@@ -370,6 +373,9 @@ extension AppState {
             AgentToolAuthorization.interactiveSurfaceSignature(
                 toolName: pending.toolName
             ) == signature
+                && AgentToolAuthorization.embeddedBrowserActionConsequence(
+                    toolName: pending.toolName, arguments: pending.arguments
+                ) == nil
         }
     }
 
@@ -468,6 +474,9 @@ extension AppState {
             return false
         }
         guard risk == .write else { return false }
+        guard AgentToolAuthorization.embeddedBrowserActionConsequence(toolName: toolName, arguments: arguments) == nil else {
+            return false
+        }
         // A rule the operator pinned in the CLI counts here too. It is an
         // exact command rather than a family, so honoring it never grants
         // more than the one command they already approved once.
@@ -635,6 +644,13 @@ extension AppState {
                 return nil
             }
             return source
+        }
+
+        // Sending, deleting, paying… on the embedded browser is confirmed even
+        // on an allowed site; Goal mode stays autonomous.
+        if interactionMode != .goal,
+           AgentToolAuthorization.embeddedBrowserActionConsequence(toolName: toolName, arguments: arguments) != nil {
+            return nil
         }
 
         if let signature = AgentToolAuthorization.interactiveSurfaceSignature(

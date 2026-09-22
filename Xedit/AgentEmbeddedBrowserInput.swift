@@ -352,6 +352,52 @@ nonisolated enum AgentEmbeddedBrowserUploadPolicy {
     }
 }
 
+extension AgentEmbeddedBrowserController {
+    static let targetLabelMaxChars = 80
+
+    /// Visible label of the control a click or an activation key would hit:
+    /// the nearest button / link around the target, or — for Enter inside a
+    /// form field — the form's submit button, since that is what fires.
+    func targetLabel(selector: String?) async -> String {
+        let script = """
+        (() => {
+          const selector = \((try? Self.javaScriptLiteral(selector ?? "")) ?? "''");
+          let el = null;
+          try { el = selector ? document.querySelector(selector) : document.activeElement; } catch (_) { return ''; }
+          if (!el) return '';
+          const label = (node) => node ? String(node.innerText || node.value || node.getAttribute('aria-label')
+            || node.getAttribute('title') || node.getAttribute('alt') || '').replace(/\\s+/g, ' ').trim() : '';
+          const control = el.closest('button, a, [role=button], [role=link], [role=menuitem], input[type=submit], input[type=button], summary') || el;
+          const tag = control.tagName;
+          if ((tag === 'INPUT' && !/^(submit|button|image|reset)$/i.test(control.type || '')) || tag === 'TEXTAREA') {
+            const form = control.form || control.closest('form');
+            const submit = form && form.querySelector('button[type=submit], input[type=submit], button:not([type])');
+            return label(submit).slice(0, \(Self.targetLabelMaxChars));
+          }
+          return label(control).slice(0, \(Self.targetLabelMaxChars));
+        })()
+        """
+        return ((try? await evaluateObject("({ label: \(script) })"))?["label"] as? String) ?? ""
+    }
+
+    /// Stamps `_willdeep_target_label` on clicks and activation keys; the
+    /// value is always the host's reading, never the model's.
+    static func stampingTargetLabel(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        runtimeID: UUID?
+    ) async -> [String: AgentJSONValue] {
+        guard AgentToolAuthorization.embeddedBrowserActionNeedsTargetLabel(toolName: toolName, arguments: arguments) else {
+            return arguments
+        }
+        var stamped = arguments
+        let label = await existingController(for: runtimeID)?
+            .targetLabel(selector: arguments["selector"]?.stringValue()) ?? ""
+        stamped[AgentToolAuthorization.embeddedBrowserTargetLabelArgument] = .string(label)
+        return stamped
+    }
+}
+
 extension AgentEmbeddedBrowserTools {
     static func pressKey(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let key = try requiredArgument("key", arguments: arguments)

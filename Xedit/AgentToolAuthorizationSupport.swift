@@ -699,6 +699,42 @@ enum AgentToolAuthorization {
             .map { "\(family):\(toolName):\($0)" }
     }
 
+    /// Hidden argument with the visible label of the control a click or an
+    /// activation key will hit, read by the host when the call is registered.
+    nonisolated static let embeddedBrowserTargetLabelArgument = "_willdeep_target_label"
+
+    /// Clicks and activation keys commit whatever the target control does.
+    static func embeddedBrowserActionNeedsTargetLabel(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> Bool {
+        switch toolName {
+        case "embedded_browser_click":
+            return true
+        case "embedded_browser_press_key":
+            let key = (arguments["key"]?.stringValue() ?? "").lowercased()
+            return ["enter", "return", " ", "space", "spacebar"].contains(key)
+        default:
+            return false
+        }
+    }
+
+    /// What a stamped click / activation key would commit to, when it is the
+    /// kind (send, delete, pay, sign in…) that is confirmed even on a site the
+    /// user allowed. Same keyword groups as Computer Use.
+    static func embeddedBrowserActionConsequence(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> AgentComputerUseConsequence? {
+        guard embeddedBrowserActionNeedsTargetLabel(toolName: toolName, arguments: arguments),
+              let label = arguments[embeddedBrowserTargetLabelArgument]?.stringValue(),
+              let consequence = AgentComputerUsePolicy.consequence(describedBy: label),
+              consequence != .none, consequence != .navigation else {
+            return nil
+        }
+        return consequence
+    }
+
     /// Execution-time check for a stamped call: the page must still be on the
     /// host the call was authorized for. Returns the refusal message, if any.
     static func embeddedBrowserHostDriftMessage(
@@ -737,6 +773,10 @@ enum AgentToolAuthorization {
         // an approval for a harmless scroll authorize a later send, delete,
         // purchase, permission change, or entirely different app.
         if toolName.hasPrefix("computer_use_") {
+            return nil
+        }
+        // A consequential browser click is approved once, never pinned.
+        if embeddedBrowserActionConsequence(toolName: toolName, arguments: arguments) != nil {
             return nil
         }
         if ["run_command", "terminal_send_command"].contains(toolName),

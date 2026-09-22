@@ -249,7 +249,7 @@ nonisolated enum AgentCompactAuthorizationCopy {
                 iconName: "globe",
                 title: L10n.ToolCard.browserAuthorizationTitle,
                 question: L10n.ToolCard.browserEmbeddedAuthorizationQuestion,
-                note: perCallNote(toolName)
+                note: consequentialNote(toolName: toolName, arguments: arguments) ?? perCallNote(toolName)
             )
         }
         return nil
@@ -261,6 +261,14 @@ nonisolated enum AgentCompactAuthorizationCopy {
         case "embedded_browser_upload_file": return L10n.ToolCard.browserUploadAuthorizationNote
         default: return nil
         }
+    }
+
+    private static func consequentialNote(toolName: String, arguments: [String: AgentJSONValue]) -> String? {
+        guard AgentToolAuthorization.embeddedBrowserActionConsequence(toolName: toolName, arguments: arguments) != nil else {
+            return nil
+        }
+        let label = arguments[AgentToolAuthorization.embeddedBrowserTargetLabelArgument]?.stringValue() ?? ""
+        return L10n.ToolCard.browserConsequentialActionNote(label)
     }
 
     /// Label for the always-allow button of a site-scoped browser rule, so
