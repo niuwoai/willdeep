@@ -41,9 +41,15 @@ struct AgentEmbeddedBrowserInteractionTests {
     private func open(_ url: URL, in sandbox: Sandbox) async throws -> AgentEmbeddedBrowserController {
         let controller = AgentEmbeddedBrowserController.controller(for: sandbox.runtimeID)
         try controller.navigate(to: url.absoluteString)
-        #expect(await controller.waitForNavigationToSettle())
+        #expect(await controller.waitForNavigationToSettle(timeout: Self.initialLoadTimeout))
         return controller
     }
+
+    /// The first load in a suite spawns a cold WebContent process; under the
+    /// full 4.5k-test run that alone outlasts the production 10 s settle
+    /// window, and only the suite's first test ever failed. Only the test's
+    /// setup load gets the longer window; the actions under test keep theirs.
+    private static let initialLoadTimeout: Duration = .seconds(60)
 
     private func pageValue(_ controller: AgentEmbeddedBrowserController, _ expression: String) async throws -> String {
         let result = try await controller.evaluate(source: "return \(expression);", maxChars: 10_000)

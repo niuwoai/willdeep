@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.398.0-rc5 - 2026-09-22
+
+### Fixed
+
+- **两个内置浏览器用例在全量测试里不再必红。** rc4 里记作"满载下偶发"的 `AgentEmbeddedBrowserInputTests.enterSubmitsForm()` 和 `AgentEmbeddedBrowserInteractionTests.blankTargetLinkOpensInPlace()`，实际上连续两次全量测试都红，并不是偶发。
+  - 它们都是各自串行 suite 里的第一个用例，失败都发生在测试准备阶段的第一次页面加载：这次加载要冷启动 WebKit 的 WebContent 进程，全量 4526 个用例同时跑时，冷启动就会超过生产代码 10 秒的等待上限。同一个 suite 里后面的用例都通过，单独跑也只要 0.9 秒。
+  - 只放宽这两个 suite 准备阶段的首次加载等待（60 秒）。全量实测这两个用例各用 33.7 秒和 36.3 秒，冷启动本身就要二十多秒，30 秒余量太小。被测的按键和点击动作仍然用生产代码的超时，产品代码没动。
+
 ## 1.398.0-rc4 - 2026-09-22
 
 ### Fixed
