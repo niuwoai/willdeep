@@ -2169,7 +2169,9 @@ struct WillDeepTests {
         // `monitor` tool and sub-agent message/stop controls: 48,831 tokens.
         // 1.383.0-rc1: `send_session_message` plus peer-activity wording on
         // `list_workspace_sessions` measure 49,121.
-        let maximumExpectedToolSchemaTokens = 49_600
+        // 1.396/1.397 browser batch (press_key / scroll / upload tools and the
+        // optional `tab_id` on 14 Chrome tools) measures 51,157.
+        let maximumExpectedToolSchemaTokens = 51_600
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)

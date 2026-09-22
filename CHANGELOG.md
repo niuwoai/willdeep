@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.398.0-rc4 - 2026-09-22
+
+### Fixed
+
+- **工具 schema 预算用例的上限跟上浏览器工具。** 1.396 到 1.397 这批浏览器改动（内置浏览器新增按键、滚动、上传工具，14 个 Chrome 工具增加可选参数 `tab_id`）让完整工具表的估算从 49,121 涨到 51,157 token，超过了 49,600 的上限，`testAgentTokenEstimateIncludesTools` 因此稳定失败，把发版前的全量测试拦了下来。上限按实测值抬到 51,600，仍然只比实测值高一点，能继续发现意外的 schema 膨胀。只改了测试，产品代码没动。
+
+### Known issues
+
+- 发版前的全量测试（4526 个用例）里，`AgentEmbeddedBrowserInputTests.enterSubmitsForm()` 和 `AgentEmbeddedBrowserInteractionTests.blankTargetLinkOpensInPlace()` 在满载时会等不到页面导航完成而失败，单独跑 0.9 秒就能通过，属于满载下的时序不稳定，和本次改动无关。
+
 ## 1.398.0-rc3 - 2026-09-22
 
 ### Fixed
