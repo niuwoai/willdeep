@@ -268,6 +268,13 @@ struct AgentToolCallCard: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(appState.editorSettings.interfaceSkin.palette.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if let note = descriptor.note {
+                    Text(note)
+                        .font(.system(size: 12))
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             compactAuthorizationActions

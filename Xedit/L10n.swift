@@ -1575,6 +1575,7 @@ nonisolated enum L10n {
         static let browserAuthorizationTitle = String(localized: "tool-card.authorization.browser.title", defaultValue: "Browser")
         static let browserChromeAuthorizationQuestion = String(localized: "tool-card.authorization.browser.chrome-question", defaultValue: "Allow WillDeep to control Chrome?")
         static let browserEmbeddedAuthorizationQuestion = String(localized: "tool-card.authorization.browser.embedded-question", defaultValue: "Allow WillDeep to control Browser?")
+        static let browserPerCallAuthorizationNote = String(localized: "tool-card.authorization.browser.per-call-note", defaultValue: "Running a script can read cookies and sign-in data on the page, so it can't be set to always allow and asks every time.")
         static let computerUseAuthorizationTitle = String(localized: "tool-card.authorization.computer-use.title", defaultValue: "Computer Use")
         static let computerUseAuthorizationQuestion = String(localized: "tool-card.authorization.computer-use.question", defaultValue: "Allow WillDeep to control this Mac?")
         static func alwaysAllowHelp(_ a1: String) -> String {

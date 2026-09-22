@@ -118,6 +118,27 @@ struct AgentBrowserRunawayGuardTests {
         #expect(embeddedLine.map { $0.contains("presses keys") && $0.contains("scrolls") && $0.contains("uploads workspace files") } == true)
     }
 
+    @Test("读页面先用 read_page / snapshot；eval 每次都要确认，要一次取全")
+    func browserGuidanceSteersReadsAwayFromEval() {
+        let block = AgentContextBuilder.browserUICapabilityBlock
+        let readLine = block.split(separator: "\n").first { $0.contains("To read a page") }
+        #expect(readLine.map { $0.contains("embedded_browser_read_page") && $0.contains("embedded_browser_snapshot") } == true)
+        #expect(readLine.map { $0.contains("asks the user every single time") && $0.contains("in one script") } == true)
+        let eval = AgentToolRegistry.all.first { $0.name == "embedded_browser_eval" }
+        #expect(eval?.description.contains("gather everything you need in one script") == true)
+    }
+
+    @Test("逐次确认的浏览器工具在授权卡上说明为什么没有一直允许，其他工具不带说明")
+    func perCallBrowserToolsExplainMissingAlwaysAllow() {
+        for toolName in AgentToolAuthorization.browserToolsRequiringPerCallApproval {
+            let descriptor = AgentCompactAuthorizationCopy.descriptor(toolName: toolName, arguments: [:])
+            #expect(descriptor?.note == L10n.ToolCard.browserPerCallAuthorizationNote, "\(toolName)")
+        }
+        for toolName in ["embedded_browser_navigate", "embedded_browser_click", "chrome_click"] {
+            #expect(AgentCompactAuthorizationCopy.descriptor(toolName: toolName, arguments: [:])?.note == nil, "\(toolName)")
+        }
+    }
+
     @Test("浏览类调用不计入触发计划的写操作")
     func browsingDoesNotCountAsExecution() {
         #expect(!AgentPlanOnDemandPolicy.countsAsExecutionWrite(toolName: "embedded_browser_navigate", risk: .write))

@@ -208,6 +208,9 @@ nonisolated struct AgentCompactAuthorizationDescriptor: Equatable {
     let iconName: String
     let title: String
     let question: String
+    /// Why this card has no always-allow button, for tools that are approved
+    /// one call at a time.
+    var note: String? = nil
 }
 
 nonisolated enum AgentCompactAuthorizationCopy {
@@ -237,17 +240,25 @@ nonisolated enum AgentCompactAuthorizationCopy {
             return AgentCompactAuthorizationDescriptor(
                 iconName: "globe",
                 title: L10n.ToolCard.browserAuthorizationTitle,
-                question: L10n.ToolCard.browserChromeAuthorizationQuestion
+                question: L10n.ToolCard.browserChromeAuthorizationQuestion,
+                note: perCallNote(toolName)
             )
         }
         if toolName.hasPrefix("embedded_browser_") {
             return AgentCompactAuthorizationDescriptor(
                 iconName: "globe",
                 title: L10n.ToolCard.browserAuthorizationTitle,
-                question: L10n.ToolCard.browserEmbeddedAuthorizationQuestion
+                question: L10n.ToolCard.browserEmbeddedAuthorizationQuestion,
+                note: perCallNote(toolName)
             )
         }
         return nil
+    }
+
+    private static func perCallNote(_ toolName: String) -> String? {
+        AgentToolAuthorization.browserToolsRequiringPerCallApproval.contains(toolName)
+            ? L10n.ToolCard.browserPerCallAuthorizationNote
+            : nil
     }
 }
 
