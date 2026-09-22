@@ -178,9 +178,9 @@ extension AppState {
             }
             return String(prompt.prefix(40))
         }()
-        let runInBackground = AgentSubagentSchedulingPolicy.runsInBackground(arguments)
+        let requestedBackground = AgentSubagentSchedulingPolicy.runsInBackground(arguments)
         agentSpawnLog.info(
-            "spawn_agent received runtime=\(runtime.id.uuidString, privacy: .public) turn=\(runtime.activeTurnID?.uuidString ?? "none", privacy: .public) call=\(call.externalID, privacy: .public) label=\(label, privacy: .public) requestedProfile=\(arguments["profile"]?.stringValue() ?? "default", privacy: .public) background=\(runInBackground ? "true" : "false", privacy: .public) promptChars=\(prompt.count, privacy: .public)"
+            "spawn_agent received runtime=\(runtime.id.uuidString, privacy: .public) turn=\(runtime.activeTurnID?.uuidString ?? "none", privacy: .public) call=\(call.externalID, privacy: .public) label=\(label, privacy: .public) requestedProfile=\(arguments["profile"]?.stringValue() ?? "default", privacy: .public) background=\(requestedBackground ? "true" : "false", privacy: .public) promptChars=\(prompt.count, privacy: .public)"
         )
 
         // New tool calls default to the bounded investigation role. Explicit
@@ -445,6 +445,13 @@ extension AppState {
             .first { $0.id.caseInsensitiveCompare(profile.id) == .orderedSame }?
             .localizedName
             ?? L10n.AgentDelegation.profileName(for: profile.id)
+        // Decided on the final trade: operations Workers touch real servers,
+        // so the user must be able to watch them in the chat's live card.
+        let runInBackground = requestedBackground
+            && !AgentSubagentSchedulingPolicy.mustRunInForeground(profileID: profile.id)
+        if requestedBackground, !runInBackground {
+            profileNotices.append(AgentSubagentSchedulingPolicy.foregroundOnlyNotice(profileID: profile.id))
+        }
         if AgentOpsConvergencePolicy.shouldReturnToParent(profileID: profile.id,
             background: runInBackground, delegation: runtime.currentTurnDelegationPolicy,
             completed: runtime.completedForegroundOpsInspection) {

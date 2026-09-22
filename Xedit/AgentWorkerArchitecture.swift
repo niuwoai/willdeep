@@ -1,6 +1,21 @@
 import Foundation
 
 nonisolated enum AgentSubagentSchedulingPolicy {
+    /// Trades that always run in the foreground, whatever the model asks.
+    /// Operations Workers act on real (often production) machines; in the
+    /// background they only show a counter in the composer strip, and the
+    /// user cannot see which command is running. Background was also the
+    /// way around AgentOpsConvergencePolicy's one-inspection-per-turn rule.
+    static let foregroundOnlyProfileIDs: Set<String> = [AgentSubagentProfileCatalog.opsRunnerID]
+
+    static func mustRunInForeground(profileID: String) -> Bool {
+        foregroundOnlyProfileIDs.contains(profileID)
+    }
+
+    static func foregroundOnlyNotice(profileID: String) -> String {
+        "Note: `\(profileID)` Workers always run in the foreground so the user can watch operations on real machines; `run_in_background` was ignored and this result is the Worker's final report."
+    }
+
     static func runsInBackground(_ arguments: [String: AgentJSONValue]) -> Bool {
         guard arguments["run_in_background"]?.boolValue() == true,
               arguments["independent_task"]?.boolValue() == true else { return false }

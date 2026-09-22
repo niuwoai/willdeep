@@ -1145,6 +1145,7 @@ private struct AgentActivityPhase {
 
 private struct AgentSubagentFleetPopover: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
     let fleet: AgentSubagentFleetStatus
 
     var body: some View {
@@ -1187,18 +1188,39 @@ private struct AgentSubagentFleetPopover: View {
     private func memberRow(_ member: AgentSubagentFleetStatus.Member) -> some View {
         if let runID = member.runID {
             HStack(spacing: 8) {
+            // Clicking a Worker brings its live card into the foreground
+            // above the composer; the full round-by-round record stays one
+            // click away in the inspector window.
             Button {
-                AgentSubagentInspectorWindowRegistry.shared.open(
-                    runID: runID,
-                    fallbackLabel: member.workerName
-                )
+                if appState.isBackgroundWorker(runID: runID) {
+                    appState.showWorkerInForeground(runID: runID)
+                } else {
+                    AgentSubagentInspectorWindowRegistry.shared.open(
+                        runID: runID,
+                        fallbackLabel: member.workerName
+                    )
+                }
+                dismiss()
             } label: {
                 memberRowContent(member, showsDisclosure: true)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(L10n.AgentDelegation.inspectorTitle)
+            .help(L10n.AgentDelegation.foregroundShow)
+            .accessibilityIdentifier("show-worker-foreground-\(runID.uuidString)")
             .focusable(false)
+                Button {
+                    AgentSubagentInspectorWindowRegistry.shared.open(
+                        runID: runID,
+                        fallbackLabel: member.workerName
+                    )
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                }
+                .buttonStyle(.borderless)
+                .focusable(false)
+                .help(L10n.AgentDelegation.foregroundOpenRecord)
+                .accessibilityLabel(L10n.AgentDelegation.foregroundOpenRecord)
                 if let parentID = appState.activeAgentSessionID,
                    appState.agentSubagentRegistry.runs.contains(where: {
                        $0.id == runID && $0.parentRuntimeID == parentID && $0.status == .running

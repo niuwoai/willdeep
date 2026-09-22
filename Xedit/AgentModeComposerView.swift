@@ -81,6 +81,12 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if let foregroundWorker = appState.foregroundWorkerCall {
+                    AgentForegroundWorkerCard(call: foregroundWorker)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
                 if shouldShowActivityStatus {
                     AgentSemanticActivityStatusLine(style: .composer)
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)

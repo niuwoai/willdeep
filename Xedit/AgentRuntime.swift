@@ -84,6 +84,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// until the tool loop seals the batch at a dependency boundary.
     @Published var collectingPatchReviewMessageIDs: Set<AgentMessage.ID> = []
     @Published var toolCalls: [AgentToolCall] = []
+    /// A background Worker the user pulled into the foreground: its live
+    /// card stays above the composer until closed, independent of whether
+    /// the parent turn is still responding. View state only — the run keeps
+    /// its background ownership, wake-up channels and slot.
+    @Published var foregroundWorkerRunID: UUID?
     /// Decisions clicked before the tool loop has registered its waiter.
     /// This state drives the approval card's immediate "submitted" receipt,
     /// so it must publish even though the loop consumes entries in order.

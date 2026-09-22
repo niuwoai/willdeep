@@ -360,6 +360,28 @@ extension L10n {
             return String(format: template, count, primaryWorkerName)
         }
 
+        /// Pin a running background Worker's live card above the composer.
+        static let foregroundShow = String(
+            localized: "agent-delegation.foreground-show",
+            defaultValue: "Show in foreground"
+        )
+        static let foregroundReturn = String(
+            localized: "agent-delegation.foreground-return",
+            defaultValue: "Back to background"
+        )
+        static let foregroundBadge = String(
+            localized: "agent-delegation.foreground-badge",
+            defaultValue: "Foreground"
+        )
+        static let foregroundOpenRecord = String(
+            localized: "agent-delegation.foreground-open-record",
+            defaultValue: "Full record"
+        )
+        static let foregroundClose = String(
+            localized: "agent-delegation.foreground-close",
+            defaultValue: "Close"
+        )
+
         static func fleetPanelTitle(_ count: Int) -> String {
             let template = String(
                 localized: "agent-delegation.fleet-panel-title",

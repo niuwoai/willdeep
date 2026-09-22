@@ -41,6 +41,7 @@ extension AppState {
         runtime.completedForegroundOpsInspection = false
         runtime.currentTurnEmittedReadOnlyHandoffHint = false
         runtime.currentTurnToolFailureCounts = [:]
+        releaseFinishedForegroundWorker(for: runtime)
         // Classified from what the user actually typed. Tool-loop
         // continuations and system notices re-enter here with the same
         // runtime; routing those would classify WillDeep's own plumbing.
