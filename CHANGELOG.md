@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.403.0-rc13 - 2026-09-23
+
+### Fixed
+
+- **发版测试关被三个「单独跑是绿的」用例拦下。** rc12 发版跑全量 4583 项，红了 3 个，都是测试自身的隔离问题，产品代码不受影响：
+  - `AgentContextCheckpointTests` 里两个大检查点用例报「摘要没有回收足够的上下文」。压缩回收校验用的窗口来自当前模型，而夹具没钉模型，读的是测试宿主与正在运行的 App、其他 suite 共享的 `UserDefaults.standard`：同一次全量里就同时读到过 `gpt-5-mini`（400K）和 `someim-auto-flash`（128K），发版那一轮读到的窗口小到放不下这两个检查点。现在夹具显式钉住 `gpt-5-mini`；把钉的模型换成 16K 窗口能原样复现发版时的失败（同两个用例、同一句报错）。
+  - `AgentDockBadgeCoordinatorTests` 的基线用例 79 秒后读到 0 个待审批。Dock 徽标协调器是进程级单例，全量时别的 suite 会在 `await` 空档里通过 `EditorAppStateRegistry` 重新 `track`，把本用例登记的 AppState 整组替换掉；原来的 1 秒忙轮询在满载主线程上也不够。现在每轮轮询都补回本用例的登记，等待证据的窗口放宽到 5 秒。
+  - 测试：全量 XeditTests 本地重跑结果见提交说明。
+
 ## 1.403.0-rc12 - 2026-09-23
 
 ### Fixed

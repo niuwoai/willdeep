@@ -32,6 +32,17 @@ struct AgentContextCheckpointTests {
         let app = AppState(dispatchStore: AgentDispatchStore(defaults: defaults), sessionManagementDefaults: defaults, loadSessionCatalog: false)
         let session = app.startNewAgentSession(inWorkspaceAt: root.path)
         let runtime = try #require(app.runtime(for: session.id))
+        // Pin the consumer model. Otherwise the window that compression's
+        // reclamation check divides by comes from `UserDefaults.standard`,
+        // which the test host shares with the real app and other suites: one
+        // full run resolved `gpt-5-mini` (400K) for some cases and
+        // `someim-auto-flash` (128K) for others, and the release gate's run
+        // got a window small enough that the two large-checkpoint cases below
+        // failed with "did not reclaim enough context" (a 16K pin reproduces
+        // exactly that).
+        app.agentLoopInferenceEnvironment = (.init(providerID: "openai", baseURL: "https://context-checkpoint.invalid/v1",
+                                                   model: "gpt-5-mini", apiKey: "test-placeholder"),
+                                             URLSession(configuration: .ephemeral))
         runtime.session.titleIsUserSet = true
         runtime.contextSystemPromptTokenEstimate = 0
         runtime.currentGoal = .init(statement: "完整交付，不发布", checklist: [.init(text: "测试真实通过"), .init(text: "保留用户改动")])

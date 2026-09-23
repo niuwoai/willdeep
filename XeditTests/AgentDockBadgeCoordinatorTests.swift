@@ -24,11 +24,29 @@ struct AgentDockBadgeCoordinatorTests {
     }
 
     /// Lets the coordinator's hop-to-main refresh run.
-    private func settle(until condition: () -> Bool = { false }) async {
-        for _ in 0..<50 {
-            if condition() { return }
+    ///
+    /// `AgentDockBadgeCoordinator.shared` is process-wide. In a full run other
+    /// suites' main-actor tests interleave at every `await`, and any of them
+    /// that registers an AppState with an `EditorAppStateRegistry` re-tracks
+    /// the coordinator with *its* set, silently dropping ours — the release
+    /// gate saw 0 pending after 79s while the case passed alone. Re-assert
+    /// our tracking on every poll, and give a loaded main actor a real window.
+    private func settle(
+        retracking tracked: @autoclosure () -> [AppState] = [],
+        until condition: (() -> Bool)? = nil
+    ) async {
+        // A bare settle only lets pending refreshes land; the long window is
+        // for waiting on evidence.
+        for _ in 0..<(condition == nil ? 50 : 250) {
+            if condition?() == true { return }
+            let appStates = tracked()
+            if !appStates.isEmpty { AgentDockBadgeCoordinator.shared.track(appStates: appStates) }
             try? await Task.sleep(for: .milliseconds(20))
         }
+    }
+
+    private func badgeShown(for session: AgentSession) -> Bool {
+        pendingCount(for: session) == 1 && NSApp.dockTile.badgeLabel != nil
     }
 
     private func pendingCount(for session: AgentSession) -> Int {
@@ -44,10 +62,10 @@ struct AgentDockBadgeCoordinatorTests {
             AgentSessionStore.delete(id: session.id)
         }
         AgentDockBadgeCoordinator.shared.track(appStates: [appState])
-        await settle()
+        await settle(retracking: [appState])
         let runtime = try #require(appState.agentRuntimes[session.id])
         runtime.toolCalls = [pendingCall()]
-        await settle { pendingCount(for: session) == 1 }
+        await settle(retracking: [appState]) { badgeShown(for: session) }
         #expect(pendingCount(for: session) == 1)
         #expect(NSApp.dockTile.badgeLabel != nil)
     }
@@ -61,12 +79,12 @@ struct AgentDockBadgeCoordinatorTests {
             AgentSessionStore.delete(id: session.id)
         }
         AgentDockBadgeCoordinator.shared.track(appStates: [appState])
-        await settle()
+        await settle(retracking: [appState])
         let replacement = AgentRuntime(session: session)
         appState.agentRuntimes[session.id] = replacement
-        await settle()
+        await settle(retracking: [appState])
         replacement.toolCalls = [pendingCall()]
-        await settle { pendingCount(for: session) == 1 }
+        await settle(retracking: [appState]) { badgeShown(for: session) }
         #expect(pendingCount(for: session) == 1)
         #expect(NSApp.dockTile.badgeLabel != nil)
     }
@@ -81,12 +99,12 @@ struct AgentDockBadgeCoordinatorTests {
         }
         appState.agentRuntimes.removeValue(forKey: session.id)
         AgentDockBadgeCoordinator.shared.track(appStates: [appState])
-        await settle()
+        await settle(retracking: [appState])
         let runtime = AgentRuntime(session: session)
         appState.agentRuntimes[session.id] = runtime
-        await settle()
+        await settle(retracking: [appState])
         runtime.toolCalls = [pendingCall()]
-        await settle { pendingCount(for: session) == 1 }
+        await settle(retracking: [appState]) { badgeShown(for: session) }
         #expect(pendingCount(for: session) == 1)
         #expect(NSApp.dockTile.badgeLabel != nil)
     }
@@ -104,10 +122,10 @@ struct AgentDockBadgeCoordinatorTests {
         }
         registry.register(editor)
         #expect(registry.current === editor)
-        await settle()
+        await settle(retracking: registry.appStatesForTerminationCheck)
         let runtime = try #require(headless.agentRuntimes[session.id])
         runtime.toolCalls = [pendingCall()]
-        await settle { pendingCount(for: session) == 1 }
+        await settle(retracking: registry.appStatesForTerminationCheck) { badgeShown(for: session) }
         #expect(pendingCount(for: session) == 1)
         #expect(NSApp.dockTile.badgeLabel != nil)
     }
