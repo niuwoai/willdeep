@@ -33,7 +33,6 @@ struct AgentLocalModelResidencyTests {
             summaryModel: model,
             preferForImageUnderstanding: true,
             preferForTitles: true,
-            preferForContextSummaries: false,
             preferForWorkerRouting: true,
             warmOnLaunchAndKeepResident: resident,
             exposeAsComposerModel: false,

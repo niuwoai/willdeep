@@ -374,7 +374,6 @@ struct AgentProviderLibraryTests {
             summaryModel: "",
             preferForImageUnderstanding: true,
             preferForTitles: true,
-            preferForContextSummaries: false,
             exposeAsComposerModel: false,
             composerDisplayName: " "
         ).normalized
@@ -394,7 +393,6 @@ struct AgentProviderLibraryTests {
             summaryModel: "qwen3.5-4b-q4_k_m",
             preferForImageUnderstanding: true,
             preferForTitles: true,
-            preferForContextSummaries: false,
             exposeAsComposerModel: false,
             composerDisplayName: AgentLocalModelSettings.defaultComposerDisplayName
         ).normalized
@@ -415,7 +413,6 @@ struct AgentProviderLibraryTests {
             summaryModel: "gemma4:e2b",
             preferForImageUnderstanding: true,
             preferForTitles: true,
-            preferForContextSummaries: false,
             exposeAsComposerModel: false,
             composerDisplayName: AgentLocalModelSettings.defaultComposerDisplayName
         ).normalized
@@ -444,7 +441,6 @@ struct AgentProviderLibraryTests {
             summaryModel: "custom-summary",
             preferForImageUnderstanding: true,
             preferForTitles: true,
-            preferForContextSummaries: false,
             exposeAsComposerModel: false,
             composerDisplayName: AgentLocalModelSettings.defaultComposerDisplayName
         ).normalized
@@ -498,8 +494,36 @@ struct AgentProviderLibraryTests {
         let settings = try JSONDecoder().decode(AgentLocalModelSettings.self, from: data).normalized
 
         #expect(settings.preferForTitles == true)
-        #expect(settings.preferForContextSummaries == false)
         #expect(settings.exposeAsComposerModel == false)
+    }
+
+    /// 2026-09-23 删掉了「上下文压缩先用本地」。老配置里还留着这个键，
+    /// 解码不能因此报错——它只是不再有任何作用。
+    @Test
+    func localModelSettingsIgnoreRemovedContextCompressionPreference() throws {
+        let data = Data("""
+        {
+          "enabled": true,
+          "baseURL": "\(AgentLocalModelSettings.defaultBaseURL)",
+          "visionModel": "\(AgentLocalModelSettings.defaultVisionModelID)",
+          "summaryModel": "\(AgentLocalModelSettings.defaultSummaryModelID)",
+          "preferForImageUnderstanding": true,
+          "preferForTitles": true,
+          "preferForContextSummaries": true,
+          "preferForWorkerRouting": true
+        }
+        """.utf8)
+
+        let settings = try JSONDecoder().decode(AgentLocalModelSettings.self, from: data).normalized
+        #expect(settings.enabled)
+        #expect(settings.preferForTitles)
+        #expect(settings.preferForWorkerRouting)
+        // 本地辅助模型只剩这三种用途；压缩不在其中。
+        for purpose in [AgentLocalAuxiliaryPurpose.imageUnderstanding, .title, .workerRouting] {
+            _ = purpose
+        }
+        let encoded = String(decoding: try JSONEncoder().encode(settings), as: UTF8.self)
+        #expect(!encoded.contains("preferForContextSummaries"), "删掉的偏好不该再写回磁盘")
     }
 
     @Test
@@ -1090,7 +1114,6 @@ struct AgentProviderLibraryTests {
             summaryModel: "qwen-chat-local",
             preferForImageUnderstanding: true,
             preferForTitles: true,
-            preferForContextSummaries: false,
             exposeAsComposerModel: true,
             composerDisplayName: " Offline Local "
         )

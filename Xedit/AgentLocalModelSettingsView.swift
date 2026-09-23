@@ -44,8 +44,6 @@ struct AgentLocalModelSettingsSection: View {
                 .onCompatibleChange(of: settings.preferForImageUnderstanding) { _, _ in save() }
             Toggle(L10n.Settings.LocalModel.preferTitle, isOn: $settings.preferForTitles)
                 .onCompatibleChange(of: settings.preferForTitles) { _, _ in save() }
-            Toggle(L10n.Settings.LocalModel.preferContextSummary, isOn: $settings.preferForContextSummaries)
-                .onCompatibleChange(of: settings.preferForContextSummaries) { _, _ in save() }
             Toggle(L10n.Settings.LocalModel.preferWorkerRouting, isOn: $settings.preferForWorkerRouting)
                 .onCompatibleChange(of: settings.preferForWorkerRouting) { _, _ in save() }
             Text(L10n.Settings.LocalModel.workerRoutingHint)

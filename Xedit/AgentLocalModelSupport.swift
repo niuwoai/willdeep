@@ -33,7 +33,6 @@ struct AgentLocalModelSettings: Codable, Equatable {
     var summaryModel: String
     var preferForImageUnderstanding: Bool
     var preferForTitles: Bool
-    var preferForContextSummaries: Bool
     /// Worker 路由判决是否先问本地模型。关掉（或整个本地加速关掉）时，
     /// 路由直接回落纯关键词判决，不会为辅助判断调用会话远程模型。
     /// 刻意不给它单独的模型字段：文本辅助任务统一复用 `summaryModel`
@@ -54,7 +53,6 @@ struct AgentLocalModelSettings: Codable, Equatable {
         summaryModel: defaultSummaryModelID,
         preferForImageUnderstanding: true,
         preferForTitles: true,
-        preferForContextSummaries: false,
         preferForWorkerRouting: true,
         warmOnLaunchAndKeepResident: false,
         exposeAsComposerModel: false,
@@ -68,7 +66,6 @@ struct AgentLocalModelSettings: Codable, Equatable {
         summaryModel: String,
         preferForImageUnderstanding: Bool,
         preferForTitles: Bool,
-        preferForContextSummaries: Bool,
         preferForWorkerRouting: Bool = AgentLocalModelSettings.defaultPreferForWorkerRouting,
         warmOnLaunchAndKeepResident: Bool = AgentLocalModelSettings.defaultWarmOnLaunchAndKeepResident,
         exposeAsComposerModel: Bool,
@@ -80,7 +77,6 @@ struct AgentLocalModelSettings: Codable, Equatable {
         self.summaryModel = summaryModel
         self.preferForImageUnderstanding = preferForImageUnderstanding
         self.preferForTitles = preferForTitles
-        self.preferForContextSummaries = preferForContextSummaries
         self.preferForWorkerRouting = preferForWorkerRouting
         self.warmOnLaunchAndKeepResident = warmOnLaunchAndKeepResident
         self.exposeAsComposerModel = exposeAsComposerModel
@@ -99,6 +95,8 @@ struct AgentLocalModelSettings: Codable, Equatable {
         case preferForImageUnderstanding
         case preferForSummaries
         case preferForTitles
+        /// 2026-09-23 移除的「上下文压缩先用本地」。仍然解码是为了旧配置
+        /// 不报错，值被丢弃：压缩只走远端。
         case preferForContextSummaries
         case preferForWorkerRouting
         case warmOnLaunchAndKeepResident
@@ -119,8 +117,6 @@ struct AgentLocalModelSettings: Codable, Equatable {
         self.preferForTitles = try c.decodeIfPresent(Bool.self, forKey: .preferForTitles)
             ?? legacyPreferForSummaries
             ?? defaults.preferForTitles
-        self.preferForContextSummaries = try c.decodeIfPresent(Bool.self, forKey: .preferForContextSummaries)
-            ?? defaults.preferForContextSummaries
         self.preferForWorkerRouting = try c.decodeIfPresent(Bool.self, forKey: .preferForWorkerRouting)
             ?? defaults.preferForWorkerRouting
         self.warmOnLaunchAndKeepResident = try c.decodeIfPresent(Bool.self, forKey: .warmOnLaunchAndKeepResident)
@@ -139,7 +135,6 @@ struct AgentLocalModelSettings: Codable, Equatable {
         try c.encode(summaryModel, forKey: .summaryModel)
         try c.encode(preferForImageUnderstanding, forKey: .preferForImageUnderstanding)
         try c.encode(preferForTitles, forKey: .preferForTitles)
-        try c.encode(preferForContextSummaries, forKey: .preferForContextSummaries)
         try c.encode(preferForWorkerRouting, forKey: .preferForWorkerRouting)
         try c.encode(warmOnLaunchAndKeepResident, forKey: .warmOnLaunchAndKeepResident)
         try c.encode(exposeAsComposerModel, forKey: .exposeAsComposerModel)
@@ -184,7 +179,6 @@ struct AgentLocalModelSettings: Codable, Equatable {
 enum AgentLocalAuxiliaryPurpose {
     case imageUnderstanding
     case title
-    case contextSummary
     case workerRouting
 }
 
@@ -707,9 +701,6 @@ extension AppState {
         case .title:
             guard settings.preferForTitles else { return nil }
             return settings.configuration(model: settings.summaryModel)
-        case .contextSummary:
-            guard settings.preferForContextSummaries else { return nil }
-            return settings.configuration(model: settings.summaryModel)
         case .workerRouting:
             guard settings.preferForWorkerRouting else { return nil }
             return settings.configuration(model: settings.summaryModel)
@@ -747,16 +738,17 @@ extension AppState {
 
     func contextCompressionConfigurationCandidates() -> [AgentConfiguration] {
         if let environment = agentLoopInferenceEnvironment { return [environment.configuration.normalized] }
-        // 顺序：用户显式偏好的本地模型 → some.im 网关托管压缩模型
-        // （someim-32b-compressor，固定指令由服务端 replace 注入）→ 会话
-        // 压缩模型兜底。用户在设置里显式指定了压缩模型时尊重该选择，
-        // 不插入托管压缩候选。
+        // 顺序：some.im 网关托管压缩模型（someim-32b-compressor，固定指令
+        // 由服务端 replace 注入）→ 会话压缩模型兜底。用户在设置里显式指定
+        // 了压缩模型时尊重该选择，不插入托管压缩候选。
+        //
+        // 2026-09-23 起压缩不再走本地小模型：把十几万 token 的历史交给一个
+        // 2B 模型，实测每次只喂得进几千 token，压出来的摘要撑不起后续工作。
         let normalized = agentConfiguration.normalized
         let hasExplicitCompressionModel = !normalized.compressionModel
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hosted = hasExplicitCompressionModel ? nil : someIMContextCompressorConfiguration()
         return auxiliaryConfigurationCandidates(ordered: [
-            localAuxiliaryConfiguration(for: .contextSummary),
             hosted,
             normalized.resolved(for: .compression)
         ])
