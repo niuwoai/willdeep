@@ -344,14 +344,40 @@ final class TerminalShortcutRecorder {
     /// per character.
     private var pendingProtectedBytes: [UInt8] = []
     private var pendingProtectedStartedAt: Date?
+    /// Where the pending echo-off line began on screen; nil when unknown.
+    private var pendingLineAnchor: TerminalShortcutLineAnchor?
+    /// An echo-off line whose Enter reached the shell, held until the screen
+    /// shows whether it ran and what it said. Shell line editors turn ECHO
+    /// off too, so this is how a typed command (and whatever Tab completed
+    /// it to) is told apart from a password.
+    private var pendingSubmission: PendingSubmission?
+
+    private struct PendingSubmission {
+        var bytes: [UInt8]
+        var startedAt: Date
+        var terminator: UInt8
+        var submittedAt: Date
+        var anchor: TerminalShortcutLineAnchor
+        var capture: TerminalShortcutLineCapture
+    }
+
+    var isAwaitingSubmittedLine: Bool { pendingSubmission != nil }
 
     init(startedAt: Date = Date()) {
         self.startedAt = startedAt
         self.lastRecordedInputAt = startedAt
     }
 
-    func record(data: [UInt8], echoEnabled: Bool, now: Date = Date()) {
+    /// - Parameter screen: the visible grid *before* `data` reaches the
+    ///   process, so it shows the effect of every earlier keystroke.
+    func record(
+        data: [UInt8],
+        echoEnabled: Bool,
+        now: Date = Date(),
+        screen: TerminalShortcutScreen? = nil
+    ) {
         guard !data.isEmpty else { return }
+        settlePendingSubmission(screen: screen, isFinal: true)
 
         if echoEnabled {
             // Echo is back on: any password line in progress is complete.
@@ -360,36 +386,139 @@ final class TerminalShortcutRecorder {
             return
         }
 
-        // Echo off => protected input. Accumulate keystrokes, and treat Enter
-        // (CR/LF) as the line terminator that finalizes one protected event.
-        for byte in data {
+        // Echo off => protected input unless the screen later proves
+        // otherwise. Accumulate keystrokes, and treat Enter (CR/LF) as the
+        // line terminator that finalizes one event.
+        let isLoneEnter = data.count == 1
+        for (offset, byte) in data.enumerated() {
             if byte == 0x0D || byte == 0x0A {
+                if isLoneEnter, beginSubmission(terminator: byte, now: now, screen: screen) {
+                    continue
+                }
                 flushPendingProtectedInput(now: now)
                 // The Enter keypress itself is not a secret; record it as a
                 // normal event so replay still submits the password line.
                 appendEvent(bytes: [byte], echoEnabled: true, now: now)
-            } else if totalRecordedBytes + pendingProtectedBytes.count < maxRecordedBytes {
+            } else if totalRecordedBytes + heldBytesCount < maxRecordedBytes {
                 if pendingProtectedBytes.isEmpty {
                     pendingProtectedStartedAt = now
+                    // Later bytes of a chunk are not on the pre-chunk screen.
+                    pendingLineAnchor = offset == 0 ? screen.flatMap { TerminalShortcutLineAnchor(screen: $0) } : nil
                 }
                 pendingProtectedBytes.append(byte)
             }
         }
     }
 
-    /// Finalize the buffered protected keystrokes into a single event.
-    private func flushPendingProtectedInput(now: Date) {
+    /// New output reached the screen. Settles a submitted line as soon as the
+    /// shell has moved past it and repainted it without any autosuggestion.
+    func screenDidUpdate(_ screen: TerminalShortcutScreen) {
+        settlePendingSubmission(screen: screen, isFinal: false)
+    }
+
+    private var heldBytesCount: Int {
+        pendingProtectedBytes.count + (pendingSubmission.map { $0.bytes.count + 1 } ?? 0)
+    }
+
+    private func beginSubmission(terminator: UInt8, now: Date, screen: TerminalShortcutScreen?) -> Bool {
+        guard !pendingProtectedBytes.isEmpty,
+              let anchor = pendingLineAnchor,
+              let screen,
+              let capture = TerminalShortcutLineResolver.capture(anchor: anchor, screen: screen) else {
+            return false
+        }
+        pendingSubmission = PendingSubmission(
+            bytes: pendingProtectedBytes,
+            startedAt: pendingProtectedStartedAt ?? now,
+            terminator: terminator,
+            submittedAt: now,
+            anchor: anchor,
+            capture: capture
+        )
+        pendingProtectedBytes.removeAll(keepingCapacity: true)
+        pendingProtectedStartedAt = nil
+        pendingLineAnchor = nil
+        return true
+    }
+
+    /// - Parameter isFinal: the next keystroke or the end of recording; the
+    ///   screen will not get a better chance to show what happened.
+    private func settlePendingSubmission(screen: TerminalShortcutScreen?, isFinal: Bool) {
+        guard let submission = pendingSubmission else { return }
+        let settlement = screen.map {
+            TerminalShortcutLineResolver.settle(anchor: submission.anchor, capture: submission.capture, screen: $0)
+        } ?? .unverifiable
+        let typed = TerminalShortcutTypedLine(bytes: submission.bytes)
+        let verifiedComplete: Bool?
+        switch settlement {
+        case .stillEditing:
+            guard isFinal else { return }
+            if typed.mayOpenPager {
+                // Enter picked a completion from the pager instead of running
+                // the line; keep editing it as one line.
+                pendingSubmission = nil
+                pendingProtectedBytes = submission.bytes + [submission.terminator]
+                pendingProtectedStartedAt = submission.startedAt
+                pendingLineAnchor = submission.anchor
+                return
+            }
+            verifiedComplete = nil
+        case .submitted(let restIsClean):
+            verifiedComplete = restIsClean
+        case .unverifiable:
+            verifiedComplete = nil
+        }
+        pendingSubmission = nil
+        let resolved = TerminalShortcutLineResolver.resolvedText(
+            typed: typed,
+            capture: submission.capture,
+            verifiedComplete: verifiedComplete
+        )
+        appendLine(
+            bytes: submission.bytes,
+            resolvedText: resolved,
+            startedAt: submission.startedAt,
+            endedAt: submission.submittedAt
+        )
+        appendEvent(bytes: [submission.terminator], echoEnabled: true, now: submission.submittedAt)
+    }
+
+    /// Finalize the buffered keystrokes into a single event. With a screen
+    /// (end of recording, line never submitted) the displayed text replaces
+    /// the keystrokes when it provably is the whole line.
+    private func flushPendingProtectedInput(now: Date, screen: TerminalShortcutScreen? = nil) {
         defer {
             pendingProtectedBytes.removeAll(keepingCapacity: true)
             pendingProtectedStartedAt = nil
+            pendingLineAnchor = nil
         }
         guard !pendingProtectedBytes.isEmpty else { return }
-        appendEvent(
+        var resolved: String?
+        if let screen,
+           let anchor = pendingLineAnchor,
+           let capture = TerminalShortcutLineResolver.capture(anchor: anchor, screen: screen) {
+            resolved = TerminalShortcutLineResolver.resolvedText(
+                typed: TerminalShortcutTypedLine(bytes: pendingProtectedBytes),
+                capture: capture,
+                verifiedComplete: capture.tailIsClean
+            )
+        }
+        appendLine(
             bytes: pendingProtectedBytes,
-            echoEnabled: false,
-            now: pendingProtectedStartedAt ?? now,
-            anchor: now
+            resolvedText: resolved,
+            startedAt: pendingProtectedStartedAt ?? now,
+            endedAt: now
         )
+    }
+
+    /// One echo-off line: the text the screen proved, or the raw keystrokes
+    /// kept protected.
+    private func appendLine(bytes: [UInt8], resolvedText: String?, startedAt: Date, endedAt: Date) {
+        if let resolvedText {
+            appendEvent(bytes: Array(resolvedText.utf8), echoEnabled: true, now: startedAt, anchor: endedAt)
+        } else {
+            appendEvent(bytes: bytes, echoEnabled: false, now: startedAt, anchor: endedAt)
+        }
     }
 
     /// Appends one recorded event, honoring the event/byte budgets.
@@ -425,11 +554,13 @@ final class TerminalShortcutRecorder {
     func finish(
         title: String,
         id: UUID = UUID(),
-        finishedAt: Date = Date()
+        finishedAt: Date = Date(),
+        screen: TerminalShortcutScreen? = nil
     ) -> TerminalShortcut? {
-        // Flush a password line the user never submitted (e.g. recording stopped
+        settlePendingSubmission(screen: screen, isFinal: true)
+        // Flush a line the user never submitted (e.g. recording stopped
         // mid-prompt) so it is not silently dropped.
-        flushPendingProtectedInput(now: finishedAt)
+        flushPendingProtectedInput(now: finishedAt, screen: screen)
         guard !events.isEmpty else { return nil }
         return TerminalShortcut(
             id: id,

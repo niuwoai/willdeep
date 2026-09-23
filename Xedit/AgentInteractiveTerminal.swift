@@ -825,6 +825,10 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
                 // 别让同一条信号在后续 chunk 里反复触发。
                 self.outputSignalTail = ""
             }
+            // 录制中刚回车的那一行：shell 换行后屏幕上就是最终执行的命令。
+            if let recorder = self.recorder, recorder.isAwaitingSubmittedLine {
+                recorder.screenDidUpdate(self.shortcutScreen())
+            }
         }
         terminalView.shouldRecordInput = { [weak self] in
             guard let self else { return false }
@@ -953,7 +957,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
             activeRecordingStartedAt = nil
         }
         let title = defaultTitle ?? "Terminal Shortcut \(Self.shortcutTitleFormatter.string(from: finishedAt))"
-        return recorder?.finish(title: title, finishedAt: finishedAt)
+        return recorder?.finish(title: title, finishedAt: finishedAt, screen: shortcutScreen())
     }
 
     func cancelRecording() {
@@ -1344,8 +1348,17 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     }
 
     private func recordInputIfNeeded(data: [UInt8], echoEnabled: Bool) {
-        guard !isPlayingShortcut else { return }
-        recorder?.record(data: data, echoEnabled: echoEnabled)
+        guard !isPlayingShortcut, let recorder else { return }
+        recorder.record(data: data, echoEnabled: echoEnabled, screen: shortcutScreen())
+    }
+
+    /// The visible grid for the recorder: shell line editors keep ECHO off,
+    /// so only the screen tells a typed command from a password.
+    private func shortcutScreen() -> AgentTerminalShortcutScreen {
+        AgentTerminalShortcutScreen(
+            terminal: terminalView.getTerminal(),
+            isShowingLiveBottom: !terminalView.canScroll || terminalView.scrollPosition >= 1
+        )
     }
 
     // MARK: Idle bookkeeping
