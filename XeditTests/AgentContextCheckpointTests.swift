@@ -535,6 +535,39 @@ struct AgentContextCheckpointTests {
         #expect(!history.contains { $0.content.contains("old reference data") }, "摘要必须仍然生效")
     }
 
+    /// 2026-09-23 同一会话的第二处漏洞：90% 停机 → 压缩 → 自动续跑三次，
+    /// 统一日志三次都是 `context checkpoint stale`，出在续跑回合的第一个
+    /// 请求上。压缩时的本回合上下文载体落在被压前缀里，新回合一挂上下文
+    /// 就把它改写成占位符，前缀摘要随之失配，prompt 从 117k 涨到 129k。
+    @Test("新回合挂上下文、把前缀里的旧快照改写成占位符后，检查点仍然有效")
+    func checkpointSurvivesTurnContextSupersede() throws {
+        let f = try fixture(); defer { f.cleanup() }
+        // 本回合载体在被压前缀里（through = messages[1]）。
+        var carrier = [f.runtime.messages[0]]
+        AgentContextBuilder.attachTurnContextIfNeeded("turn A context", to: &carrier)
+        f.runtime.messages[0] = carrier[0]
+        #expect(f.runtime.messages[0].modelContext?.hasPrefix(AgentContextBuilder.turnContextReminderHeader) == true)
+
+        try f.app.installContextCompression(for: f.runtime, summary: "继续", ticket: f.ticket())
+        #expect(f.app.contextCheckpointText(for: f.runtime) != nil)
+
+        // 续跑回合：给前缀外的用户消息挂新上下文，同时改写前缀里的旧快照。
+        AgentContextBuilder.attachTurnContextIfNeeded("turn B context", to: &f.runtime.messages)
+        #expect(f.runtime.messages[0].modelContext == AgentContextBuilder.supersededTurnContextPlaceholder)
+
+        #expect(f.app.contextCheckpointText(for: f.runtime) != nil, "每轮上下文改写不应作废检查点")
+        let history = f.app.modelFacingHistory(for: f.runtime)
+        #expect(!history.contains { $0.content.contains("old reference data") }, "摘要必须仍然生效，而不是回退成完整历史")
+    }
+
+    @Test("前缀里的用户原话被改，检查点照样作废")
+    func checkpointStillRejectsRealPrefixEdits() throws {
+        let f = try fixture(); defer { f.cleanup() }
+        try f.app.installContextCompression(for: f.runtime, summary: "继续", ticket: f.ticket())
+        f.runtime.messages[1].content = "改写过的历史"
+        #expect(f.app.contextCheckpointText(for: f.runtime) == nil)
+    }
+
     @Test("旧检查点没有截短计数字段也能解码")
     func legacyCheckpointDecodesWithoutOmittedPathCount() throws {
         let f = try fixture(); defer { f.cleanup() }

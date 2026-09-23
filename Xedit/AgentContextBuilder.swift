@@ -804,14 +804,14 @@ enum AgentContextBuilder {
     /// Stable prefix identifying a full per-turn context reminder in a user
     /// message's `modelContext`. Used to find superseded snapshots without
     /// matching the placeholder below.
-    static let turnContextReminderHeader = "<system-reminder>\nThe host supplied this per-turn context."
+    nonisolated static let turnContextReminderHeader = "<system-reminder>\nThe host supplied this per-turn context."
 
     /// What an earlier turn's full context is rewritten to once a newer turn
     /// attaches its own. Deterministic (no timestamps) so replays stay
     /// byte-identical after the one-time rewrite. Keeping only the newest
     /// snapshot bounds hidden-context growth to one copy per session instead
     /// of one per turn (a full snapshot can run ~18K characters).
-    static let supersededTurnContextPlaceholder = """
+    nonisolated static let supersededTurnContextPlaceholder = """
     <system-reminder>
     Per-turn context that was delivered here in an earlier turn has been superseded by the latest turn's context.
     </system-reminder>

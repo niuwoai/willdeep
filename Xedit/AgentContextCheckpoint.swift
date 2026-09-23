@@ -172,6 +172,13 @@ nonisolated struct AgentContextCheckpoint: Codable, Equatable {
     /// 回来。一个真实会话因此三次压缩全部白做，请求从 116k 一路涨到
     /// 132k 撑满窗口，界面上只表现为「压缩完成」却毫无收益。
     /// `createdAt` 取整到秒，正是为了扛住存盘往返。
+    ///
+    /// 同日第二处漏洞：`modelContext` 是宿主挂的每轮上下文，新回合一开始
+    /// `attachTurnContextIfNeeded` 就把上一份改写成 superseded 占位符（或给
+    /// 空载体补上新快照）。压缩时的「本回合载体」几乎总落在被压前缀里，于是
+    /// 续跑回合的第一个请求就判检查点过期、整段原文重发——90% 停机后的三次
+    /// 自动续跑全部白压。这段内容压缩后本就被摘要替掉、模型看不到，检查点
+    /// 也不收录它，所以归一化成 nil，不参与校验。
     private struct SemanticMessage: Encodable {
         let id: UUID
         let role: AgentRole
@@ -198,7 +205,7 @@ nonisolated struct AgentContextCheckpoint: Codable, Equatable {
             source = message.source
             content = message.content
             reasoningContent = message.reasoningContent
-            modelContext = message.modelContext
+            modelContext = Self.digestableModelContext(message.modelContext)
             toolCallID = message.toolCallID
             toolCallStatus = message.toolCallStatus
             toolCalls = message.toolCalls.map {
@@ -207,6 +214,16 @@ nonisolated struct AgentContextCheckpoint: Codable, Equatable {
             imageIDs = message.images.map(\.id.uuidString).sorted()
             textAttachmentIDs = message.textAttachments.map(\.id.uuidString).sorted()
             createdAtSeconds = Int(message.createdAt.timeIntervalSince1970.rounded(.down))
+        }
+
+        /// 宿主每轮上下文（完整快照或其占位符）视同没有；其余原样参与。
+        static func digestableModelContext(_ value: String?) -> String? {
+            guard let value else { return nil }
+            if value.hasPrefix(AgentContextBuilder.turnContextReminderHeader)
+                || value == AgentContextBuilder.supersededTurnContextPlaceholder {
+                return nil
+            }
+            return value
         }
     }
 
