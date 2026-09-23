@@ -488,6 +488,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// circuit breaker (`AgentToolFailureGuidance`): past a few failures the
     /// host stops saying "try another approach" and asks for a report.
     var currentTurnToolFailureCounts: [String: Int] = [:]
+    /// `prefixDigest` of the checkpoint already reported as stale, so the
+    /// log stays one line per incident instead of one per request.
+    var staleContextCheckpointDigest: String?
     /// Whether an embedded_browser_* call was made since the turn started.
     var usedEmbeddedBrowserThisTurn: Bool {
         guard let turnStartedAt else { return false }

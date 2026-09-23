@@ -1,6 +1,9 @@
 import Foundation
+import os
 
 extension AppState {
+    static let contextCompressionLog = Logger(subsystem: "com.willdeep.app", category: "context-compression")
+
     private final class CheckpointPrefixCache: NSObject {
         let checkpoint: AgentContextCheckpoint
         let prefix: [AgentMessage]
@@ -44,7 +47,7 @@ extension AppState {
             .tasks.first { $0.id == runtime.session.dispatchTaskID && $0.runtimeSessionID == runtime.id }
         let paths = AgentContextCheckpoint.boundedAttributedPaths(runtime.agentEditedPaths)
         return AgentContextCheckpoint(version: AgentContextCheckpoint.schemaVersion, sessionID: runtime.id,
-            throughMessageID: id, prefixDigest: try AgentGoalTaskAuthorization.digest(prefix),
+            throughMessageID: id, prefixDigest: try AgentContextCheckpoint.prefixDigest(for: prefix),
             workspace: runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) },
             executionAgent: runtime.executionAgent, userInputs: inputs, goal: goal, plan: runtime.currentPlan,
             attributedPaths: paths.kept, recentToolReceipts: receipts,
@@ -109,10 +112,23 @@ extension AppState {
         let prefix = Array(runtime.messages.prefix(index + 1))
         if let cached = Self.checkpointPrefixCaches.object(forKey: runtime),
            cached.checkpoint == checkpoint, cached.prefix == prefix { return cached.prompt }
-        guard (try? AgentGoalTaskAuthorization.digest(prefix)) == checkpoint.prefixDigest,
+        guard (try? AgentContextCheckpoint.prefixDigest(for: prefix)) == checkpoint.prefixDigest,
               let prompt = try? checkpoint.prompt() else { return nil }
         Self.checkpointPrefixCaches.setObject(.init(checkpoint: checkpoint, prefix: prefix, prompt: prompt), forKey: runtime)
         return prompt
+    }
+
+    /// Logged once per stale checkpoint; the flag makes the next
+    /// between-turns pass recompress instead of running the window up to
+    /// 100% on a summary nothing is using.
+    func noteStaleContextCheckpoint(for runtime: AgentRuntime) {
+        guard runtime.staleContextCheckpointDigest != runtime.contextCheckpoint?.prefixDigest else { return }
+        runtime.staleContextCheckpointDigest = runtime.contextCheckpoint?.prefixDigest
+        Self.contextCompressionLog.error(
+            """
+            context checkpoint stale: summary dropped and the full transcript is being sent             runtime=\(runtime.id.uuidString, privacy: .public)             messages=\(runtime.messages.count)             through=\(runtime.contextSummaryThroughMessageID?.uuidString ?? "-", privacy: .public)
+            """
+        )
     }
 
     func discardContextCheckpointCache(for runtime: AgentRuntime) {
@@ -143,9 +159,13 @@ extension AppState {
     }
 
     /// A stale structured checkpoint cannot silently degrade to its old prose
-    /// summary. Fall back to the intact transcript until it is recompressed.
+    /// summary. Fall back to the intact transcript until it is recompressed —
+    /// but say so and ask for a recompression, because this fallback undoes
+    /// the whole compression: the request goes back to full size while the
+    /// UI still reports "compression finished".
     func modelFacingHistory(for runtime: AgentRuntime, excludingMessageID: UUID? = nil) -> [AgentMessage] {
         let text = contextCheckpointText(for: runtime)
+        if runtime.contextCheckpoint != nil, text == nil { noteStaleContextCheckpoint(for: runtime) }
         let summary = runtime.contextCheckpoint == nil || text != nil ? runtime.contextSummary : nil
         return Self.modelFacingHistory(messages: runtime.messages, contextSummary: summary,
             contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,

@@ -487,6 +487,54 @@ struct AgentContextCheckpointTests {
         #expect(bounded.kept == bounded.kept.sorted())
     }
 
+    /// 2026-09-23：一个会话三次压缩「成功」，请求体积却只增不减
+    /// （116k → 132k），最后把窗口撑到 100%。落盘取证：摘要装上了，
+    /// 但 prefixDigest 对不上，`contextCheckpointText` 返回 nil，
+    /// `modelFacingHistory` 连摘要一起丢掉，回退成发送完整历史，全程无提示。
+    @Test("回合结束回填 token 统计后，检查点仍然有效（统计字段不参与校验）")
+    func checkpointSurvivesTokenAccountingWrites() throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let ticket = try f.ticket()
+        try f.app.installContextCompression(for: f.runtime, summary: "继续", ticket: ticket)
+        #expect(f.app.contextCheckpointText(for: f.runtime) != nil)
+
+        // 正是 runAgentLoop 在回合收尾对助手消息做的回填。
+        f.runtime.messages[1].promptTokens = 115_200
+        f.runtime.messages[1].cachedPromptTokens = 98_432
+        f.runtime.messages[1].completionTokens = 2_290
+        f.runtime.messages[1].elapsedSeconds = 16.4
+        f.runtime.messages[1].firstResponseSeconds = 2.1
+
+        #expect(f.app.contextCheckpointText(for: f.runtime) != nil, "回填统计不应作废检查点")
+        #expect(f.app.effectiveContextSummary(for: f.runtime) != nil)
+        let history = f.app.modelFacingHistory(for: f.runtime)
+        #expect(!history.contains { $0.content.contains("old reference data") }, "摘要必须仍然生效，而不是回退成完整历史")
+        #expect(history.contains { $0.content.contains("<untrusted-conversation-summary>") })
+    }
+
+    @Test("会话存盘再读回后，检查点仍然有效（时间戳精度不参与校验）")
+    func checkpointSurvivesStoreRoundTrip() throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let ticket = try f.ticket()
+        try f.app.installContextCompression(for: f.runtime, summary: "继续", ticket: ticket)
+        f.runtime.session.messages = f.runtime.messages
+        f.runtime.session.contextSummary = f.runtime.contextSummary
+        f.runtime.session.contextSummaryThroughMessageID = f.runtime.contextSummaryThroughMessageID
+        f.runtime.session.contextCheckpoint = f.runtime.contextCheckpoint
+        #expect(AgentSessionStore.save(f.runtime.session))
+        let reloaded = try #require(AgentSessionStore.load(id: f.runtime.id))
+        let restored = AgentRuntime(session: reloaded)
+        restored.contextSummary = reloaded.contextSummary
+        restored.contextSummaryThroughMessageID = reloaded.contextSummaryThroughMessageID
+        restored.contextCheckpoint = reloaded.contextCheckpoint
+        restored.currentGoal = f.runtime.currentGoal
+        restored.currentPlan = f.runtime.currentPlan
+
+        #expect(f.app.contextCheckpointText(for: restored) != nil, "存盘往返不应作废检查点")
+        let history = f.app.modelFacingHistory(for: restored)
+        #expect(!history.contains { $0.content.contains("old reference data") }, "摘要必须仍然生效")
+    }
+
     @Test("旧检查点没有截短计数字段也能解码")
     func legacyCheckpointDecodesWithoutOmittedPathCount() throws {
         let f = try fixture(); defer { f.cleanup() }

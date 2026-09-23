@@ -153,8 +153,20 @@ extension AppState {
     }
 
     func maybeAutoCompressContext(for runtime: AgentRuntime) {
-        guard shouldAutoCompressNow(for: runtime) else { return }
+        // A stale checkpoint means the installed summary is being dropped at
+        // request time, so the window is not actually reclaimed no matter
+        // what the ratio says. Recompress instead of waiting for 75% of a
+        // number that will only keep climbing.
+        guard shouldAutoCompressNow(for: runtime) || staleCheckpointNeedsRecompression(for: runtime) else { return }
         compressAgentContext(for: runtime)
+    }
+
+    /// True when a checkpoint exists but no longer validates, which is the
+    /// only state where compression reports success and reclaims nothing.
+    func staleCheckpointNeedsRecompression(for runtime: AgentRuntime) -> Bool {
+        guard !runtime.isCompressingContext, !runtime.isResponding,
+              runtime.contextCheckpoint != nil, runtime.messages.count > 6 else { return false }
+        return contextCheckpointText(for: runtime) == nil
     }
 
     @MainActor

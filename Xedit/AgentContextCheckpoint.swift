@@ -4,7 +4,9 @@ import Foundation
 /// or silently discard. Receipts are historical references, never grants or
 /// permission to restore a done flag without current host verification.
 nonisolated struct AgentContextCheckpoint: Codable, Equatable {
-    static let schemaVersion = 1
+    /// v2 起 `prefixDigest` 只覆盖语义投影（见 `prefixDigest(for:)`）。
+    /// 旧检查点按版本直接作废，重压一次即可，不做静默降级。
+    static let schemaVersion = 2
     static let maximumEncodedBytes = 131_072
     static let recentToolLimit = 32
     /// `attributedPaths` 是一份索引，不是约束，和工具回执一样可以截短。
@@ -158,6 +160,59 @@ nonisolated struct AgentContextCheckpoint: Codable, Equatable {
         }
         let kept = paths.sorted { rank($0) < rank($1) }.prefix(attributedPathLimit)
         return (kept.sorted(), paths.count - kept.count)
+    }
+
+    /// What the digest may look at: identity plus everything the model
+    /// actually sees. Deliberately excludes render-only and after-the-fact
+    /// fields.
+    ///
+    /// 2026-09-23：`prefixDigest` 原本对整条消息做编码取哈希，于是两件
+    /// 与任务无关的事都会让检查点永久作废——回合收尾把 token 统计和耗时
+    /// 回填到助手消息上，以及会话存盘（日期按 ISO8601 只留到秒）后再读
+    /// 回来。一个真实会话因此三次压缩全部白做，请求从 116k 一路涨到
+    /// 132k 撑满窗口，界面上只表现为「压缩完成」却毫无收益。
+    /// `createdAt` 取整到秒，正是为了扛住存盘往返。
+    private struct SemanticMessage: Encodable {
+        let id: UUID
+        let role: AgentRole
+        let source: AgentMessageSource?
+        let content: String
+        let reasoningContent: String?
+        let modelContext: String?
+        let toolCallID: String?
+        let toolCallStatus: AgentToolCallStatus?
+        let toolCalls: [SemanticToolCall]
+        let imageIDs: [String]
+        let textAttachmentIDs: [String]
+        let createdAtSeconds: Int
+
+        struct SemanticToolCall: Encodable {
+            let externalID: String
+            let toolName: String
+            let argumentsJSON: String
+        }
+
+        init(_ message: AgentMessage) {
+            id = message.id
+            role = message.role
+            source = message.source
+            content = message.content
+            reasoningContent = message.reasoningContent
+            modelContext = message.modelContext
+            toolCallID = message.toolCallID
+            toolCallStatus = message.toolCallStatus
+            toolCalls = message.toolCalls.map {
+                .init(externalID: $0.externalID, toolName: $0.toolName, argumentsJSON: $0.argumentsJSON)
+            }
+            imageIDs = message.images.map(\.id.uuidString).sorted()
+            textAttachmentIDs = message.textAttachments.map(\.id.uuidString).sorted()
+            createdAtSeconds = Int(message.createdAt.timeIntervalSince1970.rounded(.down))
+        }
+    }
+
+    /// Stable digest of a transcript prefix; see `SemanticMessage`.
+    static func prefixDigest(for messages: [AgentMessage]) throws -> String {
+        try AgentGoalTaskAuthorization.digest(messages.map(SemanticMessage.init))
     }
 
     func encoded() throws -> Data {
