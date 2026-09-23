@@ -7,8 +7,32 @@
 
 import SwiftUI
 
+/// 设置窗口注入的 `AppState` 是当前聚焦的 editor，不一定是常驻中继的 owner。
+/// 这里统一换成 owner 的 coordinator / desktop peer，保证二维码、「重新生成」
+/// 和状态显示操作的都是手机真正连着的那一条连接。
 struct MobileGatewaySettingsView: View {
     @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        let owner = MobileGatewayAutostart.shared.relayOwner(adopting: appState)
+        MobileGatewaySettingsContent(
+            coordinator: owner.mobileGatewayCoordinator,
+            desktopPeer: owner.mobileGatewayDesktopPeer
+        )
+    }
+}
+
+private struct MobileGatewaySettingsContent: View {
+    @ObservedObject var coordinator: MobileGatewayCoordinator
+    /// Observed only so the "desktop peer connected" row refreshes; reads go
+    /// through `coordinator.desktopPeerIsConnected`.
+    @ObservedObject var desktopPeer: AgentMobileGatewayDesktopPeer
+
+    init(coordinator: MobileGatewayCoordinator, desktopPeer: AgentMobileGatewayDesktopPeer) {
+        self.coordinator = coordinator
+        self.desktopPeer = desktopPeer
+    }
+
     @ObservedObject private var settingsNavigation = EditorSettingsNavigation.shared
     @State private var draft = MobileGatewaySettingsStore.load()
     @State private var portText = String(MobileGatewaySettingsStore.load().port)
@@ -17,10 +41,6 @@ struct MobileGatewaySettingsView: View {
     /// default — day-to-day the user only needs the QR code.
     @State private var showAdvanced = false
     @State private var showCustomRelaySettings = false
-
-    private var coordinator: MobileGatewayCoordinator {
-        appState.mobileGatewayCoordinator
-    }
 
     private var gatewayLogPreview: String {
         String(coordinator.recentOutput.suffix(2_000))

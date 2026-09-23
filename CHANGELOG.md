@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.403.0-rc11 - 2026-09-23
+
+### Fixed
+
+- **设置页「重新生成二维码」后，手机扫新码连上中继却一直等不到 Mac 回话，要退出重开 App 才恢复。** 中继连接是启动时锁定的一个 owner `AppState` 常驻持有的（`MobileGatewayAutostart`），而设置页用的是设置窗口注入的「当前聚焦 editor」那份 coordinator，两者往往不是同一个：重新生成只把设置页窗口那条连接挪到新 room / token，常驻连接留在旧 room；设置页窗口一关，新 room 里就没有任何桌面端了。现在设置页统一取 owner 的 coordinator 与 desktop peer，二维码、重新生成、重启、状态显示操作的都是手机真正连着的那一条连接；全进程也不会再因为在别的窗口打开设置而多拨出一条中继连接。
+  - owner 改为强引用：owner 若是某个 editor 窗口的 `AppState`，窗口关闭后 registry 不再持有它，原先的弱引用会让中继连接跟着窗口一起消失。
+  - 设置页现在直接观察 coordinator 与 desktop peer，「桌面端已连接 / 未连接」随连接状态实时刷新。
+  - 测试：新增 `MobileGatewayAutostartTests`，钉住「owner 一经锁定不再更换、后来的窗口拿到的是同一个 coordinator」。
+
 ## 1.403.0-rc10 - 2026-09-23
 
 ### Fixed
