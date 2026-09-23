@@ -30,7 +30,10 @@ struct AgentDockBadgeCoordinatorTests {
     /// that registers an AppState with an `EditorAppStateRegistry` re-tracks
     /// the coordinator with *its* set, silently dropping ours — the release
     /// gate saw 0 pending after 79s while the case passed alone. Re-assert
-    /// our tracking on every poll, and give a loaded main actor a real window.
+    /// our tracking only once it has actually been dropped, and give a loaded
+    /// main actor a real window. (Re-tracking on every poll made the whole
+    /// full run ~40s slower and pushed an unrelated near-deadline Goal case
+    /// past its 120s wait.)
     private func settle(
         retracking tracked: @autoclosure () -> [AppState] = [],
         until condition: (() -> Bool)? = nil
@@ -40,7 +43,9 @@ struct AgentDockBadgeCoordinatorTests {
         for _ in 0..<(condition == nil ? 50 : 250) {
             if condition?() == true { return }
             let appStates = tracked()
-            if !appStates.isEmpty { AgentDockBadgeCoordinator.shared.track(appStates: appStates) }
+            if !appStates.isEmpty, !appStates.allSatisfy(AgentDockBadgeCoordinator.shared.isTracking) {
+                AgentDockBadgeCoordinator.shared.track(appStates: appStates)
+            }
             try? await Task.sleep(for: .milliseconds(20))
         }
     }

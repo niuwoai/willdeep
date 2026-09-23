@@ -204,6 +204,13 @@ final class AgentDockBadgeCoordinator: ObservableObject {
 
     private init() {}
 
+    /// Whether `appState` is in the tracked set. Every `track(appStates:)`
+    /// call replaces the whole set, so tests use this to re-assert their
+    /// tracking only after another registry actually replaced it.
+    func isTracking(_ appState: AppState) -> Bool {
+        trackedAppStates[ObjectIdentifier(appState)] != nil
+    }
+
     func track(appStates: [AppState]) {
         let uniqueAppStates = Dictionary(
             appStates.map { (ObjectIdentifier($0), $0) },
