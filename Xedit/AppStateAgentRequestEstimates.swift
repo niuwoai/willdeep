@@ -351,6 +351,7 @@ extension AppState {
         let contextWindow = agentContextWindow
         let historyForAnchor = agentMessages
         let summaryThroughID = activeRuntime?.contextSummaryThroughMessageID
+        let summaryInstalledAt = activeRuntime?.contextSummaryInstalledAt
 
         let worker = Task.detached(priority: .utility) { () -> AgentContextTokenUsageSnapshot? in
             let estimated = Self.estimateAgentTokens(workload: usedWorkload)
@@ -359,7 +360,8 @@ extension AppState {
             guard !Task.isCancelled else { return nil }
             let anchored = Self.providerAnchoredUsedTokens(
                 messages: historyForAnchor,
-                contextSummaryThroughMessageID: summaryThroughID
+                contextSummaryThroughMessageID: summaryThroughID,
+                contextSummaryInstalledAt: summaryInstalledAt
             )
             guard !Task.isCancelled else { return nil }
             return AgentContextTokenUsageSnapshot(
@@ -391,7 +393,8 @@ extension AppState {
     /// forever and hide the very compression that fixed it.
     nonisolated static func providerAnchoredUsedTokens(
         messages: [AgentMessage],
-        contextSummaryThroughMessageID: AgentMessage.ID?
+        contextSummaryThroughMessageID: AgentMessage.ID?,
+        contextSummaryInstalledAt: Date? = nil
     ) -> Int? {
         guard let anchorIndex = messages.lastIndex(where: {
             $0.role == .assistant && ($0.promptTokens ?? 0) > 0
@@ -401,6 +404,16 @@ extension AppState {
         if let throughID = contextSummaryThroughMessageID,
            let summaryIndex = messages.firstIndex(where: { $0.id == throughID }),
            summaryIndex >= anchorIndex {
+            return nil
+        }
+        // Position is not enough. Compression runs between turns, so the
+        // summary marker sits *behind* the newest request while the
+        // compression itself happened *after* it: that reading priced a
+        // history the provider will never see again. 2026-09-23: a session
+        // sat at 68% right after "compression finished" for exactly this
+        // reason — the ring was quoting the pre-compression request.
+        if let installedAt = contextSummaryInstalledAt,
+           messages[anchorIndex].createdAt <= installedAt {
             return nil
         }
 

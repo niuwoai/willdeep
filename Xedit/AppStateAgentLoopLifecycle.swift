@@ -41,6 +41,7 @@ extension AppState {
         agentMessages.removeAll()
         if let runtime = activeRuntime {
             runtime.contextSummary = nil
+            runtime.contextSummaryInstalledAt = nil
             runtime.contextSummaryThroughMessageID = nil
             runtime.contextCheckpoint = nil
             discardContextCheckpointCache(for: runtime)

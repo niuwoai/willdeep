@@ -132,7 +132,8 @@ extension AppState {
         // how a session reached 155% of its window without ever tripping 75%.
         let anchored = Self.providerAnchoredUsedTokens(
             messages: runtime.messages,
-            contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+            contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
+            contextSummaryInstalledAt: runtime.contextSummaryInstalledAt
         )
         let used = max(estimated, anchored ?? 0)
         // Bare used/window — the same ratio the status-bar ring shows and

@@ -78,6 +78,8 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var contextSummary: String?
     @Published var contextCheckpoint: AgentContextCheckpoint?
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
+    /// See `AgentSession.contextSummaryInstalledAt`.
+    @Published var contextSummaryInstalledAt: Date?
     @Published var patchProposals: [AgentPatchProposal] = []
     /// Assistant messages whose consecutive local file edits are still being
     /// collected into one review batch. Patch decision controls stay disabled
@@ -585,6 +587,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.messages = session.messages.map(Self.normalizingInterruptedWorkflow)
         self.latestComputerUseActivity = AgentComputerUseActivity.latest(in: self.messages)
         self.contextSummary = session.contextSummary
+        self.contextSummaryInstalledAt = session.contextSummaryInstalledAt
         self.contextCheckpoint = session.contextCheckpoint
         self.contextSummaryThroughMessageID = session.contextSummaryThroughMessageID
         self.didEditFiles = session.didEditFiles
@@ -770,6 +773,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     func persist(touchUpdatedAt: Bool = true) {
         session.messages = messages
         session.contextSummary = contextSummary
+        session.contextSummaryInstalledAt = contextSummaryInstalledAt
         session.contextCheckpoint = contextCheckpoint
         session.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         session.workspaceRootPath = workspaceRootPath

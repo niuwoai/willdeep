@@ -93,6 +93,7 @@ extension AppState {
         }
         runtime.contextCheckpoint = ticket.checkpoint
         runtime.contextSummary = summary
+        runtime.contextSummaryInstalledAt = Date()
         runtime.contextSummaryThroughMessageID = ticket.checkpoint.throughMessageID
         if let index = runtime.messages.firstIndex(where: { $0.id == ticket.checkpoint.throughMessageID }) {
             Self.checkpointPrefixCaches.setObject(.init(checkpoint: ticket.checkpoint,

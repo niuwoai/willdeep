@@ -2238,6 +2238,38 @@ struct WillDeepTests {
         )
     }
 
+    /// 2026-09-23：一个会话刚压缩完，状态栏仍然写着 68%。压缩跑在回合之间，
+    /// 所以摘要覆盖到的那条消息位置上**早于**最后一次请求，位置判据放行了，
+    /// 而那次请求算的是压缩前的历史——环上于是一直挂着旧数字，直到下一轮
+    /// 真的发出去为止。
+    @Test("压缩发生在最后一次请求之后时，不再拿那次请求当锚")
+    func testAnchorIsDroppedWhenCompressionLandedAfterIt() {
+        let head = AgentMessage(role: .user, content: "早期历史", createdAt: Date(timeIntervalSince1970: 1_000))
+        let anchored = AgentMessage(role: .assistant, content: "ok", promptTokens: 86_616,
+                                    createdAt: Date(timeIntervalSince1970: 2_000))
+        let messages = [head, AgentMessage(role: .user, content: "hi", createdAt: Date(timeIntervalSince1970: 1_500)), anchored]
+
+        // 摘要覆盖到最早那条：位置判据挡不住它。
+        #expect(AppState.providerAnchoredUsedTokens(
+            messages: messages,
+            contextSummaryThroughMessageID: head.id
+        ) != nil)
+
+        // 压缩发生在那次请求之后 → 这个读数已经作废。
+        #expect(AppState.providerAnchoredUsedTokens(
+            messages: messages,
+            contextSummaryThroughMessageID: head.id,
+            contextSummaryInstalledAt: Date(timeIntervalSince1970: 2_500)
+        ) == nil)
+
+        // 压缩发生在更早、之后又跑过一轮 → 那一轮的读数仍然可信。
+        #expect(AppState.providerAnchoredUsedTokens(
+            messages: messages,
+            contextSummaryThroughMessageID: head.id,
+            contextSummaryInstalledAt: Date(timeIntervalSince1970: 1_800)
+        ) != nil)
+    }
+
     @Test("agent tool-round safety limit supports long multi-step work")
     func testAgentToolRoundSafetyLimit() {
         #expect(AppState.maxAgentToolRounds == 256)

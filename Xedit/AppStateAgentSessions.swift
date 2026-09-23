@@ -2597,7 +2597,8 @@ extension AppState {
         let cacheWarning = AgentModelSwitchCachePolicy.cacheWarning(
             usedTokens: Self.providerAnchoredUsedTokens(
                 messages: runtime.messages,
-                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
+                contextSummaryInstalledAt: runtime.contextSummaryInstalledAt
             )
         )
         let notice = [L10n.AgentModelPicker.modelChanged(from: old, to: new), cacheWarning]

@@ -740,7 +740,8 @@ extension AppState {
             runtime.contextSystemPromptTokenEstimate = Self.estimateTextTokens(systemPrompt)
             let providerAnchoredTokens = Self.providerAnchoredUsedTokens(
                 messages: runtime.messages,
-                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
+                contextSummaryInstalledAt: runtime.contextSummaryInstalledAt
             )
             let contextWindow = Self.agentContextWindow(
                 model: turnConfiguration.model,

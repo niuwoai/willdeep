@@ -156,6 +156,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// the summary plus messages after this id; the UI still renders every
     /// original message from `messages`.
     var contextSummaryThroughMessageID: AgentMessage.ID?
+    /// When `contextSummary` was installed. The gauge needs it because a
+    /// `prompt_tokens` reading from *before* a compression describes a
+    /// request that no longer exists: anchoring on it pins the ring at the
+    /// pre-compression number until the next turn happens to run.
+    var contextSummaryInstalledAt: Date?
     /// True once the Agent has successfully applied at least one patch in
     /// this session. Drives whether the "正在编辑 / N 个文件已更改" worktree
     /// card appears — empty/new sessions never show it, even when the
@@ -300,6 +305,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         auxiliaryModelRequests: [AgentAuxiliaryModelRequestRecord] = [],
         contextSummary: String? = nil,
         contextSummaryThroughMessageID: AgentMessage.ID? = nil,
+        contextSummaryInstalledAt: Date? = nil,
         didEditFiles: Bool = false,
         agentEditedPaths: [String] = [],
         fileObservations: [String: AgentFileObservation] = [:],
@@ -355,6 +361,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.auxiliaryModelRequests = auxiliaryModelRequests
         self.contextSummary = contextSummary
         self.contextSummaryThroughMessageID = contextSummaryThroughMessageID
+        self.contextSummaryInstalledAt = contextSummaryInstalledAt
         self.didEditFiles = didEditFiles
         self.agentEditedPaths = agentEditedPaths
         self.fileObservations = fileObservations
@@ -499,7 +506,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case prefersSubagents, sandboxEnabled
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
-        case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID, contextCheckpoint
+        case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID, contextSummaryInstalledAt, contextCheckpoint
         case didEditFiles, agentEditedPaths, fileObservations, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
         case originRoutineID, lastTurnFailure
@@ -544,6 +551,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.contextSummary = try c.decodeIfPresent(String.self, forKey: .contextSummary)
         self.contextCheckpoint = try c.decodeIfPresent(AgentContextCheckpoint.self, forKey: .contextCheckpoint)
         self.contextSummaryThroughMessageID = try c.decodeIfPresent(AgentMessage.ID.self, forKey: .contextSummaryThroughMessageID)
+        self.contextSummaryInstalledAt = try c.decodeIfPresent(Date.self, forKey: .contextSummaryInstalledAt)
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
         self.agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
         // 用 try? 而不是 try：台账是辅助证据，一条坏掉的记录不该让整段对话
