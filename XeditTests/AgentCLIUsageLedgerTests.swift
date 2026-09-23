@@ -236,6 +236,28 @@ struct AgentCLIUsageLedgerTests {
         #expect(cell.desktopTokenCount >= 50)
     }
 
+    /// 用户报的现象：热力图 tooltip 说 9 月 23 日 602 万 Token，点进用量日历
+    /// 同一天只有 5.97M。差值正是子 Worker 与辅助请求（压缩、标题等）的
+    /// Token——热力图算、日历不算。两个面板对同一天必须给同一个数。
+    @Test("同一天：用量日历与热力图的 Token 一致（含 worker 与辅助请求）")
+    func calendarMatchesHeatmapForTheSameDay() throws {
+        let now = Date()
+        var session = Self.session([
+            AgentMessage(role: .user, content: "hi", createdAt: now),
+            AgentMessage(role: .assistant, content: "ok", usageTokens: 1_000,
+                         requestModelID: "gpt-4.1", createdAt: now),
+        ])
+        session.auxiliaryModelRequests = [AgentAuxiliaryModelRequestRecord(
+            purpose: .contextCompression, providerID: "someim", modelID: "m", isLocal: false,
+            createdAt: now, promptTokens: 48_000, completionTokens: 900, elapsedSeconds: 3, succeeded: true
+        )]
+        let cell = try #require(Self.cell(on: now, in: AgentUsageStats.heatmap(for: [session], weekCount: 1, now: now)))
+        let day = try #require(AgentUsageStats.dailyUsage(for: [session], in: now)
+            .first { Calendar.current.isDate($0.date, inSameDayAs: now) })
+        #expect(cell.tokenCount == day.tokenCount)
+        #expect(day.tokenCount >= 48_900, "压缩这类辅助请求的 Token 必须进日历")
+    }
+
     @Test("总览合并 CLI：Token、会话数、活跃天数；最爱模型按逐次调用")
     func overviewMergesCLI() {
         let now = Date()

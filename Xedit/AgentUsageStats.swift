@@ -949,6 +949,15 @@ nonisolated enum AgentUsageStats {
             }
         }
 
+        // 子 Worker 与辅助请求（标题、上下文压缩、图片描述、派发判断、输入
+        // 联想）的 Token 不在 transcript 消息里，热力图一直把它们算进当天
+        // 用量，日历却漏了——同一天点进去数字会凭空变小。2026-09-23 对齐：
+        // 这里只取 `additionalTokens`，CLI 仍走下面的账本分支，避免重复计。
+        for event in AgentRequestAnalytics.requestEvents(for: sessions)
+        where event.additionalTokens > 0 && monthInterval.contains(event.createdAt) {
+            tokenCountByDay[calendar.startOfDay(for: event.createdAt), default: 0] += event.additionalTokens
+        }
+
         // CLI 账本：Token 取账本报的数，费用按同一张价目表算（未定价的记 0）。
         let cliByDay = Dictionary(grouping: cliRecords.filter { monthInterval.contains($0.timestamp) }) {
             calendar.startOfDay(for: $0.timestamp)
