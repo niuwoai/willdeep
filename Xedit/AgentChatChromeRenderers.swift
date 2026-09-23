@@ -108,50 +108,6 @@ enum AgentChatHistoryFooterChrome {
     /// 图标搬进 TextKit footer,跟 copy / ◷ / tokens / ↻ 同一行。link
     /// 值供 NSTextView 的 `clickedOnLink` 路由到 popover。
     static let reportLinkValue = "agent-chat-history-show-turn-report"
-    /// 上下文跑道交接的两个接力动作。只在最后一条 assistant 消息、且
-    /// 这条消息真的是一次 handoff 时出现 —— 正文里的 `NEXT PROMPT:`
-    /// 段落被折进这两个图标,别处不再重复。
-    static let resumeHandoffLinkValue = "agent-chat-history-resume-handoff"
-    static let handoffNewSessionLinkValue = "agent-chat-history-handoff-new-session"
-
-    /// "在本会话继续":把本地化的「继续」填进输入框。
-    static func resumeHandoffButton(
-        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
-        font: NSFont? = nil
-    ) -> NSAttributedString {
-        let font = font ?? footerFont(baseFontSize: baseFontSize)
-        let result = NSMutableAttributedString(attributedString: resumeSymbolString(
-            pointSize: font.pointSize,
-            color: NSColor.secondaryLabelColor
-        ))
-        result.addAttributes([
-            .link: resumeHandoffLinkValue,
-            .agentChatHistoryResumeHandoff: NSNumber(value: true),
-            .toolTip: L10n.ContextRunwayHandoff.resumeTooltip,
-        ], range: NSRange(location: 0, length: result.length))
-        return result
-    }
-
-    /// "开新会话继续":新建会话并把接力提示词填进它的输入框。提示词
-    /// 挂在 sidecar 属性上,点击时不必回头再解析一遍消息正文。
-    static func handoffNewSessionButton(
-        relayPrompt: String,
-        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
-        font: NSFont? = nil
-    ) -> NSAttributedString {
-        let font = font ?? footerFont(baseFontSize: baseFontSize)
-        let result = NSMutableAttributedString(attributedString: newSessionSymbolString(
-            pointSize: font.pointSize,
-            color: NSColor.secondaryLabelColor
-        ))
-        result.addAttributes([
-            .link: handoffNewSessionLinkValue,
-            .agentChatHistoryHandoffRelayPrompt: relayPrompt,
-            .toolTip: L10n.ContextRunwayHandoff.newSessionTooltip,
-        ], range: NSRange(location: 0, length: result.length))
-        return result
-    }
-
     /// Per-message report trigger. 仅在 `appendMessageFooter` 判定
     /// `isLatestAssistant && toolCount > 0` 时插入,否则不显示。
     static func reportButton(
@@ -323,17 +279,6 @@ private func checkmarkSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttr
 /// Learning/Tokens/Mode 报告。
 private func reportSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
     symbolAttachmentString(named: "doc.text", fallback: "▤", pointSize: pointSize, color: color)
-}
-
-/// 「在这儿接着干」——播放三角是继续执行最没有歧义的图标语义。
-private func resumeSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
-    symbolAttachmentString(named: "play.circle", fallback: "▶", pointSize: pointSize, color: color)
-}
-
-/// 「换个新会话接着干」——跟侧边栏新建会话用同一个 `square.and.pencil`
-/// 语义,用户在两处看到的是同一件事。
-private func newSessionSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
-    symbolAttachmentString(named: "square.and.pencil", fallback: "✎", pointSize: pointSize, color: color)
 }
 
 /// Footer chrome for rendered Markdown tables in the history NSTextView.

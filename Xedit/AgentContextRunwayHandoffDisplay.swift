@@ -21,9 +21,11 @@ import Foundation
 /// already acted on it. Left in the body it reads as "you must now copy this
 /// somewhere", which is exactly the thing nobody has to do.
 ///
-/// So the line comes out of the visible body and becomes two actions in the
-/// turn footer instead (continue here / carry it into a fresh session). The
-/// stored `content` is untouched — compression, resume, copy, export and the
+/// So the finished handover is not rendered as prose at all: it becomes a
+/// card (`AgentContextRunwayHandoffHistoryRenderer`) whose sections this type
+/// parses out, with the relay line shown as "what continuing will send" above
+/// two actions — continue here, or carry it into a fresh session. The stored
+/// `content` is untouched — compression, resume, copy, export and the
 /// transcript reader all still see the complete handover.
 nonisolated enum AgentContextRunwayHandoffDisplay {
     /// Section labels of the handover contract in `AgentContextRunwayPolicy
@@ -41,7 +43,29 @@ nonisolated enum AgentContextRunwayHandoffDisplay {
     /// handoff feature ("the model writes a NEXT PROMPT line…") would have
     /// its own sentence silently swallowed. Requiring the surrounding
     /// sections means the message really is a handover.
-    static let minimumCompanionSections = 2
+    ///
+    /// Raised from 2 to 3 (plus the `PAUSE` requirement below) when the
+    /// handover stopped being "prose minus one line" and became a card that
+    /// replaces the whole message body: a false positive used to cost one
+    /// hidden sentence, and now costs the entire reply's normal rendering.
+    static let minimumCompanionSections = 3
+
+    /// The section that makes a handover a handover. Every other label shows
+    /// up in ordinary engineering prose ("DONE: 3 of 5", "REMAINING work"),
+    /// while `PAUSE:` at the head of a line is the one thing only the
+    /// handover contract asks for.
+    static let requiredCompanionLabel = "PAUSE"
+
+    /// One human-facing section of the handover, in the order the model wrote
+    /// it. `NEXT PROMPT` is deliberately not in here — it lives on
+    /// `relayPrompt` because it is the payload of an action, not a paragraph.
+    struct Section: Equatable {
+        /// Canonical contract label (`PAUSE`, `DONE`, `ANCHORS`,
+        /// `REMAINING`), uppercased regardless of how the model decorated it.
+        let label: String
+        /// The section text with its label and colon stripped.
+        let body: String
+    }
 
     struct Extraction: Equatable {
         /// Body to render, with the relay section removed. Equal to the input
@@ -50,14 +74,17 @@ nonisolated enum AgentContextRunwayHandoffDisplay {
         /// The relay instruction with its `NEXT PROMPT:` label stripped, or
         /// nil when this message carries no recognizable handover.
         let relayPrompt: String?
+        /// The human-facing sections, in written order. Empty when this
+        /// message is not a handover — a non-handover has no sections to
+        /// invent, and callers must not fall back to guessing.
+        let sections: [Section]
 
         var isHandoff: Bool { relayPrompt != nil }
     }
 
     static func extract(from content: String) -> Extraction {
         let lines = content.components(separatedBy: .newlines)
-        var sections: Set<String> = []
-        var relayRange: Range<Int>?
+        var labeled: [(label: String, range: Range<Int>)] = []
         var isInsideFence = false
         var index = 0
 
@@ -73,29 +100,27 @@ nonisolated enum AgentContextRunwayHandoffDisplay {
                 index += 1
                 continue
             }
-            if label == relayLabel {
-                // Keep the FIRST relay section: a model that repeats itself
-                // has already made the later copies redundant, and anchoring
-                // on the first keeps the removed range contiguous.
-                if relayRange == nil {
-                    relayRange = index..<endOfSection(startingAfter: index, in: lines)
-                }
-            } else {
-                sections.insert(label)
+            // Keep the FIRST occurrence of each label: a model that repeats
+            // itself has already made the later copies redundant, and
+            // anchoring the relay on the first keeps its range contiguous.
+            if !labeled.contains(where: { $0.label == label }) {
+                labeled.append((label, index..<endOfSection(startingAfter: index, in: lines)))
             }
             index += 1
         }
 
-        guard let relayRange,
-              sections.count >= minimumCompanionSections else {
-            return Extraction(visibleContent: content, relayPrompt: nil)
+        let companions = labeled.filter { $0.label != relayLabel }
+        guard let relayRange = labeled.first(where: { $0.label == relayLabel })?.range,
+              companions.count >= minimumCompanionSections,
+              companions.contains(where: { $0.label == requiredCompanionLabel }) else {
+            return Extraction(visibleContent: content, relayPrompt: nil, sections: [])
         }
 
-        let relayPrompt = relayText(of: lines[relayRange])
+        let relayPrompt = sectionText(of: lines[relayRange])
         guard !relayPrompt.isEmpty else {
-            // A bare `NEXT PROMPT:` with nothing after it gives the footer
+            // A bare `NEXT PROMPT:` with nothing after it gives the card
             // nothing to send, so leave the body exactly as written.
-            return Extraction(visibleContent: content, relayPrompt: nil)
+            return Extraction(visibleContent: content, relayPrompt: nil, sections: [])
         }
 
         var remaining = Array(lines[..<relayRange.lowerBound])
@@ -105,7 +130,10 @@ nonisolated enum AgentContextRunwayHandoffDisplay {
         }
         return Extraction(
             visibleContent: remaining.joined(separator: "\n"),
-            relayPrompt: relayPrompt
+            relayPrompt: relayPrompt,
+            sections: companions.map {
+                Section(label: $0.label, body: sectionText(of: lines[$0.range]))
+            }
         )
     }
 
@@ -152,7 +180,9 @@ nonisolated enum AgentContextRunwayHandoffDisplay {
         return lines.count
     }
 
-    private static func relayText(of lines: ArraySlice<String>) -> String {
+    /// The text of one handover section: everything after the label's colon
+    /// on the opening line, plus the lines that follow it.
+    private static func sectionText(of lines: ArraySlice<String>) -> String {
         guard let first = lines.first else { return "" }
         var body: [String] = []
         let stripped = undecorated(first)

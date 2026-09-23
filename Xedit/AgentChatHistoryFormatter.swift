@@ -94,6 +94,17 @@ enum AgentChatHistoryRenderer {
     private static var cacheOrder: [CacheKey] = []
     private static let cacheLimit = 32
 
+    /// Everything the handover card needs, decided while the message body is
+    /// being resolved and consumed a few dozen lines later where the bubble
+    /// content is emitted.
+    private struct HandoffCard {
+        let sections: [AgentContextRunwayHandoffDisplay.Section]
+        let relayPrompt: String
+        /// What "continue in a new session" carries — the whole handover.
+        let relayPayload: String
+        let showsActions: Bool
+    }
+
     private struct CacheKey: Hashable {
         let countAndHash: Int
         let isDark: Bool
@@ -588,7 +599,7 @@ enum AgentChatHistoryRenderer {
             }()
             let body: String
             var progressPresentation: AgentTurnProgressPresentation? = nil
-            var handoffRelayPrompt: String? = nil
+            var handoffCard: HandoffCard? = nil
             if message.role == .workflowReport, let report = message.workflowReport {
                 // Workflow 消息的 content 恒为空,状态/摘要都在 report 字段
                 // 上。运行中的卡片由 AgentChatTranscript 的 SwiftUI 工作态
@@ -606,16 +617,35 @@ enum AgentChatHistoryRenderer {
                     from: displaySourceContent,
                     plan: progressPlan
                 )
-                // 上下文跑道交接里的 `NEXT PROMPT:` 段是给宿主看的接力
-                // 指令,不是给人读的段落 —— 宿主本来就会压缩后自动拿它
-                // 续跑。正文里去掉,改成 footer 上两个接力图标。
+                // 上下文跑道交接整条换成一张卡片:标题说明是「窗口满了」
+                // 不是「活干完了」,模型写的几段照原顺序摆出来,`NEXT
+                // PROMPT` 那段作为「点继续会发什么」展示 —— 它是给宿主看的
+                // 接力指令,不是给人读的段落,混在正文里像在要求用户自己
+                // 复制一遍。
+                //
+                // 流式中不走卡片:小节此刻是半截的,SwiftUI 那条路径继续
+                // 渲染剥掉 NEXT PROMPT 的纯文本,回合结束折进历史才变卡片。
                 //
                 // 「开新会话继续」带走的是整份交接,不是 NEXT PROMPT 一句:
                 // 新会话没有这段对话,DONE / ANCHORS / REMAINING 不带过去
                 // 就丢了。
                 let handoff = AgentContextRunwayHandoffDisplay.extract(from: extraction.visibleContent)
-                body = handoff.visibleContent
-                handoffRelayPrompt = handoff.isHandoff ? extraction.visibleContent : nil
+                if handoff.isHandoff, !isActiveAssistantTurn {
+                    body = ""
+                    handoffCard = HandoffCard(
+                        sections: handoff.sections,
+                        relayPrompt: handoff.relayPrompt ?? "",
+                        relayPayload: extraction.visibleContent,
+                        // 动作只挂最后一条 assistant:历史轮里那条交接早就
+                        // 被后面的消息接上了,再给一次「继续」等于给用户
+                        // 一排全是继续的按钮。回合还在跑时也不给 —— 宿主
+                        // 此刻多半正在压缩后自动续跑。
+                        showsActions: !isAssistantTurnActive
+                            && message.id == latestAssistantMessageID
+                    )
+                } else {
+                    body = handoff.visibleContent
+                }
                 progressPresentation = message.id == latestProgressCardMessageID
                     ? extraction.presentation
                     : nil
@@ -706,7 +736,7 @@ enum AgentChatHistoryRenderer {
                 hasMessageBubbleContent = true
             }
 
-            if !body.isEmpty || progressPresentation != nil {
+            if !body.isEmpty || progressPresentation != nil || handoffCard != nil {
                 if hasMessageBubbleContent {
                     result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
                 }
@@ -743,6 +773,15 @@ enum AgentChatHistoryRenderer {
                             allowsLocalCommandButtons: allowsLocalCommandButtons
                         )
                     }
+                }
+                if let handoffCard {
+                    result.append(AgentContextRunwayHandoffHistoryRenderer.attributedString(
+                        sections: handoffCard.sections,
+                        relayPrompt: handoffCard.relayPrompt,
+                        relayPayload: handoffCard.relayPayload,
+                        showsActions: handoffCard.showsActions,
+                        baseFontSize: baseFontSize
+                    ))
                 }
                 if let progressPresentation {
                     if result.length > bodyStart {
@@ -847,7 +886,9 @@ enum AgentChatHistoryRenderer {
             if isAssistantTurnFooter,
                !isActiveAssistantTurn,
                activityHeadline == nil,
-                shouldShowFooter(for: message, body: body) {
+                // 交接消息的 body 被整条换成了卡片(body == ""),但 copy /
+                // tokens / retry / 时间戳这一行不能跟着消失。
+                (shouldShowFooter(for: message, body: body) || handoffCard != nil) {
                 let messageBodyEnd = result.length
                 let assistantMetadataSpacerRange: NSRange?
                 if message.role == .assistant,
@@ -879,9 +920,6 @@ enum AgentChatHistoryRenderer {
                     isLatestAssistant: message.id == latestAssistantMessageID,
                     isVisible: message.role != .user || isHoveredUserMessage,
                     turnReportToolCount: latestTurnReportToolCount,
-                    // 回合还在跑的时候不给接力按钮:宿主此刻多半正在压缩
-                    // 后自动续跑,这两个图标一闪而过只会让人以为要自己动手。
-                    handoffRelayPrompt: isAssistantTurnActive ? nil : handoffRelayPrompt,
                     turnTimestamp: message.role == .assistant
                         ? (
                             completedAt: turnPresentation?.completedAt

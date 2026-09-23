@@ -318,6 +318,17 @@ extension AgentChatHistoryRenderer {
                 baseStyle: progressStyle
             )
         }
+        // 上下文交接卡片跟进度卡片共用一套卡片排版：同样的缩进、同样的上下
+        // 留白，读者不必再学第二种「这是一张卡片」的视觉语言。
+        attributed.enumerateAttribute(.agentChatHistoryHandoffCard, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: progressStyle, range: subrange)
+            applyProgressBlockVerticalMargins(
+                to: attributed,
+                progressRange: subrange,
+                baseStyle: progressStyle
+            )
+        }
         let headingStyle = headingParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryHeadingLevel, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
@@ -379,6 +390,17 @@ extension AgentChatHistoryRenderer {
         }
         let progressStyle = progressBlockParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryProgressBlockID, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: progressStyle, range: subrange)
+            applyProgressBlockVerticalMargins(
+                to: attributed,
+                progressRange: subrange,
+                baseStyle: progressStyle
+            )
+        }
+        // 上下文交接卡片跟进度卡片共用一套卡片排版：同样的缩进、同样的上下
+        // 留白，读者不必再学第二种「这是一张卡片」的视觉语言。
+        attributed.enumerateAttribute(.agentChatHistoryHandoffCard, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: progressStyle, range: subrange)
             applyProgressBlockVerticalMargins(
@@ -808,7 +830,6 @@ extension AgentChatHistoryRenderer {
         isLatestAssistant: Bool,
         isVisible: Bool = true,
         turnReportToolCount: Int? = nil,
-        handoffRelayPrompt: String? = nil,
         turnTimestamp: (completedAt: Date, key: String)? = nil,
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
@@ -866,22 +887,11 @@ extension AgentChatHistoryRenderer {
                 result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
                 result.append(AgentChatHistoryFooterChrome.retryButton(baseFontSize: baseFontSize, font: metadataFont))
             }
-            // 上下文跑道交接的接力动作。只挂最后一条 assistant:交接是
-            // 「这一轮停在这儿了」,历史轮里那条 handoff 早就被后面的
-            // 消息接上了,再挂一次等于给用户一排全是「继续」的按钮。
-            if isLatestAssistant, let handoffRelayPrompt, !handoffRelayPrompt.isEmpty {
-                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
-                result.append(AgentChatHistoryFooterChrome.resumeHandoffButton(
-                    baseFontSize: baseFontSize,
-                    font: metadataFont
-                ))
-                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
-                result.append(AgentChatHistoryFooterChrome.handoffNewSessionButton(
-                    relayPrompt: handoffRelayPrompt,
-                    baseFontSize: baseFontSize,
-                    font: metadataFont
-                ))
-            }
+            // 上下文跑道交接的两个接力动作曾经挂在这儿(两个无字图标)。
+            // 现在整条交接渲染成一张卡片,动作带着文字长在卡片底部
+            // (AgentContextRunwayHandoffHistoryRenderer) —— 同一次交接不能
+            // 出现两组「继续」按钮。
+            //
             // 这一轮的完成时间。始终占位（透明），悬停到这一轮时由文本视图用
             // 临时属性显色——不重排整篇 transcript，也不会因为出现而挤动布局。
             if isVisible, let turnTimestamp {

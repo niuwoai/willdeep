@@ -52,6 +52,9 @@ extension NSAttributedString.Key {
     static let agentChatHistoryProgressBlockID = NSAttributedString.Key("AgentChatHistoryProgressBlockID")
     static let agentChatHistoryProgressToggleID = NSAttributedString.Key("AgentChatHistoryProgressToggleID")
     static let agentChatHistoryProgressShowPlan = NSAttributedString.Key("AgentChatHistoryProgressShowPlan")
+    /// 整张上下文交接卡片的范围标记，供 bubble chrome 给它卡片级的缩进
+    /// 和上下外边距（跟回合进度卡片同一套）。
+    static let agentChatHistoryHandoffCard = NSAttributedString.Key("AgentChatHistoryHandoffCard")
     static let agentChatHistoryResumeHandoff = NSAttributedString.Key("AgentChatHistoryResumeHandoff")
     static let agentChatHistoryHandoffRelayPrompt = NSAttributedString.Key("AgentChatHistoryHandoffRelayPrompt")
 }
