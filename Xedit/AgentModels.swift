@@ -406,7 +406,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         modelID: String?,
         providerEntryID: UUID?,
         providerID: String?,
-        providerDisplayName: String?
+        providerDisplayName: String?,
+        approvalMode: AgentApprovalMode = .smart
     ) -> AgentSession {
         AgentSession(
             workspaceRootPath: workspaceRootPath,
@@ -414,6 +415,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
             providerEntryID: providerEntryID,
             providerID: providerID,
             providerDisplayName: providerDisplayName,
+            approvalMode: approvalMode,
             originRoutineID: routineID
         )
     }

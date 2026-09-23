@@ -299,12 +299,12 @@ nonisolated enum L10n {
 
     enum Automation {
         static let cancel = String(localized: "automation.cancel", defaultValue: "Cancel")
-        static let createTitle = String(localized: "automation.create-title", defaultValue: "New Automation")
-        static let defaultName = String(localized: "automation.default-name", defaultValue: "Untitled Automation")
-        static let delete = String(localized: "automation.delete", defaultValue: "Delete Automation")
+        static let createTitle = String(localized: "automation.create-title", defaultValue: "New Scheduled Task")
+        static let defaultName = String(localized: "automation.default-name", defaultValue: "Untitled Scheduled Task")
+        static let delete = String(localized: "automation.delete", defaultValue: "Delete Scheduled Task")
         static let deleteAlertTitle = String(
             localized: "automation.delete.alert-title",
-            defaultValue: "Delete Automation"
+            defaultValue: "Delete Scheduled Task"
         )
         static func deleteAlertMessage(_ name: String) -> String {
             let template = String(
@@ -316,15 +316,16 @@ nonisolated enum L10n {
         static let deleteConfirm = String(localized: "automation.delete.confirm", defaultValue: "Delete")
         static let deleteCancel = String(localized: "automation.delete.cancel", defaultValue: "Cancel")
         static let edit = String(localized: "automation.edit", defaultValue: "Edit…")
-        static let editTitle = String(localized: "automation.edit-title", defaultValue: "Edit Automation")
-        static let emptyState = String(localized: "automation.empty-state", defaultValue: "Create your first automation")
+        static let editTitle = String(localized: "automation.edit-title", defaultValue: "Edit Scheduled Task")
+        static let emptyState = String(localized: "automation.empty-state", defaultValue: "Create your first scheduled task")
         static let enabled = String(localized: "automation.enabled", defaultValue: "Enabled")
         static let followCurrentRoute = String(localized: "automation.follow-current-route", defaultValue: "Follow current Flash / Pro route")
         static let followCurrentRouteShort = String(localized: "automation.follow-current-route.short", defaultValue: "Follow current route")
-        static let header = String(localized: "automation.header", defaultValue: "Automations")
-        static let helpCreate = String(localized: "automation.help.create", defaultValue: "New Automation")
+        static let header = String(localized: "automation.header", defaultValue: "Scheduled Tasks")
+        static let helpCreate = String(localized: "automation.help.create", defaultValue: "New Scheduled Task")
         static let helpRunNow = String(localized: "automation.help.run-now", defaultValue: "Run once now")
-        static let helpRunOnce = String(localized: "automation.help.run-once", defaultValue: "Does not affect the schedule. Disabled automations can still run once manually.")
+        static let helpRunOnce = String(localized: "automation.help.run-once", defaultValue: "Does not affect the schedule. Disabled scheduled tasks can still run once manually.")
+        static let labelApprovalMode = String(localized: "automation.label.approval-mode", defaultValue: "Approval mode")
         static let labelEvery = String(localized: "automation.label.every", defaultValue: "Every")
         static let labelModel = String(localized: "automation.label.model", defaultValue: "Model")
         static let labelName = String(localized: "automation.label.name", defaultValue: "Name")
@@ -378,8 +379,8 @@ nonisolated enum L10n {
             let template = String(localized: "automation.notification.body.failed", defaultValue: "%1$@ failed: %2$@")
             return String(format: template, a1, a2)
         }
-        static let notificationFailedTitle = String(localized: "automation.notification.failed-title", defaultValue: "Automation failed")
-        static let notificationTitle = String(localized: "automation.notification.title", defaultValue: "Automation started")
+        static let notificationFailedTitle = String(localized: "automation.notification.failed-title", defaultValue: "Scheduled task failed")
+        static let notificationTitle = String(localized: "automation.notification.title", defaultValue: "Scheduled task started")
         static let runOutcomeRunning = String(localized: "automation.run-outcome.running", defaultValue: "Running")
         static func scheduleDailySummary(_ a1: String) -> String {
             let template = String(localized: "automation.schedule.daily.summary", defaultValue: "Daily %@")

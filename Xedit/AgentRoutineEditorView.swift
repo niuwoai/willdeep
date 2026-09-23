@@ -2,9 +2,10 @@
 //  AgentRoutineEditorView.swift
 //  WillDeep
 //
-//  Sheet for creating / editing an Automation: name, prompt, workspace
-//  binding, model override, schedule, enabled flag. The underlying type
-//  remains AgentRoutine so existing persisted JSON stays compatible.
+//  Sheet for creating / editing a scheduled task: name, prompt, workspace
+//  binding, model override, approval mode, schedule, enabled flag. The
+//  underlying type remains AgentRoutine so existing persisted JSON stays
+//  compatible.
 //
 
 import SwiftUI
@@ -82,6 +83,7 @@ struct AgentRoutineEditorView: View {
                     promptField
                     workspaceField
                     modelField
+                    approvalModeField
                     scheduleField
                     enabledField
                 }
@@ -229,6 +231,57 @@ struct AgentRoutineEditorView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
         }
+    }
+
+    private var approvalModeField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionLabel(L10n.Automation.labelApprovalMode)
+            Menu {
+                ForEach(AgentApprovalMode.allCases) { mode in
+                    Button {
+                        draft.approvalMode = mode
+                    } label: {
+                        HStack {
+                            Text(mode.displayName)
+                            if draft.approvalMode == mode {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack {
+                    Image(systemName: draft.approvalMode.symbol)
+                        .foregroundStyle(approvalModeAccent ?? .secondary)
+                    Text(draft.approvalMode.displayName)
+                        .foregroundStyle(approvalModeAccent ?? .primary)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.25))
+                )
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+
+            Text(draft.approvalMode.summary)
+                .font(.system(size: 11))
+                .foregroundStyle(approvalModeAccent ?? .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// 完全访问沿用 composer 的橙色风险语义，其余档位保持中性色。
+    private var approvalModeAccent: Color? {
+        draft.approvalMode == .fullAccess ? AgentComposerChrome.fullAccessAccent : nil
     }
 
     private var scheduleField: some View {

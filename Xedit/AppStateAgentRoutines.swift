@@ -94,22 +94,7 @@ extension AppState {
         // Build the session and its runtime, but DO NOT touch
         // activeAgentSessionID or appMode — that would yank the user
         // out of whatever they're reading.
-        let routineProvider = agentProviderLibrary.active
-        // `forRoutineRun` stamps `originRoutineID`, which marks the run
-        // unattended for the rest of its life: nobody is watching this
-        // conversation at 22:00, so its turn loop gets the minutes-long
-        // transient-network recovery window instead of the interactive "show
-        // the error card and wait for a click" path.
-        let session = AgentSession.forRoutineRun(
-            routineID: routine.id,
-            workspaceRootPath: routine.workspaceRootPath,
-            modelID: routine.modelID?.isEmpty == false
-                ? routine.modelID
-                : agentConfiguration.normalized.model(for: .interactive),
-            providerEntryID: routineProvider?.id,
-            providerID: routineProvider?.providerID,
-            providerDisplayName: routineProvider?.displayName
-        )
+        let session = makeRoutineRunSession(for: routine)
         agentSessions.insert(session, at: 0)
         // saveAsync, not save: sync save can beachball behind another
         // instance's NSFileCoordinator hold on the session directory.
@@ -218,6 +203,29 @@ extension AppState {
         // case and the drain will re-trigger this path soon.
         persistAgentSession(runtime: runtime)
         return session.id
+    }
+
+    /// The conversation one run of `routine` starts in.
+    ///
+    /// `forRoutineRun` stamps `originRoutineID`, which marks the run
+    /// unattended for the rest of its life: nobody is watching this
+    /// conversation at 22:00, so its turn loop gets the minutes-long
+    /// transient-network recovery window instead of the interactive "show
+    /// the error card and wait for a click" path. The approval mode is the
+    /// one saved on the task, never the composer's current setting.
+    func makeRoutineRunSession(for routine: AgentRoutine) -> AgentSession {
+        let routineProvider = agentProviderLibrary.active
+        return AgentSession.forRoutineRun(
+            routineID: routine.id,
+            workspaceRootPath: routine.workspaceRootPath,
+            modelID: routine.modelID?.isEmpty == false
+                ? routine.modelID
+                : agentConfiguration.normalized.model(for: .interactive),
+            providerEntryID: routineProvider?.id,
+            providerID: routineProvider?.providerID,
+            providerDisplayName: routineProvider?.displayName,
+            approvalMode: routine.approvalMode
+        )
     }
 
     /// Close out the run-history record for a scheduled-routine conversation.

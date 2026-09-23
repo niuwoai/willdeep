@@ -183,9 +183,13 @@ struct AgentScheduledTasksPage: View {
             .swiftUIFont(size: max(10, appState.agentChatBaseFontSize + sizeDelta), weight: weight)
     }
 
-    /// `每天 22:00 · muchtoken · 下次 22:00`
+    /// `每天 22:00 · muchtoken · 下次 22:00`；审核模式不是默认的智能审核时
+    /// 也标出来（如 `· 完全访问`），免得无人值守的任务权限悄悄偏离默认。
     private func metaLine(for routine: AgentRoutine) -> String {
         var parts = [routine.schedule.summary, routine.workspaceDisplayName]
+        if let badge = routine.approvalModeBadge {
+            parts.append(badge)
+        }
         if !routine.isEnabled {
             parts.append(L10n.Automation.pagePaused)
         } else if let next = routine.nextFireDate() {

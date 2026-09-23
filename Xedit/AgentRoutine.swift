@@ -165,6 +165,10 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
     var workspaceRootPath: String?
     /// Concrete model override. Nil = follow current Flash/Pro route.
     var modelID: String?
+    /// Approval posture every run of this task starts with. Runs are
+    /// unattended, so the user picks it per task instead of inheriting
+    /// whatever the composer happened to be set to.
+    var approvalMode: AgentApprovalMode
     var schedule: AgentRoutineSchedule
     var isEnabled: Bool
     /// When the routine last fired (regardless of success). Used by the
@@ -190,6 +194,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         prompt: String = "",
         workspaceRootPath: String? = nil,
         modelID: String? = nil,
+        approvalMode: AgentApprovalMode = .smart,
         schedule: AgentRoutineSchedule = .dailyAt(hour: 9, minute: 0),
         isEnabled: Bool = true,
         lastRunAt: Date? = nil,
@@ -204,6 +209,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         self.prompt = prompt
         self.workspaceRootPath = workspaceRootPath
         self.modelID = modelID
+        self.approvalMode = approvalMode
         self.schedule = schedule
         self.isEnabled = isEnabled
         self.lastRunAt = lastRunAt
@@ -220,6 +226,13 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         return URL(fileURLWithPath: path).lastPathComponent
     }
 
+    /// Shown on the task card only when the task leaves the default smart
+    /// review, so an unattended run with wider (or stricter) authority is
+    /// visible without opening the editor.
+    var approvalModeBadge: String? {
+        approvalMode == .smart ? nil : approvalMode.displayName
+    }
+
     /// The next moment this routine wants to fire, given the current
     /// `lastRunAt` (or `createdAt` if it never ran). Returns nil if the
     /// schedule is degenerate or the routine is disabled.
@@ -232,7 +245,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
     // MARK: Codable — decodeIfPresent on every field added after launch
     // so older routine JSON keeps loading cleanly.
     enum CodingKeys: String, CodingKey {
-        case id, name, prompt, workspaceRootPath, modelID, schedule
+        case id, name, prompt, workspaceRootPath, modelID, approvalMode, schedule
         case isEnabled, lastRunAt, lastSessionID, originSessionID, goal, createdAt, updatedAt
     }
 
@@ -243,6 +256,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         self.prompt = try c.decode(String.self, forKey: .prompt)
         self.workspaceRootPath = try c.decodeIfPresent(String.self, forKey: .workspaceRootPath)
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
+        self.approvalMode = try c.decodeIfPresent(AgentApprovalMode.self, forKey: .approvalMode) ?? .smart
         self.schedule = try c.decode(AgentRoutineSchedule.self, forKey: .schedule)
         self.isEnabled = try c.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.lastRunAt = try c.decodeIfPresent(Date.self, forKey: .lastRunAt)

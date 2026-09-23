@@ -1564,31 +1564,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete Automation"
+            "value" : "Delete Scheduled Task"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eliminar automatización"
+            "value" : "Eliminar tarea programada"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Supprimer l'automatisation"
+            "value" : "Supprimer la tâche planifiée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "オートメーションを削除"
+            "value" : "定期タスクを削除"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删除自动化任务"
+            "value" : "删除定时任务"
           }
         }
       }
@@ -1704,31 +1704,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automation failed"
+            "value" : "Scheduled task failed"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automatización fallida"
+            "value" : "Tarea programada fallida"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Échec de l'automatisation"
+            "value" : "Échec de la tâche planifiée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "オートメーション失敗"
+            "value" : "定期タスク失敗"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动化任务失败"
+            "value" : "定时任务失败"
           }
         }
       }
@@ -23937,31 +23937,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "New Automation"
+            "value" : "New Scheduled Task"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nueva automatización"
+            "value" : "Nueva tarea programada"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nouvelle automatisation"
+            "value" : "Nouvelle tâche planifiée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新規オートメーション"
+            "value" : "新規定期タスク"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新建自动化"
+            "value" : "新建定时任务"
           }
         }
       }
@@ -23972,31 +23972,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Untitled Automation"
+            "value" : "Untitled Scheduled Task"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automatización sin título"
+            "value" : "Tarea programada sin título"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automatisation sans titre"
+            "value" : "Tâche planifiée sans titre"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無題のオートメーション"
+            "value" : "無題の定期タスク"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未命名自动化"
+            "value" : "未命名定时任务"
           }
         }
       }
@@ -24007,31 +24007,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete Automation"
+            "value" : "Delete Scheduled Task"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eliminar automatización"
+            "value" : "Eliminar tarea programada"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Supprimer l'automatisation"
+            "value" : "Supprimer la tâche planifiée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "オートメーションを削除"
+            "value" : "定期タスクを削除"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删除自动化"
+            "value" : "删除定时任务"
           }
         }
       }
@@ -24077,31 +24077,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Edit Automation"
+            "value" : "Edit Scheduled Task"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Editar automatización"
+            "value" : "Editar tarea programada"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Modifier l'automatisation"
+            "value" : "Modifier la tâche planifiée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "オートメーションを編集"
+            "value" : "定期タスクを編集"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "编辑自动化"
+            "value" : "编辑定时任务"
           }
         }
       }
@@ -24112,31 +24112,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Create your first automation"
+            "value" : "Create your first scheduled task"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Crea tu primera automatización"
+            "value" : "Crea tu primera tarea programada"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Créez votre première automatisation"
+            "value" : "Créez votre première tâche planifiée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最初のオートメーションを作成"
+            "value" : "最初の定期タスクを作成"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "创建首个自动化"
+            "value" : "创建首个定时任务"
           }
         }
       }
@@ -24252,31 +24252,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automations"
+            "value" : "Scheduled Tasks"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automatizaciones"
+            "value" : "Tareas programadas"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automatisations"
+            "value" : "Tâches planifiées"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "オートメーション"
+            "value" : "定期タスク"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动化"
+            "value" : "定时任务"
           }
         }
       }
@@ -24287,31 +24287,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "New Automation"
+            "value" : "New Scheduled Task"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nueva automatización"
+            "value" : "Nueva tarea programada"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nouvelle automatisation"
+            "value" : "Nouvelle tâche planifiée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新規オートメーション"
+            "value" : "新規定期タスク"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新建自动化"
+            "value" : "新建定时任务"
           }
         }
       }
@@ -24357,31 +24357,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Does not affect the schedule. Disabled automations can still run once manually."
+            "value" : "Does not affect the schedule. Disabled scheduled tasks can still run once manually."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No afecta la programación. Las automatizaciones desactivadas aún pueden ejecutarse una vez manualmente."
+            "value" : "No afecta la programación. Las tareas programadas desactivadas aún pueden ejecutarse una vez manualmente."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "N'affecte pas la planification. Les automatisations désactivées peuvent tout de même être exécutées une fois manuellement."
+            "value" : "N'affecte pas la planification. Les tâches planifiées désactivées peuvent tout de même être exécutées une fois manuellement."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "スケジュールには影響しません。無効化されたオートメーションでも手動で 1 回実行できます。"
+            "value" : "スケジュールには影響しません。無効化された定期タスクでも手動で 1 回実行できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "不影响调度计划。即使自动化被禁用也会运行一次。"
+            "value" : "不影响调度计划。即使定时任务已停用也会运行一次。"
           }
         }
       }
@@ -24522,6 +24522,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每"
+          }
+        }
+      }
+    },
+    "automation.label.approval-mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Approval mode"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modo de aprobación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode d’approbation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "承認モード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审核模式"
           }
         }
       }
@@ -25203,31 +25238,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automation started"
+            "value" : "Scheduled task started"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automatización iniciada"
+            "value" : "Tarea programada iniciada"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automatisation démarrée"
+            "value" : "Tâche planifiée démarrée"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "オートメーションを開始しました"
+            "value" : "定期タスクを開始しました"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动化已启动"
+            "value" : "定时任务已启动"
           }
         }
       }
