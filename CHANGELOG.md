@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.404.0-rc2 - 2026-09-26
+
+### Fixed
+
+- **有待处理的会话时，Dock 图标还是没有数字徽标（rc4 没修到根上）。** 侧边栏底部显示「等你处理 1」，统一日志里也记着 `dock badge - -> 1`，App 内读回 `NSApp.dockTile.badgeLabel` 同样是 "1"，Dock 上却什么都没有。计数逻辑没问题，问题出在系统这一层：一个 App 只要申请过通知权限，Dock 就只在权限里带 `.badge` 时才显示它设的徽标；WillDeep 两处申请（工具审批通知、定时任务通知）都只要了 `[.alert, .sound]`，系统把「标记应用图标」记成不支持，徽标一设就被藏起来。
+  - 现在所有通知权限申请统一走 `AgentNotificationAuthorization.options`（`[.alert, .sound, .badge]`）。
+  - 老用户之前已经允许过通知、但从没申请过徽标的，启动时补申请一次。系统对每个 App 只弹一次授权框，所以这次补申请不会弹窗，只是把徽标权限加上。用户在系统设置里亲手关掉「标记」的不去动，只在统一日志 `com.willdeep.app` / `dock-badge` 里记一行说明；还没决定过、已拒绝的也不动，启动时不会弹权限框。
+  - 更正 rc4 的一条结论：rc4 用「没有申请过通知授权的最小程序」排除了「通知设置屏蔽了徽标」，但 WillDeep 恰好申请过，那个实验没覆盖它的处境。
+  - 排查方法：用系统无障碍接口读 Dock 上 WillDeep 图标的 `AXStatusLabel`，确认 Dock 上确实没有徽标；另用 Apple Development 签名的探针 App 在本机 macOS 26 上做了对照（探针未提交）。从没申请过通知的探针设 "7"，Dock 显示 "7"。只申请 `[.alert, .sound]` 的探针，`badgeSetting == .notSupported`，设 "7" 后 App 内读回 "7"，Dock 上为空，和 WillDeep 症状一致。同一个探针再申请一次、这次带上 `.badge`，没有弹窗，`badgeSetting` 变成 `.enabled`，Dock 立即显示；先设徽标、后补权限的情况，Dock 也会自己补上，不需要重新设一次。
+  - 测试：新增 `AgentNotificationAuthorizationTests`（4 项 7 个用例：申请集合带 `.badge`；只有「已允许 + 从没申请过徽标」才补申请；已开启、用户手动关闭、未决定、已拒绝、临时授权都不动）。连同 `AgentDockBadgeCoordinatorTests`、`AgentToolApprovalNotifierTests` 共 13 项通过。
+  - 未验证：已正式允许（非临时授权）的老安装补申请 `.badge` 这条路径，本机只能用临时授权的探针模拟；按 Apple 文档「后续申请不再弹窗」推断同样生效，装上本版本后需在 Dock 上实看一次。
+
 ## 1.404.0-rc1 - 2026-09-24
 
 ### Added

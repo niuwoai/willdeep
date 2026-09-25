@@ -33,6 +33,9 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         // Route taps on agent approval / job notifications back to the
         // session that posted them (see AgentNotificationResponder).
         UNUserNotificationCenter.current().delegate = AgentNotificationResponder.shared
+        // Older installs allowed notifications without `.badge`, which keeps
+        // the Dock number hidden. Adds it silently; never prompts at launch.
+        AgentNotificationAuthorization.restoreDockBadgePermissionIfNeeded()
         MainActor.assumeIsolated {
             // The menu-bar status and local preview feed must outlive
             // AgentModeView navigation while another app is being controlled.

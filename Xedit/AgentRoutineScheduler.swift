@@ -126,7 +126,9 @@ final class AgentRoutineScheduler {
     func requestNotificationAuthorizationIfNeeded() {
         guard !hasRequestedNotificationAuth else { return }
         hasRequestedNotificationAuth = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: AgentNotificationAuthorization.options
+        ) { _, _ in }
     }
 
     private func postNotificationIfAuthorized(routine: AgentRoutine, catchUp: Bool) {

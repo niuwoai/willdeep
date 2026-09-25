@@ -404,6 +404,9 @@ final class AgentDockBadgeCoordinator: ObservableObject {
             "dock badge \(self.lastBadgeLabel ?? "-", privacy: .public) -> \(label ?? "-", privacy: .public) (app states: \(windows), runtimes watched: \(runtimes))"
         )
         lastBadgeLabel = label
+        // Reads back fine even when the Dock hides it: the Dock only paints
+        // the label if notification permission includes `.badge` (see
+        // AgentNotificationAuthorization).
         NSApp.dockTile.badgeLabel = label
     }
 }

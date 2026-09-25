@@ -169,7 +169,9 @@ enum AgentToolApprovalNotifier {
     }
 
     private static func requestAuthorizationIfNeeded(completion: @escaping (Bool) -> Void) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: AgentNotificationAuthorization.options
+        ) { granted, _ in
             completion(granted)
         }
     }
