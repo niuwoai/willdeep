@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.404.0-rc3 - 2026-09-26
+
+### Fixed
+
+- **审批提醒、后台任务失败、定时任务失败这三类系统通知，每次启动后只有第一条能弹出来，之后的都被系统丢掉。** 通知带的 WillDeep 图标附件一直复用临时目录里同一个 `willdeep-notification-icon.png`，而系统在通知请求加入后会把附件文件**移走**存进自己的库。第一条通知把文件带走，之后每一条都指向一个已经不存在的文件，usernoted 报「文件不存在」（`AttachmentStorageError.failedToGetFileHandle`），整条请求作废，横幅和声音都没有。`UNNotificationAttachment` 创建时并不检查文件在不在，原来的 `try?` 永远拿不到 nil，所以 App 这边一直没察觉。
+  - 现在内存里只缓存图标的 PNG 数据，每条通知在创建附件前另写一个带 UUID 的新文件，放在临时目录下单独的 `willdeep-notification-icons/` 里。写文件或创建附件失败时删掉这个文件、写统一日志（`com.willdeep.app` / `notification-icon`），这条通知照常发出，只是不带自定义图标。
+  - 通知被拒、测试里被拦下等情况下附件文件不会被系统取走，每次新建附件时顺手清掉该目录里超过 1 小时的遗留文件。
+  - 测试：新增 `AgentNotificationIconTests`（4 项）：连续两次 `attachment()` 得到两个不同且都存在的文件；上一个文件被取走后下一个照常可用；过期遗留文件被清、新文件保留；目录不可用时返回 nil 且不留残渣。全量 XeditTests 本地结果见提交说明。
+
 ## 1.404.0-rc2 - 2026-09-26
 
 ### Fixed
