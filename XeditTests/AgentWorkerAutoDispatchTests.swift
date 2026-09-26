@@ -308,18 +308,19 @@ struct AgentWorkerAutoDispatchTests {
     }
 
     @Test("automatic dispatch is on by default and can be switched off")
-    func testKillSwitchDefault() {
+    func testKillSwitchDefault() throws {
         let key = AppState.autoDispatchWorkersDefaultsKey
-        let original = UserDefaults.standard.object(forKey: key)
-        defer {
-            if let original { UserDefaults.standard.set(original, forKey: key) }
-            else { UserDefaults.standard.removeObject(forKey: key) }
-        }
+        let suiteName = AppDefaults.xctestSuitePrefix + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName) }
 
-        UserDefaults.standard.removeObject(forKey: key)
-        #expect(AppState.autoDispatchWorkersEnabled)
-        UserDefaults.standard.set(false, forKey: key)
-        #expect(!AppState.autoDispatchWorkersEnabled)
+        AppDefaults._withTestDefaults(defaults) {
+            #expect(AppState.autoDispatchWorkersEnabled)
+            defaults.set(false, forKey: key)
+            #expect(!AppState.autoDispatchWorkersEnabled)
+            defaults.set(true, forKey: key)
+            #expect(AppState.autoDispatchWorkersEnabled)
+        }
     }
 
     @Test("an enormous log is trimmed from the head so the verdict survives")

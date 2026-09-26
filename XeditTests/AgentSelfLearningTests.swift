@@ -305,7 +305,7 @@ struct AgentSelfLearningTests {
 
     @Test
     func legacyDefaultSkillThresholdMigratesToSixTools() throws {
-        let defaults = UserDefaults.standard
+        let defaults = AgentSkillSettingsStore.defaults
         let settingsKey = "com.willdeep.agentSkillSettings.v1"
         let migrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc219"
         let previousSettings = defaults.data(forKey: settingsKey)
@@ -339,7 +339,7 @@ struct AgentSelfLearningTests {
 
     @Test
     func explicitCustomSkillThresholdIsPreservedDuringMigration() throws {
-        let defaults = UserDefaults.standard
+        let defaults = AgentSkillSettingsStore.defaults
         let settingsKey = "com.willdeep.agentSkillSettings.v1"
         let migrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc219"
         let previousSettings = defaults.data(forKey: settingsKey)
@@ -642,12 +642,12 @@ struct AgentSelfLearningTests {
         let root = try temporarySkillRoot()
         defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let settingsKey = "com.willdeep.agentSkillSettings.v1"
-        let previousSettings = UserDefaults.standard.data(forKey: settingsKey)
+        let previousSettings = AgentSkillSettingsStore.defaults.data(forKey: settingsKey)
         defer {
             if let previousSettings {
-                UserDefaults.standard.set(previousSettings, forKey: settingsKey)
+                AgentSkillSettingsStore.defaults.set(previousSettings, forKey: settingsKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: settingsKey)
+                AgentSkillSettingsStore.defaults.removeObject(forKey: settingsKey)
             }
         }
         AgentSkillSettingsStore.save(.default)
@@ -779,7 +779,7 @@ struct AgentSelfLearningTests {
 
     @Test
     func disabledAutomaticSkillExtractionPreservesSkillDraft() throws {
-        let defaults = UserDefaults.standard
+        let defaults = AgentSkillSettingsStore.defaults
         let settingsKey = "com.willdeep.agentSkillSettings.v1"
         let previous = defaults.data(forKey: settingsKey)
         defer {

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.404.0-rc5 - 2026-09-26
+
+### Fixed
+
+- **每跑一次单元测试，已安装的 WillDeep 就丢一次「最近打开的文件 / 文件夹」和上次的编辑器会话。** 测试宿主是 bundle id 同为 `com.willdeep.app` 的 Debug 版 WillDeep.app，测试进程里的 `UserDefaults.standard` 就是 /Applications 里那个 App 的偏好域。`WillDeepTests` 和 `EditorCoreBehaviorTests` 的 `init()` 在每个用例开跑前都会从 `.standard` 删掉 `com.willdeep.recentFiles.v1`、`com.willdeep.recentFolders.v1`、`com.willdeep.session.v1`（前者还删 `com.willdeep.terminalShortcuts.v1`），删的正是用户真实的数据。本机核对时，真实域里的 `recentFiles` 和 `session` 两个 key 都已经被清空。
+  - 新增 `AppDefaults.standard`：正式 App 里就是 `UserDefaults.standard`；在 XCTest 进程里（环境变量 `XCTestConfigurationFilePath`）换成一个每进程一次性的 suite `com.willdeep.tests.app-defaults.<UUID>`，测试没主动接管也碰不到真实域。只在 DEBUG 构建里生效，Release 不受影响。
+  - `RecentItemsStore`、`SessionStore` 的读写改走各自的 `defaults`（即 `AppDefaults.standard`），两个测试 `init()` 改为清理 store 自己的 defaults。
+  - 同类问题一并处理：终端捷径旧版 key 的读取（`TerminalShortcutStore.defaults`）、技能设置 `AgentSkillSettingsStore`（`load()` 会顺带写迁移标记 `defaultThreshold.rc219`）、自动派发开关 `willdeep.agent.autoDispatchWorkers`，都改走 `AppDefaults.standard`。原先这几处测试是先存后恢复地改真实域，测试中途崩溃就会把改过的值留在用户那里；开关测试还会反过来读到用户自己的设置。
+  - 单个测试要用自己的 suite 时调 `AppDefaults._withTestDefaults(suite) { ... }`。这个覆盖是 task-local 的，没有照搬 `SomeIMIntegrationStore` 那种进程级 `_setTestDefaultsOverride`：第一版就是进程级覆盖，回归测试当场红了。并行的 `WillDeepTests.init()` 在别的线程上清 `RecentItemsStore.defaults`，正好清到了设着覆盖的那个测试的 suite。
+  - `TestDefaultsHygiene` 登记 `com.willdeep.tests.app-defaults.`，以及之前漏登记的 `willdeep-session-management-`、`AgentExecutionProfileStoreTests.`。这些 suite 残留的 plist 空壳会在下一轮测试开跑时清掉。
+  - 测试：新增 `AppDefaultsTestIsolationTests`（3 项）：XCTest 下各 store 的 defaults 都是一次性 suite 而不是 `.standard`；注入的 suite 只对本任务可见，另一条线程读到的仍是 fallback；写入最近文件、会话、技能设置，再构造 `WillDeepTests()` 和 `EditorCoreBehaviorTests()` 走一遍原先的清理路径，真实域里 7 个 key 的快照不变。连同 `WillDeepTests`、`EditorCoreBehaviorTests`、`AgentSelfLearningTests`、`AgentWorkerAutoDispatchTests` 共 5 个套件 444 项通过；两轮测试前后用 `defaults read com.willdeep.app` 核对这 7 个 key，真实域没有变化（`recentFolders` 仍在）。第一轮里 `terminal command returns an automatic follow-up snapshot…` 红过一次，是已登记的满载 flaky（登录 shell 未起完），第二轮通过，与本次改动无关。
+  - 未处理：`TerminalShortcutStore.directory` 在测试没设目录覆盖时仍指向真实的 `~/Library/Application Support/WillDeep/terminal-shortcuts`，构造终端管理器的测试会只读地载入用户的捷径文件。这是文件而不是偏好域，另开修复。
+
 ## 1.404.0-rc4 - 2026-09-26
 
 ### Fixed

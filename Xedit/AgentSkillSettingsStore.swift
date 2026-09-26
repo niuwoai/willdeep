@@ -34,13 +34,16 @@ nonisolated enum AgentSkillSettingsStore {
     private static let settingsKey = "com.willdeep.agentSkillSettings.v1"
     private static let defaultThresholdMigrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc219"
 
+    /// Every read and write goes through here, so a test process never
+    /// reaches the installed app's skill settings.
+    static var defaults: UserDefaults { AppDefaults.standard }
+
     static func load() -> AgentSkillSettings {
-        guard let data = UserDefaults.standard.data(forKey: settingsKey),
+        guard let data = defaults.data(forKey: settingsKey),
               let settings = try? JSONDecoder().decode(AgentSkillSettings.self, from: data) else {
             return .default
         }
         var normalized = settings.normalized
-        let defaults = UserDefaults.standard
         if !defaults.bool(forKey: defaultThresholdMigrationKey),
            [3, 5].contains(normalized.minimumToolCallCount) {
             normalized.minimumToolCallCount = AgentSkillSettings.default.minimumToolCallCount
@@ -52,7 +55,7 @@ nonisolated enum AgentSkillSettingsStore {
 
     static func save(_ settings: AgentSkillSettings) {
         guard let data = try? JSONEncoder().encode(settings.normalized) else { return }
-        UserDefaults.standard.set(data, forKey: settingsKey)
+        defaults.set(data, forKey: settingsKey)
     }
 
     static func isSkillEnabled(identifier: String) -> Bool {

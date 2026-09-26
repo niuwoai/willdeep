@@ -14,9 +14,13 @@
 import Foundation
 
 enum RecentItemsStore {
-    private static let filesKey = "com.willdeep.recentFiles.v1"
-    private static let foldersKey = "com.willdeep.recentFolders.v1"
+    nonisolated static let filesKey = "com.willdeep.recentFiles.v1"
+    nonisolated static let foldersKey = "com.willdeep.recentFolders.v1"
     private static let limit = 8
+
+    /// Every read and write goes through here, so a test process never
+    /// reaches the installed app's recent files and folders.
+    nonisolated static var defaults: UserDefaults { AppDefaults.standard }
 
     static func loadFiles() -> [URL] {
         loadCleaned(key: filesKey)
@@ -55,11 +59,11 @@ enum RecentItemsStore {
     }
 
     private static func load(key: String) -> [URL] {
-        (UserDefaults.standard.stringArray(forKey: key) ?? []).map { URL(fileURLWithPath: $0) }
+        (defaults.stringArray(forKey: key) ?? []).map { URL(fileURLWithPath: $0) }
     }
 
     private static func save(_ urls: [URL], key: String) {
-        UserDefaults.standard.set(urls.filter(Self.isEligible).map(\.path), forKey: key)
+        defaults.set(urls.filter(Self.isEligible).map(\.path), forKey: key)
     }
 
     nonisolated static func isEligible(_ url: URL) -> Bool {
@@ -97,15 +101,19 @@ actor CompressionSummaryCollector {
 }
 
 enum SessionStore {
-    private static let key = "com.willdeep.session.v1"
+    nonisolated static let key = "com.willdeep.session.v1"
+
+    /// Every read and write goes through here, so a test process never
+    /// reaches the installed app's restored editor session.
+    nonisolated static var defaults: UserDefaults { AppDefaults.standard }
 
     static func load() -> EditorSessionSnapshot? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(EditorSessionSnapshot.self, from: data)
     }
 
     static func save(_ snapshot: EditorSessionSnapshot) {
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        defaults.set(data, forKey: key)
     }
 }

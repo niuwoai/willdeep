@@ -27,8 +27,10 @@ extension AppState {
     /// per-turn case.
     static let autoDispatchWorkersDefaultsKey = "willdeep.agent.autoDispatchWorkers"
 
+    /// Read from `AppDefaults.standard`, so under XCTest the switch is never
+    /// the installed app's setting.
     static var autoDispatchWorkersEnabled: Bool {
-        UserDefaults.standard.object(forKey: autoDispatchWorkersDefaultsKey) as? Bool ?? true
+        AppDefaults.standard.object(forKey: autoDispatchWorkersDefaultsKey) as? Bool ?? true
     }
 
     /// Dispatch the worker a failed verification command earns, and return the

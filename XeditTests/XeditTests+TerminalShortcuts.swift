@@ -70,7 +70,7 @@ extension WillDeepTests {
             AgentCredentialStore._setTestKeychainServiceOverride(nil)
             TerminalShortcutStore._setTestDirectoryOverride(nil)
             try? FileManager.default.removeItem(at: shortcutsDirectory)
-            UserDefaults.standard.removeObject(forKey: "com.willdeep.terminalShortcuts.v1")
+            TerminalShortcutStore.defaults.removeObject(forKey: TerminalShortcutStore.key)
         }
         #expect(service.hasPrefix("terminal-shortcuts-"))
 
@@ -115,7 +115,7 @@ extension WillDeepTests {
             AgentCredentialStore._setTestKeychainServiceOverride(nil)
             TerminalShortcutStore._setTestDirectoryOverride(nil)
             try? FileManager.default.removeItem(at: shortcutsDirectory)
-            UserDefaults.standard.removeObject(forKey: "com.willdeep.terminalShortcuts.v1")
+            TerminalShortcutStore.defaults.removeObject(forKey: TerminalShortcutStore.key)
         }
         #expect(service.hasPrefix("terminal-shortcuts-"))
 

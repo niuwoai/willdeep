@@ -575,7 +575,9 @@ final class TerminalShortcutRecorder {
 }
 
 enum TerminalShortcutStore {
-    private static let key = "com.willdeep.terminalShortcuts.v1"
+    /// Where builds before the file store kept shortcuts; `load()` still
+    /// migrates it.
+    nonisolated static let key = "com.willdeep.terminalShortcuts.v1"
     private static let maxShortcuts = 24
     private static let fileName = "shortcuts.json"
     private static let editableDirectoryName = "editable"
@@ -770,8 +772,12 @@ enum TerminalShortcutStore {
         }
     }
 
+    /// The legacy key is read from here, so a test process never migrates or
+    /// clears the installed app's shortcuts.
+    nonisolated static var defaults: UserDefaults { AppDefaults.standard }
+
     private static func loadFromUserDefaults() -> [TerminalShortcut] {
-        guard let data = UserDefaults.standard.data(forKey: key),
+        guard let data = defaults.data(forKey: key),
               let shortcuts = try? decoder.decode([TerminalShortcut].self, from: data) else {
             return []
         }

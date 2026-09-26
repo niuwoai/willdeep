@@ -20,10 +20,12 @@ enum TestDefaultsHygiene {
     /// UUID 直接用连字符相接），避免误伤 `com.willdeep.app`、`WillDeep`
     /// 等真实配置域。
     private nonisolated static let disposableSuitePrefixes = [
+        "AgentExecutionProfileStoreTests.",
         "CollaborationConnectorSettingsTests.",
         "com.willdeep.agent.test.defaults.",
         "com.willdeep.mcp.test.",
         "com.willdeep.tests.aipipe-queue.",
+        "com.willdeep.tests.app-defaults.",
         "com.willdeep.tests.font-smoothing.",
         "com.willdeep.tests.learningReview.",
         "com.willdeep.tests.someim-store.",
@@ -41,6 +43,7 @@ enum TestDefaultsHygiene {
         "willdeep-mobile-gateway-room-",
         "willdeep-profiles-",
         "willdeep-runtime-store-",
+        "willdeep-session-management-",
         "willdeep-telemetry-",
         "willdeep-workspace-trust-",
     ]

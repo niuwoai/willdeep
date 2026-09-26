@@ -14,20 +14,16 @@ import SomeIMSharedSession
 
 @Suite(.serialized)
 struct WillDeepTests {
-    /// Wipes the shared `UserDefaults` keys that AppState persists into so
-    /// each test starts from a clean slate. swift-testing builds a fresh
-    /// instance of this struct per test, so `init()` doubles as the
-    /// per-test `setUp`.
+    /// Wipes the keys AppState persists into so each test starts from a
+    /// clean slate. swift-testing builds a fresh instance of this struct per
+    /// test, so `init()` doubles as the per-test `setUp`. The keys live in
+    /// the stores' own defaults: `UserDefaults.standard` here is the
+    /// installed app's preferences domain, which the test must never clear.
     init() {
-        let keys = [
-            "com.willdeep.recentFiles.v1",
-            "com.willdeep.recentFolders.v1",
-            "com.willdeep.session.v1",
-            "com.willdeep.terminalShortcuts.v1"
-        ]
-        for key in keys {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
+        RecentItemsStore.defaults.removeObject(forKey: RecentItemsStore.filesKey)
+        RecentItemsStore.defaults.removeObject(forKey: RecentItemsStore.foldersKey)
+        SessionStore.defaults.removeObject(forKey: SessionStore.key)
+        TerminalShortcutStore.defaults.removeObject(forKey: TerminalShortcutStore.key)
     }
 
     // Editor core behavior tests live in EditorCoreBehaviorTests.swift.

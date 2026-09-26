@@ -14,15 +14,12 @@ import SwiftUI
 
 @Suite(.serialized)
 struct EditorCoreBehaviorTests {
+    /// Per-test clean slate in the stores' own defaults, never in
+    /// `UserDefaults.standard` (the installed app's preferences domain).
     init() {
-        let keys = [
-            "com.willdeep.recentFiles.v1",
-            "com.willdeep.recentFolders.v1",
-            "com.willdeep.session.v1"
-        ]
-        for key in keys {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
+        RecentItemsStore.defaults.removeObject(forKey: RecentItemsStore.filesKey)
+        RecentItemsStore.defaults.removeObject(forKey: RecentItemsStore.foldersKey)
+        SessionStore.defaults.removeObject(forKey: SessionStore.key)
     }
 
     @MainActor
