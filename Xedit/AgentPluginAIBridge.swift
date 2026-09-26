@@ -153,7 +153,9 @@ nonisolated struct AgentPluginImageRequest: Equatable, Sendable {
     ///
     /// 尺寸本身不经这里转换：`SomeIMClient.generateImage` 把它原样放进
     /// `/images/generations` 的 body，网关主路径整包透传。也就是说这张表是
-    /// 整条链路上唯一的白名单，放开它就够。
+    /// 整条链路上唯一的白名单，放开它就够。非 gpt-image 模型（nano-banana 系）
+    /// 不认 `size`，宿主会按它另算一个 `aspect_ratio` 一起送，见
+    /// `SomeIMImageGenerationRequest`。
     ///
     /// 注意 gpt-image 系出不了后三档——这里不按模型再拦一道，因为模型能力会
     /// 变而这张表不会跟着变；该由插件按自己用的模型收敛（短剧工坊就是这么做的），

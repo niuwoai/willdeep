@@ -1047,29 +1047,24 @@ enum SomeIMClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         AgentNetworkSupport.applyStandardHeaders(to: &request)
-        var body: [String: Any] = [
-            "model": model,
-            "prompt": trimmedPrompt,
-            "size": size
-        ]
         // 上限 9 张是网关的（internal/asyncmedia/capabilities.go）。超了就如实
         // 报错而不是悄悄截断——少送一张脸，出来的图错得不显眼，最难查。
         let references = referenceImageURLs
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        if !references.isEmpty {
-            guard references.count <= maximumReferenceImages else {
-                throw AgentToolError.invalidArgument(
-                    "some.im accepts at most \(maximumReferenceImages) reference images, got \(references.count)."
-                )
-            }
-            // 两种写法都带上：网关会把它们归一化去重，而不同上游读的是不同
-            // 那一个（严格 edits 读首图，GRSAI 读数组）。
-            body["image_url"] = references[0]
-            body["reference_image_url"] = references[0]
-            body["image_urls"] = references
-            body["reference_image_urls"] = references
+        guard references.count <= maximumReferenceImages else {
+            throw AgentToolError.invalidArgument(
+                "some.im accepts at most \(maximumReferenceImages) reference images, got \(references.count)."
+            )
         }
+        // body 的形状（含 nano-banana 系要的 `aspect_ratio`）见
+        // `SomeIMImageGenerationRequest`。
+        let body = SomeIMImageGenerationRequest.body(
+            model: model,
+            prompt: trimmedPrompt,
+            size: size,
+            referenceImageURLs: references
+        )
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
 
         let (data, response) = try await session.data(for: request)

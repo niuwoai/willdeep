@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.405.0-rc2 - 2026-09-26
+
+### Fixed
+
+- **插件用 nano-banana-2 出竖图，拿到的总是 1024x1024 的方图。** 2026-09-26 实测：短剧工坊插件经反向请求 `willdeep/images/generate` 发 `size: "1024x1536"`，gpt-image-2 返回 1024x1536 的 PNG，nano-banana-2 返回的一律是 1024x1024 的 JPG。nano-banana-2 是短剧工坊的默认出图模型（页面默认选中它，用上一段视频的尾帧接镜头时也固定用它），9:16 竖屏剧的首帧就成了方的，后面的视频模型只能裁切或拉伸。
+  - 原因：宿主发 `/images/generations` 时，body 里只有 `model`、`prompt`、`size` 和参照图几个键。nano-banana 系是 Gemini 出图，不认 OpenAI 的 `size`。查过 muchtoken 网关源码：主路径把 body 原样转给上游，7 月的库快照里这两个模型都挂在 apiyi 的 `openai_images` 模板上；网关自己会读的比例字段只有 snake_case 的 `aspect_ratio`（`internal/asyncmedia/params.go`、`internal/gateway/images.go`）；网关控制台 Playground 也是对非 GPT 模型发 `aspect_ratio`、只给 gpt-image 发 `size`。
+  - 新增 `SomeIMImageGenerationRequest`，`SomeIMClient.generateImage` 的请求体改由它生成。非 gpt-image / dall-e 模型在 `size` 之外再带一个 `aspect_ratio`，由 `size` 约分得到：1024x1536 → 2:3，1536x1024 → 3:2，1080x1920 → 9:16，1080x1440 → 3:4，1920x1080 → 16:9，1024x1024 → 1:1。约分结果不在 Gemini 支持的比例表里时，取对数比值最近的一档（1792x1024 → 16:9）；`auto` 这类解析不了的值就不带这个字段。gpt-image 系的 body 与改动前逐键一致，因为有的中继遇到多余字段会回 `unknown_parameter`。
+  - 插件页的 `window.willdeep.ai.generateImage` 和插件 MCP 的反向请求都经 `AgentPluginImageGeneration` 调 `SomeIMClient.generateImage`，两个入口一起生效。参照图上限的检查留在 `generateImage` 里，行为不变。
+  - 测试：新增 `SomeIMImageGenerationRequestTests`（10 项）。内容包括：size 到比例的换算、贴近与拒绝；插件白名单 `allowedSizes` 里每一档都必须精确对上一个比例，以后往白名单加尺寸而忘了 nano-banana 出不来，这项会红；gpt-image / dall-e 家族判定；两类模型的 body 键集合；参照图四个键。另有一项出口测试走真实的 `SomeIMClient.generateImage`，在 URLProtocol 层截下实际发出的 body，确认 nano-banana-2 带 `aspect_ratio: "2:3"`、gpt-image-2 不带。
+  - 验证：rebase 到 1.405.0-rc1 之后，`SomeIMImageGenerationRequestTests` 与 `AgentPluginAIMediaTests` 两个套件 19 项通过，退出码 0，report.json 与日志计数一致。反验（在 rc8 基线上做）：把 `generateImage` 的接线临时改回旧的内联 body，只有出口测试里 nano-banana-2 那个用例变红（gpt-image-2 用例仍绿），退出码 65；恢复后的源码与提交逐字节一致。全量 XeditTests 没有在本地跑。
+  - 未验证：没有实调 some.im 线上接口，nano-banana-2 加了 `aspect_ratio` 之后实际出多大的图还要确认。网关主路径会把这个字段原样交给上游，但上游（apiyi）认不认它，网关仓库里看不出来。
+  - 未处理：网关的回退路径（Poe 线路，以及上游回 404/405 之后的媒体回退）有几处会把比例压成 1:1。`size` 不在它的白名单里时（1024x1536 就不在），直接写 `aspect_ratio: "1:1"`，还会盖掉客户端显式传的 `aspect_ratio`；GRSAI 适配器会把 `aspectRatio` 改写成 `"1024x1024"` 这样的像素串。这些要在 muchtoken 仓库里修，已另开任务。Agent 工具 `generate_image` 走的是异步媒体任务（`AgentMediaTools.someIMRequestBody`），同样只带 `size`，这次没有动。
+
 ## 1.405.0-rc1 - 2026-09-26
 
 ### Added
