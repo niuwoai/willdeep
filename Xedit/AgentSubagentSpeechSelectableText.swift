@@ -240,10 +240,11 @@ final class AgentSubagentSpeechNSTextView: NSTextView {
         to pboard: NSPasteboard,
         type: NSPasteboard.PasteboardType
     ) -> Bool {
-        guard type == .string, let raw = selectedConversationText(sanitizeForModel: false) else {
+        guard AgentCopyTextSanitizer.isPlainTextPasteboardType(type),
+              let raw = selectedConversationText(sanitizeForModel: false) else {
             return super.writeSelection(to: pboard, type: type)
         }
-        pboard.setString(raw, forType: .string)
+        pboard.setString(raw, forType: type)
         return true
     }
 

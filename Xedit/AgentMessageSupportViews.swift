@@ -147,6 +147,19 @@ enum AgentCopyTextSanitizer {
         return String(scalars)
     }
 
+    /// `writeSelection(to:type:)` 覆写用来认「纯文本那一味」。
+    ///
+    /// NSTextView 做 ⌘C / 拖拽时按 `writablePasteboardTypes` 逐个口味回调，
+    /// 纯文本传进来的是旧名字 `NSStringPboardType`，**不是** `.string`
+    /// （`public.utf8-plain-text`）。只认 `.string` 的覆写永远落空，渲染串
+    /// 连同 U+200B 原样进剪贴板——1.261.0-rc4 加的净化就是这样从上线起
+    /// 没生效过。两个名字都得认。
+    static func isPlainTextPasteboardType(_ type: NSPasteboard.PasteboardType) -> Bool {
+        type == .string || type == legacyStringPasteboardType
+    }
+
+    private static let legacyStringPasteboardType = NSPasteboard.PasteboardType("NSStringPboardType")
+
     /// The transcript draws list markers as `•` / `◦` / `▪`; the clipboard
     /// gets the Markdown dash back so a copied list pastes as a list
     /// everywhere else. Only a marker at the start of a line (after

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.404.0-rc7 - 2026-09-26
+
+### Fixed
+
+- **在会话正文里拖选后按 ⌘C，粘进终端的内容会夹带看不见的 U+200B。** 用户报障：复制 APK 签名 `f2fd062dba9f981701a627e0d0792e49` 粘到 zsh 里，显示成 `…0792<200b>e49`，这串签名就没法用了。零宽空格不是模型输出的，诊断包里的会话原文一个都没有。它来自渲染用的 `AgentLongTokenBreaker`：一段没有天然断点的字符超过 30 个，就插一个 U+200B。它处理的是解析前的 markdown，行内代码的反引号也算进这一段，反引号加 29 个字符正好凑满 30，于是第 30 个字符前被插了断点，和截图完全一致。
+  - 1.261.0-rc4 已经在 `writeSelection(to:type:)` 里加过净化，但判断写的是 `type == .string`。NSTextView 按 `writablePasteboardTypes` 逐个类型回调时，纯文本传进来的是旧名字 `NSStringPboardType`，不等于 `.string`（`public.utf8-plain-text`），所以净化从上线起就没生效过，一直走的是 `super`，把渲染串原样写进剪贴板。用独立探针复现过：回调里的类型确实是 `NSStringPboardType`，剪贴板的 `public.utf8-plain-text` 里确实带着 U+200B。
+  - 新增 `AgentCopyTextSanitizer.isPlainTextPasteboardType`，新旧两个名字都算纯文本。会话正文（`AgentChatHistoryNSTextView`）和工种发言（`AgentSubagentSpeechNSTextView`）两处覆写都改用它，写入时用传进来的类型。
+  - 消息上的「复制」按钮和代码块的复制按钮原本就复制原文，不受影响。
+  - 测试：`AgentCopyTextSanitizerTests` 新增 3 项。一项确认新旧两个纯文本类型名都认、RTF/RTFD 不认。另两项分别对会话正文和工种发言，按 `copy:` 的实际做法（`writeSelection(to:types: writablePasteboardTypes)`）写进私有剪贴板，确认纯文本里没有 U+200B、签名完整。之前只测了 `sanitize()` 这个纯函数，出口没接上时测试照样全绿，这个缺口就是这么漏过去的。
+  - 验证：`AgentCopyTextSanitizerTests` 和 `AgentChatHistoryRendererGoalTests` 两个套件 59 项通过，退出码 0，report.json 和日志计数一致。反验：把两处判断临时改回 `type == .string`，两项复制测试都变红（剪贴板带 U+200B、签名不完整），退出码 65；恢复后的源码和跑绿的版本逐字节一致。全量 XeditTests 没有在本地跑。
+  - 未处理（已评估，另开修复）：复制出的 RTF 仍然带 U+200B，粘进备忘录、Pages 后会残留在里面。断行器在 TextKit 正文里还有别的副作用：会话内搜索搜不到被插了断点的哈希；超过 30 字符的文件名路径 chip 只识别出后半截；链接目标里的 U+200B 会被百分号编码进 URL。评估的结论是，TextKit 路径不需要这个断行器，NSTextView 遇到超长单词会自己按字符断行，实测也没有卡顿。
+
 ## 1.404.0-rc6 - 2026-09-26
 
 ### Fixed

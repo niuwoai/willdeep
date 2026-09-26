@@ -381,11 +381,13 @@ final class AgentChatHistoryNSTextView: NSTextView {
     /// **渲染串**——排版专用的零宽断点会原样进剪贴板。纯文本这一味在这里
     /// 换成净化版;RTF 等富文本口味仍交给 super(粘到富文本编辑器里那些
     /// 零宽字符本来就是随格式走的,而且真正会被塞进终端的是 .string)。
+    /// 纯文本口味 AppKit 传的是旧名字 `NSStringPboardType`,判定必须走
+    /// `isPlainTextPasteboardType`,只比 `.string` 会整段落空。
     override func writeSelection(
         to pboard: NSPasteboard,
         type: NSPasteboard.PasteboardType
     ) -> Bool {
-        guard type == .string else {
+        guard AgentCopyTextSanitizer.isPlainTextPasteboardType(type) else {
             return super.writeSelection(to: pboard, type: type)
         }
         let range = selectedRange()
@@ -401,7 +403,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         let plain = AgentCopyTextSanitizer.restoringMarkdownListMarkers(
             AgentCopyTextSanitizer.sanitize(raw)
         )
-        pboard.setString(plain, forType: .string)
+        pboard.setString(plain, forType: type)
         return true
     }
 

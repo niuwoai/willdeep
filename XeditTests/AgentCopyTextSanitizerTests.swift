@@ -9,12 +9,16 @@
 //  屏幕上；一旦跟着复制出去，用户粘到终端或编译器里就得到一串"看不见的
 //  语法错误"。代码块的复制载荷曾经就是从插过断点的字符串里解析出来的。
 //
-//  这个 suite 盯三件事：
+//  这个 suite 盯四件事：
 //    1. 中文正文根本不该触发断点注入（CJK 本来就能任意断行）；
 //    2. 净化只清排版字符，不碰有语义的不可见字符（ZWJ / ZWNJ / 双向标记）；
-//    3. 会回流给模型的出口，净化之后必须重新打断注入标记。
+//    3. 会回流给模型的出口，净化之后必须重新打断注入标记；
+//    4. 拖选 + ⌘C 的真实复制链路确实走到了净化。只测 `sanitize()` 纯函数
+//       挡不住出口没接上——`writeSelection(to:type:)` 只认 `.string`、
+//       而 AppKit 传的是 `NSStringPboardType`，净化因此从上线起就没生效过。
 //
 
+import AppKit
 import Testing
 import Foundation
 @testable import WillDeep
@@ -97,5 +101,61 @@ struct AgentCopyTextSanitizerTests {
     func modelRoundTripLeavesBenignTextClean() {
         let rendered = "把这段代码\(zwsp)复制出去"
         #expect(AgentCopyTextSanitizer.sanitizeForModelRoundTrip(rendered) == "把这段代码复制出去")
+    }
+
+    // MARK: - 真实复制链路：⌘C 写进剪贴板的纯文本不带排版字符
+
+    /// 用户报障原样：行内代码里的 32 位签名，反引号 + 29 个字符凑满 30，
+    /// 断行器在第 30 个字符前插了 U+200B，粘进终端成了 `…0792<200b>e49`。
+    private static let reportedSignature = "f2fd062dba9f981701a627e0d0792e49"
+    private static let renderedSignatureLine =
+        "应用签名 f2fd062dba9f981701a627e0d0792\u{200B}e49（微信这一栏填 32 位小写）"
+
+    @Test("纯文本口味的新旧两个名字都认，富文本口味不认")
+    func plainTextPasteboardTypeAcceptsLegacyName() {
+        #expect(AgentCopyTextSanitizer.isPlainTextPasteboardType(.string))
+        #expect(AgentCopyTextSanitizer.isPlainTextPasteboardType(
+            NSPasteboard.PasteboardType("NSStringPboardType")
+        ))
+        #expect(!AgentCopyTextSanitizer.isPlainTextPasteboardType(.rtf))
+        #expect(!AgentCopyTextSanitizer.isPlainTextPasteboardType(.rtfd))
+    }
+
+    @Test("会话正文拖选 ⌘C：剪贴板纯文本不带 U+200B")
+    @MainActor
+    func transcriptCopyWritesSanitizedPlainText() throws {
+        let view = AgentChatHistoryNSTextView()
+        view.frame = NSRect(x: 0, y: 0, width: 480, height: 120)
+        view.string = Self.renderedSignatureLine
+        view.setSelectedRange(NSRange(location: 0, length: (view.string as NSString).length))
+
+        let plain = try Self.plainTextCopied(from: view)
+        #expect(!plain.contains(zwsp))
+        #expect(plain.contains(Self.reportedSignature))
+    }
+
+    @Test("工种发言拖选 ⌘C：剪贴板纯文本不带 U+200B")
+    @MainActor
+    func subagentSpeechCopyWritesSanitizedPlainText() throws {
+        let view = AgentSubagentSpeechNSTextView()
+        view.frame = NSRect(x: 0, y: 0, width: 480, height: 40)
+        view.string = Self.renderedSignatureLine
+        view.setSelectedRange(NSRange(location: 0, length: (view.string as NSString).length))
+
+        let plain = try Self.plainTextCopied(from: view)
+        #expect(!plain.contains(zwsp))
+        #expect(plain.contains(Self.reportedSignature))
+    }
+
+    /// 复刻 `copy:` 的做法——按 `writablePasteboardTypes` 调
+    /// `writeSelection(to:types:)`，逐个口味回调才会落到覆写上——只是换成
+    /// 私有剪贴板，不去动开发机上的通用剪贴板。
+    @MainActor
+    private static func plainTextCopied(from view: NSTextView) throws -> String {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("willdeep.tests.copy.\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        #expect(view.writeSelection(to: pasteboard, types: view.writablePasteboardTypes))
+        return try #require(pasteboard.string(forType: .string))
     }
 }
