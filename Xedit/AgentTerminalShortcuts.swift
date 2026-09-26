@@ -583,12 +583,40 @@ enum TerminalShortcutStore {
     private static let editableDirectoryName = "editable"
     private static var directoryOverride: URL?
 
-    static var directory: URL {
-        if let directoryOverride { return directoryOverride }
+    #if DEBUG
+    /// Directory-name prefix of the throwaway directory below.
+    nonisolated static let xctestDirectoryPrefix = "willdeep-tests-terminal-shortcuts-"
+
+    /// The unit-test host is a Debug WillDeep.app with the installed app's
+    /// bundle id, so without an override `directory` is the installed app's
+    /// real shortcuts folder. Every test that builds the interactive terminal
+    /// manager loaded the user's `shortcuts.json` from there, and any save
+    /// path that skipped `_setTestDirectoryOverride` would rewrite it, along
+    /// with the protected vault's key and data files beside it. So under
+    /// XCTest the store falls back to one throwaway directory per process,
+    /// whether or not a test opted in. The legacy defaults key already goes
+    /// through `AppDefaults.standard`; this is the file half.
+    private static let xctestFallbackDirectory: URL? = {
+        guard AppDefaults.isRunningUnderXCTest else { return nil }
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent(xctestDirectoryPrefix + UUID().uuidString, isDirectory: true)
+    }()
+    #endif
+
+    /// Where the shipping app keeps shortcuts and the protected vault.
+    static var applicationSupportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("WillDeep", isDirectory: true)
             .appendingPathComponent("terminal-shortcuts", isDirectory: true)
+    }
+
+    static var directory: URL {
+        if let directoryOverride { return directoryOverride }
+        #if DEBUG
+        if let xctestFallbackDirectory { return xctestFallbackDirectory }
+        #endif
+        return applicationSupportDirectory
     }
 
     static var fileURL: URL {

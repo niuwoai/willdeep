@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.404.0-rc6 - 2026-09-26
+
+### Fixed
+
+- **单测进程会读到、也可能改写已安装 WillDeep 的终端捷径。** 单测宿主是同一个 bundle id 的 Debug 版 WillDeep.app，`TerminalShortcutStore.directory` 在测试没装 override 时直接返回 `~/Library/Application Support/WillDeep/terminal-shortcuts`，也就是已安装 App 真正在用的那个目录。每个构造交互终端控制器（`AgentInteractiveTerminalController`）的测试，初始化时都会 `TerminalShortcutStore.load()` 读一遍用户真实的 `shortcuts.json`；任何没调 `_setTestDirectoryOverride` 就走到保存的路径，会覆盖这个文件，连同同目录下保护输入保险库的 `protected-vault.key` / `protected-vault.json` 一起改掉。目前只有 `XeditTests+TerminalShortcuts.swift` 里的用例装了 override。
+  - 现在 DEBUG 构建下只要是单测进程（沿用 rc5 的 `AppDefaults.isRunningUnderXCTest`，即带 `XCTestConfigurationFilePath`），没装 override 时 `directory` 落到本进程专用的临时目录 `$TMPDIR/willdeep-tests-terminal-shortcuts-<UUID>`，整个进程共用一个，不会回到 Application Support。测试自己装的 override 优先级不变；正式构建不受影响。保险库的 key、data 文件跟着 `directory` 走，一并隔离。
+  - 原来拼 Application Support 路径的逻辑拆成 `applicationSupportDirectory`，出货 App 走的还是它。
+  - 这是 rc5 条目里「未处理」那一项的修复。rc5 已把 `load()` 迁移旧键 `com.willdeep.terminalShortcuts.v1` 的读取换成 `AppDefaults.standard`，这次补的是文件这一半；两处合起来，单测进程碰不到已安装 App 的终端捷径。
+  - 测试：新增 `TerminalShortcutStoreTestIsolationTests`（2 项）。一项只做路径解析：不装 override 时 `directory` 和 `fileURL` 都不在真实 Application Support 下、目录名带上述前缀、位于系统临时目录、同一进程内稳定不变。另一项不装 override 保存一个含保护输入的捷径，确认 `shortcuts.json` 和保险库两个文件都落在临时目录、能读回原密码，且真实目录下这三个文件的大小和修改时间前后一致（只 stat，不读内容）。第二项在碰任何文件之前先确认目录不在 Application Support 下，修复一旦回退会在这里直接失败，不会去动真实目录。两项都在主线程同步跑完，返回前恢复原来的 override 和临时目录里的文件。
+  - 验证：rebase 到 rc5 之后，新套件连同 `AppDefaultsTestIsolationTests`、`WillDeepTests` 聚合套件和 6 个终端相关套件（`TerminalShortcutLineResolutionTests`、`AgentTerminalDisplayRefreshTests`、`AgentExecutorAndTerminalPoolTests` 等），9 个套件共 477 项通过，退出码 0。反验（在 rebase 前的同一份修复上做）：临时让 `directory` 跳过临时目录，新套件两项都变红（第一项 5 条断言失败，第二项停在「目录不在 Application Support 下」那道前置检查，没有碰任何文件）；反验前后 stat 真实目录的三个文件，大小和修改时间不变。全量 XeditTests 没有在本地跑。
+
 ## 1.404.0-rc5 - 2026-09-26
 
 ### Fixed
