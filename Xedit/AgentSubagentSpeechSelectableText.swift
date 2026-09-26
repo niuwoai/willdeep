@@ -235,11 +235,19 @@ final class AgentSubagentSpeechNSTextView: NSTextView {
     }
 
     /// 拖选 + ⌘C 拿的是渲染串。工种发言是纯文本，这里主要是和会话正文
-    /// 走同一条净化出口，避免两处复制出来的东西不一样。
+    /// 走同一条净化出口，避免两处复制出来的东西不一样。`isRichText` 关着时
+    /// ⌘C 只要纯文本，RTF 分支留给直接按富文本口味来取的调用方。
     override func writeSelection(
         to pboard: NSPasteboard,
         type: NSPasteboard.PasteboardType
     ) -> Bool {
+        if let handled = AgentCopyTextSanitizer.writeSanitizedRichText(
+            selectionOf: self,
+            to: pboard,
+            type: type
+        ) {
+            return handled
+        }
         guard AgentCopyTextSanitizer.isPlainTextPasteboardType(type),
               let raw = selectedConversationText(sanitizeForModel: false) else {
             return super.writeSelection(to: pboard, type: type)

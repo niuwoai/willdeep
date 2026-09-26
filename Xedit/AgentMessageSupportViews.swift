@@ -19,6 +19,11 @@ import UniformTypeIdentifiers
 /// a break opportunity. On macOS this manifests as the entire chat
 /// pane freezing while scrolling past a message that contains, e.g.,
 /// a pnpm-store path listing where each line is a 150-char hash.
+///
+/// 只给 SwiftUI Text 路径用。TextKit 历史（AgentChatHistoryFormatter）
+/// 1.404.0-rc8 起不再注入：NSTextView 遇到超长单词会自己按字符断行，实测
+/// 不卡；插进去的 U+200B 反而弄坏会话内搜索、路径 chip、链接 URL 与表格
+/// payload。别再把它接回 TextKit 路径。
 enum AgentLongTokenBreaker {
     /// Threshold above which we start inserting breakpoints. Roughly
     /// the width of a chat-bubble column at the default font size, so
@@ -117,9 +122,10 @@ enum AgentLongTokenBreaker {
 /// 一个都不许有。
 ///
 /// 两个来源：
-/// 1. `AgentLongTokenBreaker` 为了防止长 token 卡死布局插的 U+200B——
-///    它是**渲染态**，跟着复制出去就变成了粘贴到终端/编译器里的隐形
-///    地雷。
+/// 1. `AgentLongTokenBreaker`（只剩 SwiftUI 流式路径）为了防止长 token
+///    卡死布局插的 U+200B，以及 `AgentInjectionDefense` 打断注入标记插的
+///    U+200B——它们是**渲染态**，跟着复制出去就变成了粘贴到终端/编译器里
+///    的隐形地雷。
 /// 2. 模型自己吐的零宽字符、BOM、软连字符。模型输出不保证干净，这层
 ///    顺手一起收了。
 ///
@@ -159,6 +165,66 @@ enum AgentCopyTextSanitizer {
     }
 
     private static let legacyStringPasteboardType = NSPasteboard.PasteboardType("NSStringPboardType")
+
+    /// 富文本口味同一个坑：`isRichText` 的 NSTextView 做 ⌘C 时回调的是
+    /// `NeXT Rich Text Format v1.0 pasteboard type`，不是 `.rtf`
+    /// （`public.rtf`）；RTFD 同理。新旧名字都认，其余口味返回 nil。
+    static func richTextDocumentType(
+        for type: NSPasteboard.PasteboardType
+    ) -> NSAttributedString.DocumentType? {
+        switch type {
+        case .rtf, legacyRTFPasteboardType: return .rtf
+        case .rtfd, legacyRTFDPasteboardType: return .rtfd
+        default: return nil
+        }
+    }
+
+    private static let legacyRTFPasteboardType = NSPasteboard.PasteboardType("NeXT Rich Text Format v1.0 pasteboard type")
+    private static let legacyRTFDPasteboardType = NSPasteboard.PasteboardType("NeXT RTFD pasteboard type")
+
+    /// 富文本版的 `sanitize`：属性跟着字符走，倒序删才不会让前面的下标失效。
+    /// 四个排版字符都在 BMP 且不是代理对，按 UTF-16 单元比对就是精确的。
+    static func sanitize(_ attributed: NSAttributedString) -> NSAttributedString {
+        let units = attributed.string as NSString
+        var doomed: [Int] = []
+        for index in 0..<units.length where renderOnlyScalars.contains(UInt32(units.character(at: index))) {
+            doomed.append(index)
+        }
+        guard !doomed.isEmpty else { return attributed }
+        let cleaned = NSMutableAttributedString(attributedString: attributed)
+        for index in doomed.reversed() {
+            cleaned.deleteCharacters(in: NSRange(location: index, length: 1))
+        }
+        return cleaned
+    }
+
+    /// 两处 `writeSelection(to:type:)` 覆写共用的富文本出口：取选区的
+    /// attributedSubstring，净化后再生成 RTF / RTFD 写进剪贴板。
+    ///
+    /// 返回 nil 表示「不归这里管」（不是富文本口味，或选区不可用），调用方
+    /// 交给 super。生成失败返回 false：宁可少写这一味（纯文本那一味仍在），
+    /// 也不退回带零宽字符的 super。
+    static func writeSanitizedRichText(
+        selectionOf textView: NSTextView,
+        to pboard: NSPasteboard,
+        type: NSPasteboard.PasteboardType
+    ) -> Bool? {
+        guard let documentType = richTextDocumentType(for: type) else { return nil }
+        let range = textView.selectedRange()
+        guard range.location != NSNotFound,
+              range.length > 0,
+              let textStorage = textView.textStorage,
+              NSMaxRange(range) <= textStorage.length else {
+            return nil
+        }
+        let cleaned = sanitize(textStorage.attributedSubstring(from: range))
+        let fullRange = NSRange(location: 0, length: cleaned.length)
+        let data = documentType == .rtfd
+            ? cleaned.rtfd(from: fullRange, documentAttributes: [:])
+            : cleaned.rtf(from: fullRange, documentAttributes: [:])
+        guard let data else { return false }
+        return pboard.setData(data, forType: type)
+    }
 
     /// The transcript draws list markers as `•` / `◦` / `▪`; the clipboard
     /// gets the Markdown dash back so a copied list pastes as a list

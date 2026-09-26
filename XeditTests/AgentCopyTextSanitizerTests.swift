@@ -158,4 +158,92 @@ struct AgentCopyTextSanitizerTests {
         #expect(view.writeSelection(to: pasteboard, types: view.writablePasteboardTypes))
         return try #require(pasteboard.string(forType: .string))
     }
+
+    // MARK: - 富文本口味：RTF / RTFD 同样不带排版字符
+
+    private static let legacyRTFType = NSPasteboard.PasteboardType("NeXT Rich Text Format v1.0 pasteboard type")
+    private static let legacyRTFDType = NSPasteboard.PasteboardType("NeXT RTFD pasteboard type")
+
+    @Test("富文本口味的新旧两个名字都认，纯文本口味不认")
+    func richTextPasteboardTypeAcceptsLegacyNames() {
+        #expect(AgentCopyTextSanitizer.richTextDocumentType(for: .rtf) == .rtf)
+        #expect(AgentCopyTextSanitizer.richTextDocumentType(for: Self.legacyRTFType) == .rtf)
+        #expect(AgentCopyTextSanitizer.richTextDocumentType(for: .rtfd) == .rtfd)
+        #expect(AgentCopyTextSanitizer.richTextDocumentType(for: Self.legacyRTFDType) == .rtfd)
+        #expect(AgentCopyTextSanitizer.richTextDocumentType(for: .string) == nil)
+    }
+
+    @Test("富文本净化：删掉排版字符，属性仍对齐原来的字")
+    func attributedSanitizeKeepsAttributesAligned() {
+        let bold = NSFont.boldSystemFont(ofSize: 13)
+        let dirty = NSMutableAttributedString(string: "ab\u{200B}cd\u{FEFF}ef")
+        dirty.addAttribute(.font, value: bold, range: NSRange(location: 3, length: 2))
+        let cleaned = AgentCopyTextSanitizer.sanitize(dirty)
+        #expect(cleaned.string == "abcdef")
+        #expect(cleaned.attribute(.font, at: 2, effectiveRange: nil) as? NSFont == bold)
+        #expect(cleaned.attribute(.font, at: 3, effectiveRange: nil) as? NSFont == bold)
+        #expect(cleaned.attribute(.font, at: 4, effectiveRange: nil) as? NSFont != bold)
+    }
+
+    @Test("会话正文拖选 ⌘C：剪贴板 RTF 读回来不带 U+200B")
+    @MainActor
+    func transcriptCopyWritesSanitizedRichText() throws {
+        let view = AgentChatHistoryNSTextView()
+        view.isRichText = true
+        view.frame = NSRect(x: 0, y: 0, width: 480, height: 120)
+        view.string = Self.renderedSignatureLine
+        view.setSelectedRange(NSRange(location: 0, length: (view.string as NSString).length))
+        // ⌘C 真实链路：RTF 这一味传进覆写的是旧名字，不是 `.rtf`。
+        #expect(view.writablePasteboardTypes.contains {
+            AgentCopyTextSanitizer.richTextDocumentType(for: $0) != nil
+        })
+
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("willdeep.tests.copy.\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        #expect(view.writeSelection(to: pasteboard, types: view.writablePasteboardTypes))
+        let rtf = try Self.attributedString(from: pasteboard, type: .rtf, documentType: .rtf)
+        #expect(!rtf.string.contains(zwsp))
+        #expect(rtf.string.contains(Self.reportedSignature))
+    }
+
+    @Test("按 RTFD 口味直接来取：会话正文与工种发言都不带 U+200B")
+    @MainActor
+    func richTextFlavorsRequestedDirectlyAreSanitized() throws {
+        let transcript = AgentChatHistoryNSTextView()
+        transcript.isRichText = true
+        let speech = AgentSubagentSpeechNSTextView()
+        let flavors: [(NSPasteboard.PasteboardType, NSPasteboard.PasteboardType, NSAttributedString.DocumentType)] = [
+            (Self.legacyRTFType, .rtf, .rtf),
+            (.rtfd, .rtfd, .rtfd),
+        ]
+        for view in [transcript as NSTextView, speech] {
+            view.frame = NSRect(x: 0, y: 0, width: 480, height: 120)
+            view.string = Self.renderedSignatureLine
+            view.setSelectedRange(NSRange(location: 0, length: (view.string as NSString).length))
+            for (written, read, documentType) in flavors {
+                let pasteboard = NSPasteboard(name: NSPasteboard.Name("willdeep.tests.copy.\(UUID().uuidString)"))
+                defer { pasteboard.releaseGlobally() }
+                pasteboard.clearContents()
+                pasteboard.declareTypes([written], owner: nil)
+                #expect(view.writeSelection(to: pasteboard, type: written))
+                let copied = try Self.attributedString(from: pasteboard, type: read, documentType: documentType)
+                #expect(!copied.string.contains(zwsp), "\(type(of: view)) \(written.rawValue)")
+                #expect(copied.string.contains(Self.reportedSignature))
+            }
+        }
+    }
+
+    private static func attributedString(
+        from pasteboard: NSPasteboard,
+        type: NSPasteboard.PasteboardType,
+        documentType: NSAttributedString.DocumentType
+    ) throws -> NSAttributedString {
+        let data = try #require(pasteboard.data(forType: type))
+        return try NSAttributedString(
+            data: data,
+            options: [.documentType: documentType],
+            documentAttributes: nil
+        )
+    }
 }

@@ -378,15 +378,23 @@ final class AgentChatHistoryNSTextView: NSTextView {
     }
 
     /// 拖选 + ⌘C 走的是 AppKit 自己的复制链路,拿的是 textStorage 里的
-    /// **渲染串**——排版专用的零宽断点会原样进剪贴板。纯文本这一味在这里
-    /// 换成净化版;RTF 等富文本口味仍交给 super(粘到富文本编辑器里那些
-    /// 零宽字符本来就是随格式走的,而且真正会被塞进终端的是 .string)。
-    /// 纯文本口味 AppKit 传的是旧名字 `NSStringPboardType`,判定必须走
-    /// `isPlainTextPasteboardType`,只比 `.string` 会整段落空。
+    /// **渲染串**——注入防御打断标记用的零宽字符、模型自己吐的零宽字符会
+    /// 原样进剪贴板。纯文本和 RTF/RTFD 两类口味都在这里换成净化版,其余
+    /// 口味交给 super。AppKit 回调传的是旧名字(`NSStringPboardType`、
+    /// `NeXT Rich Text Format v1.0 pasteboard type`),判定必须走
+    /// `isPlainTextPasteboardType` / `richTextDocumentType`,只比 `.string`
+    /// / `.rtf` 会整段落空。
     override func writeSelection(
         to pboard: NSPasteboard,
         type: NSPasteboard.PasteboardType
     ) -> Bool {
+        if let handled = AgentCopyTextSanitizer.writeSanitizedRichText(
+            selectionOf: self,
+            to: pboard,
+            type: type
+        ) {
+            return handled
+        }
         guard AgentCopyTextSanitizer.isPlainTextPasteboardType(type) else {
             return super.writeSelection(to: pboard, type: type)
         }

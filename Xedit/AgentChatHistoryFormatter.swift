@@ -745,12 +745,9 @@ enum AgentChatHistoryRenderer {
                     if useMono {
                         appendPlainBody(body, to: result, font: messageMonoFont, color: messageBodyColor)
                     } else if message.role == .user {
-                        appendPlainBody(
-                            AgentLongTokenBreaker.inject(into: body),
-                            to: result,
-                            font: bodyFont,
-                            color: bodyColor
-                        )
+                        // 不插零宽断点：TextKit 遇到超长单词自己会退回按字符
+                        // 断行（见 appendMarkdownBody 的说明）。
+                        appendPlainBody(body, to: result, font: bodyFont, color: bodyColor)
                     } else if let activityHeadline {
                         appendActivityHeadline(
                             activityHeadline,
@@ -1467,11 +1464,18 @@ enum AgentChatHistoryRenderer {
         layoutWidth: CGFloat,
         allowsLocalCommandButtons: Bool
     ) {
+        // 这里**不**走 AgentLongTokenBreaker。它是给 SwiftUI Text 防卡死的，
+        // TextKit 的 byWordWrapping 碰到超长单词会自己退回按字符断行：
+        // 200 行×150 位十六进制、200KB 单行、pnpm 3000 行这些语料，原文与
+        // 插零宽两种排法耗时同一量级、都线性增长；本函数自己在插过零宽的
+        // pnpm 列表上反而慢一个数量级（见 AgentChatHistoryLongTokenTests
+        // 的实测）。插进来的 U+200B 还让会话内搜索搜不到长哈希、路径 chip
+        // 只认出后半截文件名、链接 URL 带上 %E2%80%8B、表格 payload 带零宽、
+        // 紧跟 `**` 的长单词粗体失效。
         let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(source)
-        let safe = AgentLongTokenBreaker.inject(into: normalized)
-        let blocks = MarkdownPreviewParser.blocks(from: safe)
+        let blocks = MarkdownPreviewParser.blocks(from: normalized)
         guard !blocks.isEmpty else {
-            result.append(inlineMarkdownAttributedString(safe, baseFont: bodyFont, color: bodyColor))
+            result.append(inlineMarkdownAttributedString(normalized, baseFont: bodyFont, color: bodyColor))
             return
         }
 
@@ -1604,10 +1608,10 @@ enum AgentChatHistoryRenderer {
                         .foregroundColor: secondaryColor,
                     ]
                 ))
-                // block.text 是从**已经插过零宽断点**的 `safe` 里解析出来
-                // 的(见 appendMarkdownBody),直接当复制载荷会把 U+200B 一起
-                // 送进剪贴板——粘到终端或编译器里就是一串查无此因的报错。
-                // 渲染仍用带断点的 block.text,只有复制走净化版。
+                // 渲染层不再往正文里插零宽断点,但模型输出和注入防御仍可能
+                // 带 U+200B 这类排版字符,直接当复制载荷会一起送进剪贴板——
+                // 粘到终端或编译器里就是一串查无此因的报错。渲染用原样的
+                // block.text,只有复制走净化版。
                 // 「运行」与「送进终端」排在复制左边，且只有够格的块才有：
                 // 要审批的、复杂的、耗时的、远端的一律只留复制（判据见
                 // AgentChatRunnableCommand）。user 气泡不给——用户自己贴

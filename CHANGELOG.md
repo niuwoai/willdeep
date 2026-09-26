@@ -1,6 +1,25 @@
 # Changelog
 
-## 1.404.0-rc7 - 2026-09-26
+## 1.404.0-rc8 - 2026-09-26
+
+### Fixed
+
+- **会话正文里的长哈希搜不到、长文件名的路径 chip 只认出后半截、链接 URL 里混进 `%E2%80%8B`。** 三件事同一个来源：`AgentLongTokenBreaker` 在一段没有天然断点的字符超过 30 个时插一个 U+200B。它本来是给 SwiftUI `Text` 防卡死的（1.52.1-rc10），1.52.1-rc18 把 history 渲染改成 TextKit 时原样搬进了 `AgentChatHistoryFormatter`，搬过去时没有卡死方面的证据；rc11 已经记过「零宽空格方案没能消除卡死」。插进渲染串的 U+200B 造成了这些问题：
+  - 会话内搜索是在渲染串上匹配的（`AgentTranscriptSearch.matchRanges`），64 位 sha256、40 位 commit 中间被插了断点，搜原文一个都搜不到。
+  - 路径 chip 正则的字符集不含 U+200B，`Xedit/AppStateAgentBackgroundCompletionDelivery.swift` 只识别出 `ionDelivery.swift`，点开时拿到的是半截路径。
+  - Markdown 链接目标里的 U+200B 被百分号编码成 `%E2%80%8B` 写进 URL，打开的已经不是原来那个地址。
+  - 表格 payload 带着零宽字符进独立表格窗口；29 个字符的单词后面紧跟 `**粗体**` 时，断点正好劈开 `**`，星号原样露出来。
+  - 评估（2026-09-26，swiftc 独立探针）：NSTextView 在 TextKit 1 和 TextKit 2 下默认按 `byWordWrapping` 断行，遇到超长单词会自动退回按字符断行，不会溢出。200 行×150 位十六进制、200KB 单行、pnpm store 3000 行（约 49 万字符）这几组语料，原文和插零宽两种排法的布局耗时在同一量级，都随长度线性增长，都不卡。
+  - 修法：删掉 TextKit 路径上的两处 `AgentLongTokenBreaker.inject`（user 气泡的 `appendPlainBody` 和 `appendMarkdownBody`）。SwiftUI 流式路径（`AgentMessageView`，流式内容已截到 3000 字）暂时保留。`AgentCopyTextSanitizer` 和下游各处剥离零宽字符的逻辑也保留，因为 `AgentInjectionDefense` 仍会往渲染串里插 U+200B 来打断注入标记，模型自己也可能输出零宽字符。
+  - 顺带量出来的：断行器在这条路径上反而拖慢渲染。pnpm store 3000 行（约 49 万字符），user 气泡和助手正文各一份，同一个测试进程里对比（负载均值 45~110，别的会话在并行编译）：原文渲染 1.4~1.6 秒、排版 1.6~1.8 秒；先过一遍断行器再渲染，排版 1.5 秒不变，渲染要 17.5 秒，两轮结果一致。慢在 formatter 里，没有继续往下拆是哪一步。
+- **复制出的 RTF 仍然带 U+200B**（rc7 条目「未处理」的第一项）。会话正文是 `isRichText` 的 NSTextView，⌘C 时除了纯文本还会写一份 RTF，粘进备忘录、Pages 这类富文本编辑器时用的是这一份，rc7 只净化了纯文本。和 rc7 同一个坑：独立探针确认 AppKit 回调 `writeSelection(to:type:)` 时 RTF 传的是旧名字 `NeXT Rich Text Format v1.0 pasteboard type`，不是 `.rtf`。
+  - 新增 `AgentCopyTextSanitizer.richTextDocumentType(for:)`（RTF、RTFD 新旧名字都认）、`sanitize(_: NSAttributedString)`（倒序删掉 U+200B / U+2060 / U+FEFF / U+00AD，属性跟着字走）和 `writeSanitizedRichText(selectionOf:to:type:)`：取选区的 `attributedSubstring`，净化后再生成 RTF / RTFD 写入。会话正文和工种发言两处 `writeSelection(to:type:)` 覆写都先走它；rc7 的纯文本判断不动。生成失败时这一味不写（纯文本那一味仍在），不退回带零宽字符的 `super`。
+  - 工种发言的 `isRichText` 是关的，⌘C 只写纯文本；RTF 分支是给直接按富文本类型来取的调用方准备的。
+- 测试：新增 `AgentChatHistoryLongTokenTests`（7 项），全部走 `AgentChatHistoryRenderer.render` 的真实输出：user 气泡和助手正文都不含 U+200B；`AgentTranscriptSearch.matchRanges` 能命中 64 位 sha256 和 40 位 commit；`Xedit/AppStateAgentBackgroundCompletionDelivery.swift` 的路径 chip 范围等于完整路径；GitHub commit 链接的 URL 与原文逐字相同；表格 payload 的单元格原样、不含零宽字符；29 字符单词紧跟 `**重点**` 时星号不露出；pnpm 3000 行 user + 助手各一份，渲染加 `ensureLayout` 一次，要求不含零宽、`-index.json` 一行不少、`usedRect` 和字形包围盒都不超出容器宽度、耗时低于 15 秒（修复后满载实测 3.6~4.4 秒）。`AgentCopyTextSanitizerTests` 新增 4 项：富文本新旧类型名都认；富文本 `sanitize` 删字后属性仍对齐；会话正文按 `copy:` 的做法（`writeSelection(to:types: writablePasteboardTypes)`）写进私有剪贴板，读回的 RTF 不含 U+200B、签名完整，并确认 `writablePasteboardTypes` 里确实有 RTF 类型；会话正文和工种发言分别按旧名 RTF、RTFD 直接来取，读回都不含 U+200B。
+- 反验：新测试和 `AgentMessageSupportViews.swift` 里的新接口保留，把 formatter 和两处 `writeSelection` 临时退回 rc7 的写法，跑这两个套件（23 项）：新增的 11 项里 9 项变红、共 18 条断言失败——`AgentChatHistoryLongTokenTests` 7 项全红（pnpm 用例只红在「不含零宽」这一条，耗时没超限），两项 RTF/RTFD 复制测试读回的内容带 U+200B；两个纯函数用例和 rc7 的 3 项复制测试保持绿，退出码 65。恢复后三个文件与备份逐字节一致。
+- 验证：`AgentChatHistoryLongTokenTests`、`AgentCopyTextSanitizerTests` 连同所有会渲染 transcript 或用到这两个文本视图的套件（`AgentChatHistoryRendererTests`、`AgentChatHistoryRendererGoalTests`、`AgentTranscriptSearchScrollTests`、`AgentChatRunnableCommandTests`、`MarkdownInlineImageTests`、`AgentInjectionDefenseTests` 等）共 15 个套件 258 项通过，退出码 0，日志、report.md（xcresult 来源）计数一致；最后改了两处注释后在提交前的同一棵树上又跑了一遍，结果相同。跑的时候机器负载均值 55~125。全量 XeditTests 没有在本地跑。
+- 未处理：SwiftUI 流式路径（`AgentMessageView`）仍在插零宽断点，本次没动；要不要一起拿掉，得先在 SwiftUI `Text` 上单独量卡顿。
+
 
 ### Fixed
 
