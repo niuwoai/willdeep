@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-22 | Current version: v1.404.0-rc8
+> Last updated: 2026-09-26 | Current version: v1.405.0-rc1
+
+插件 MCP 网关（1.405.0-rc1）：WillDeep 启动时开一个只绑本机的 Streamable HTTP 入口（地址与 token 在 `~/Library/Application Support/WillDeep/mcp-gateway.json`），Claude Code、Codex 等外部 MCP 客户端连它就能调插件的 MCP 工具；第一条请求时宿主按需拉起插件，不必先打开插件页。设置 → MCP 的插件服务行可复制 Claude Code 连接命令。契约见 `docs/decisions/0001-plugin-mcp-gateway.md`。
 
 定时任务（原「自动化」）可以单独指定审核模式（1.404.0-rc1）：编辑表单里选智能审核、完全访问、工作区可写或严格模式，默认智能审核；每次运行的会话都用任务自己的模式，不跟随对话框当时的设置。卡片在非默认模式时标出模式名；对话里 `schedule_task` 建的任务同样默认智能审核，模型不能自行指定。
 

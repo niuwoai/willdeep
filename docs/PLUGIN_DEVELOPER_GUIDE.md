@@ -16,4 +16,8 @@
 - `WILLDEEP_PLUGIN_SYSTEM_DESIGN.md` —— 插件系统的设计与验收标准
 - `PLUGIN_HOST_CAPABILITIES_DESIGN.md` —— `ai.chat` / `providers.read` 已实现，`schedule` 仍是设计
 
+## 外部 MCP 客户端怎么连插件
+
+插件不用为外部客户端做任何事。WillDeep 自带一个只绑本机的插件 MCP 网关，Claude Code、Codex 等客户端连网关地址即可，第一条请求会让宿主按需拉起插件，不必先打开插件页。网关地址和 token 在 `~/Library/Application Support/WillDeep/mcp-gateway.json`，设置 → MCP 的插件服务行可以直接复制 Claude Code 连接命令。插件照常在自己的数据目录写 `mcp-http.json`（长耗时调用走它，避开宿主 stdio 的超时），但面向用户的文档应指向网关，不再让用户去读 `mcp-http.json`。契约见 [decisions/0001-plugin-mcp-gateway.md](decisions/0001-plugin-mcp-gateway.md)。
+
 字段级真相以 `plugin-schema/willdeep-plugin.schema.json` 和 `Xedit/AgentPluginModels.swift` 为准。

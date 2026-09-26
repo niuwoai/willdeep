@@ -1937,13 +1937,20 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
 }
 
 enum AgentPluginGeneratedMediaResolver {
+    /// 所有插件数据目录的根（`~/Library/Application Support/WillDeep/plugin-data`）。
+    /// 插件 MCP 网关也从这里找插件公布的 `mcp-http.json`。
+    nonisolated static var pluginDataRoot: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support", isDirectory: true)
+        return base.appendingPathComponent("WillDeep/plugin-data", isDirectory: true)
+    }
+
     static func directory(pluginID: String) throws -> URL {
-        guard pluginID.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"#, options: .regularExpression) != nil,
-              let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        guard pluginID.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"#, options: .regularExpression) != nil else {
             throw AgentPluginPackageError.resourceOutsidePackage(pluginID)
         }
-        return base
-            .appendingPathComponent("WillDeep/plugin-data", isDirectory: true)
+        return pluginDataRoot
             .appendingPathComponent(pluginID, isDirectory: true)
             .appendingPathComponent("generated-images", isDirectory: true)
     }

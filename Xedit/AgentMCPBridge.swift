@@ -177,6 +177,52 @@ enum AgentMCPBridge {
         )
     }
 
+    /// 插件 MCP 网关（`AgentPluginMCPGateway`）：确保插件的 MCP 进程已起。
+    ///
+    /// 经与页面、模型同一个连接池发一次 `tools/list`：插件没在运行就按平常的
+    /// 方式拉起（进程、反向请求能力、环境变量完全一致），结果顺手刷新聊天用的
+    /// 插件工具目录。错误在主 actor 上转成文字再交出去，网关那头不在主 actor 上。
+    static func ensurePluginServerStartedForGateway(pluginID: AgentPluginID, serverName: String) async throws {
+        do {
+            let server = try AgentMCPServerDirectory.pluginServer(pluginID: pluginID, named: serverName)
+            let result = try await runRequest(server: server, method: "tools/list", params: [:], rendering: .pageFacing)
+            AgentPluginMCPToolCatalog.record(
+                serverID: server.id,
+                pluginID: pluginID,
+                serverName: server.name,
+                listToolsPayload: result
+            )
+        } catch {
+            throw AgentPluginMCPGatewayHostError(message: gatewayErrorMessage(error))
+        }
+    }
+
+    /// 插件 MCP 网关：插件没有公布自己的 HTTP 入口时，经宿主的 MCP 客户端中转
+    /// 一条请求。返回紧凑、完整的 `result` JSON（与页面同一种渲染）。
+    static func relayPluginRequestForGateway(
+        pluginID: AgentPluginID,
+        serverName: String,
+        method: String,
+        paramsJSON: Data
+    ) async throws -> String {
+        do {
+            let server = try AgentMCPServerDirectory.pluginServer(pluginID: pluginID, named: serverName)
+            let params = try JSONSerialization.jsonObject(with: paramsJSON) as? [String: Any] ?? [:]
+            return try await runRequest(server: server, method: method, params: params, rendering: .pageFacing)
+        } catch {
+            throw AgentPluginMCPGatewayHostError(message: gatewayErrorMessage(error))
+        }
+    }
+
+    /// `commandTimeout` 的通用文案是写给模型的（「改用后台运行」），外部客户端
+    /// 看了只会困惑，这里换成说清是插件没按时应答。
+    private static func gatewayErrorMessage(_ error: Error) -> String {
+        if case AgentToolError.commandTimeout = error {
+            return "Plugin MCP server did not answer before the host's stdio timeout."
+        }
+        return error.localizedDescription
+    }
+
     /// 测试入口：对一个手工构造的服务配置跑一次请求，走与正式调用相同的连接池
     /// 与等待循环。正式代码路径都先经过服务目录解析，测试造不出已安装的插件。
     static func requestForTesting(

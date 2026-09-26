@@ -47,7 +47,12 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             // 产品遥测：一次启动一条。开关关闭时 `record` 直接丢弃，
             // 不入队也不落盘（见 TelemetryReporter）。
             AgentTelemetry.recordAppSessionStarted()
+            // 插件 MCP 网关要知道哪些插件已启用；注册表平时由侧栏第一次用到时
+            // 才建，没开窗口启动时就没人扫描插件，网关会对所有插件回 404。
+            _ = AgentPluginRegistry.shared
         }
+        // 插件 MCP 网关：外部 MCP 客户端经它按需拉起插件，不必先打开插件页。
+        AgentPluginMCPGateway.shared.start()
         // CPU 看门狗：持续高负载时自动抓栈上报（设置 → 隐私 → 性能报告）。
         PerformanceWatchdog.shared.start()
     }

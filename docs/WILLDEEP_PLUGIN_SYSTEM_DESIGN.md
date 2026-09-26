@@ -287,6 +287,25 @@ rs 2026-09-14（0.73.0-rc1）把 Web 宿主补到了桥 2.5.0，此前只有 `co
 
 安装器不执行 `postinstall`、npm/yarn install、构建命令或包内脚本。Git 元数据不会复制到安装版本。
 
+### 8.1 插件 MCP 进程：按需拉起与外部客户端网关（1.405.0-rc1）
+
+启用插件只把它的 MCP 服务注册进总列表，不起进程。stdio 进程在第一个请求到来时由宿主的
+MCP 客户端（`AgentMCPBridge` 的连接池）拉起：页面 `executeCommand`、模型调插件工具、
+设置页「刷新工具」，以及下面的插件 MCP 网关。进程被结束后，下一条请求会再拉起它。
+
+插件 MCP 网关让 Claude Code、Codex 等外部 MCP 客户端不打开插件页也能调插件工具：
+
+- 宿主启动时开一个只绑 `127.0.0.1` 的 Streamable HTTP 入口，地址与 token 写进
+  `~/Library/Application Support/WillDeep/mcp-gateway.json`（0600）。端口和 token 首次随机
+  生成后沿用；插件启用、停用、安装、卸载后重写其中的 `servers`。
+- 端点 `POST /plugins/<pluginID>/<server>/mcp`：Bearer 鉴权、Host / Origin 只认本机；
+  `initialize`、`ping`、通知由网关自己应答；其余请求先经宿主 MCP 客户端发一次
+  `tools/list` 确保插件已起（顺手刷新聊天用的插件工具目录），再转发到插件自己公布的
+  `plugin-data/<pluginID>/mcp-http.json` 入口；插件没公布入口时经 stdio 中转。
+- 插件侧无需任何改动。设置 → MCP 的插件服务行提供「复制 Claude Code 连接命令」。
+
+契约与 macOS 实现备注见 [decisions/0001-plugin-mcp-gateway.md](decisions/0001-plugin-mcp-gateway.md)。
+
 ## 9. AI 草案
 
 AI 只能调用 `create_plugin_draft`、`write_plugin_draft_file` 与 `inspect_plugin_draft` 在草案根内写入并验证包。路径穿越、符号链接逃逸、超大文件及草案根外路径会被拒绝。工具永远不会安装、批准或启用插件；用户必须在插件中心检查权限和目的地后手动批准。
@@ -327,6 +346,7 @@ AI 只能调用 `create_plugin_draft`、`write_plugin_draft_file` 与 `inspect_p
 - 命令和菜单：`AgentPluginCommandExecutor.swift`
 - AI 草案工具：`AgentPluginTools.swift`
 - Keychain 设置：`AgentPluginSettingsStore.swift`
+- 插件 MCP 网关：`AgentPluginMCPGateway.swift`、`AgentPluginMCPGatewayRouter.swift`、`AgentPluginMCPGatewayHTTP.swift`、`AgentPluginMCPGatewayDiscovery.swift`
 
 ## 13. 验收标准
 
@@ -337,5 +357,6 @@ AI 只能调用 `create_plugin_draft`、`write_plugin_draft_file` 与 `inspect_p
 - MCP App URI/MIME、动态声明式 Resource 与完整卸载均有边界测试。
 - 外部网络、导航、弹窗和包外资源不能由 Web 页面访问。
 - AI 草案不能自行安装或启用。
+- 插件 MCP 网关的请求解析、鉴权 / Host / Origin、404 / 405 / 411 / 413、`initialize` 形状、通知 202、转发与中转的选择、发现文件内容与 0600 权限、端口与 token 沿用均有单测（`AgentPluginMCPGatewayTests`、`AgentPluginMCPGatewayDiscoveryTests`），测试注入临时目录与假宿主，不拉起插件进程。
 - 300 个插件的发现与 snapshot 构造不在主线程执行。
 - “项目概览”、“Issue 面板”和可游玩的“俄罗斯方块”样例可用于端到端开发与回归。

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.405.0-rc1 - 2026-09-26
+
+### Added
+
+- **插件 MCP 网关：Claude Code、Codex 等外部 MCP 客户端不用先点开插件页，也能调插件的 MCP 工具。** 以前插件的 stdio 进程只在页面脚本、模型调工具或设置页「刷新工具」时才被拉起，外部客户端只能去读插件自己写的 `plugin-data/<插件 ID>/mcp-http.json`——这份文件只在进程活着时存在，端口和 token 每次重启都变，于是必须先在 WillDeep 里打开「短剧工坊」，外部客户端才连得上，插件进程被宿主结束后连接又断。
+  - App 启动时开一个只绑 `127.0.0.1` 的 Streamable HTTP 网关，地址和 token 写进 `~/Library/Application Support/WillDeep/mcp-gateway.json`（权限 0600，原子写入）。端口和 token（32 字节随机数）首次生成后沿用，下次启动先试原端口；原端口被占才换新端口并重写文件。插件启用、停用、安装、卸载，或插件 MCP 服务单独开关后，重写其中的 `servers`。退出时不删文件。
+  - 端点 `POST /plugins/<pluginID>/<server>/mcp`：Bearer token 常量时间比较，不对回 401；Host 只认 `127.0.0.1` / `localhost`，带非本机 `Origin` 回 403（防 DNS rebinding）；未知或未启用的插件 / 服务回 404，`GET` / `DELETE` 回 405，请求体超过 8 MB 回 413，不带 `Content-Length` 或分块上传回 411；批量数组和非对象回 JSON-RPC `-32600`。
+  - `initialize`、`ping` 和通知由网关自己应答，不转给插件：第三方客户端的能力声明不会覆盖宿主在 stdio 那头宣告的反向请求能力（出图、审核靠它）。`initialize` 回客户端请求的协议版本、`tools` 能力、`<插件 ID>/<服务名>` 和插件版本，并给 `Mcp-Session-Id`。
+  - 其他请求按需激活：先经宿主平时用的 MCP 客户端连接发一次 `tools/list`，插件没在运行就按平常的方式拉起（进程、反向请求能力、环境变量与页面打开时一致），这次结果顺手刷新聊天用的插件工具目录；然后插件公布了 `mcp-http.json`（只认 `http://127.0.0.1:<端口>/…`）就把原始请求体带插件自己的 token 原样转发过去，超时 15 分钟；没公布就经 stdio 客户端中转，结果包成 JSON-RPC 响应，出错回 `-32603` 带原因。
+  - 连接被拒（或插件入口在执行前就回 401 / 404）时重读一次 `mcp-http.json` 再试，仍然送不到才退回 stdio 中转。超时、中途断开这类可能已经在执行的失败不重发也不中转，直接回 `-32603`，避免一次出图被执行两遍。
+  - 设置 → MCP 的插件服务行新增「复制 Claude Code 连接命令」，生成 `claude mcp add --transport http <服务名> <网关地址> --header "Authorization: Bearer <token>"`；中、英、日、西、法五种语言。
+  - 日志走 `com.willdeep.agent` / `plugin-mcp-gateway`，记录状态码、走的路径（网关自答 / 转发 / 中转 / 拒绝）、插件、服务、JSON-RPC 方法和耗时，从不记录 token。单测进程不启动网关。
+  - 契约副本和 macOS 实现备注见 `docs/decisions/0001-plugin-mcp-gateway.md`；`docs/WILLDEEP_PLUGIN_SYSTEM_DESIGN.md` 新增 §8.1，`docs/PLUGIN_DEVELOPER_GUIDE.md` 说明外部客户端怎么连插件。两处「启用插件就由宿主拉起进程」的过时代码注释一并改正。
+  - 测试：新增 `AgentPluginMCPGatewayTests`（HTTP 解析、鉴权 / Host / Origin、路由 404 / 405、`initialize` 形状、通知 202、`ping`、转发与中转的选择、重读后重试、不重发、错误包装、`mcp-http.json` 只认回环地址）和 `AgentPluginMCPGatewayDiscoveryTests`（发现文件内容与 0600 权限、端口与 token 沿用、原端口被占换端口、`servers` 重写、经真实回环端口的请求）。宿主与转发器都是注入的假实现，发现文件和插件数据目录指向每个用例自己的临时目录，不拉起插件进程、不碰 `~/Library/Application Support/WillDeep`。
+  - 验证：`ruby scripts/run_tests_fast.rb` 跑网关 4 个套件（38 项）加 `AgentPluginMCPToolCatalogTests`、`AgentMCPServerDirectoryTests`、`AgentMCPBridgeCoreTests`、`AgentPluginSystemTests`，共 8 个套件 124 项通过，退出码 0，report.json 与日志计数一致；跑完后真实目录下没有生成 `mcp-gateway.json`。没做反验，全量 XeditTests 没有在本地跑，也没有用真实插件和 Claude Code 做端到端联调。
+
 ## 1.404.0-rc8 - 2026-09-26
 
 ### Fixed
@@ -20,6 +36,7 @@
 - 验证：`AgentChatHistoryLongTokenTests`、`AgentCopyTextSanitizerTests` 连同所有会渲染 transcript 或用到这两个文本视图的套件（`AgentChatHistoryRendererTests`、`AgentChatHistoryRendererGoalTests`、`AgentTranscriptSearchScrollTests`、`AgentChatRunnableCommandTests`、`MarkdownInlineImageTests`、`AgentInjectionDefenseTests` 等）共 15 个套件 258 项通过，退出码 0，日志、report.md（xcresult 来源）计数一致；最后改了两处注释后在提交前的同一棵树上又跑了一遍，结果相同。跑的时候机器负载均值 55~125。全量 XeditTests 没有在本地跑。
 - 未处理：SwiftUI 流式路径（`AgentMessageView`）仍在插零宽断点，本次没动；要不要一起拿掉，得先在 SwiftUI `Text` 上单独量卡顿。
 
+## 1.404.0-rc7 - 2026-09-26
 
 ### Fixed
 

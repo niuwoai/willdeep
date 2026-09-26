@@ -47,6 +47,10 @@ nonisolated enum AgentMCPSettingsStore {
         }
         settings.disabledServerIDs = Array(disabled)
         save(settings)
+        // 插件的 MCP 服务单独关掉后也要从网关发现文件里消失。
+        if id.hasPrefix("plugin:") {
+            AgentPluginMCPGateway.shared.pluginServersDidChange()
+        }
     }
 
     static func setServerTrusted(id: String, trusted: Bool) {

@@ -108,8 +108,10 @@ struct AgentMCPSettingsView: View {
             serverSection(title: L10n.Settings.MCP.cursorServers, source: .cursor)
             serverSection(title: L10n.Settings.MCP.codexServers, source: .codex)
             // 插件带的 MCP 服务器此前完全不出现在这一页：启用插件就已经把它
-            // 注册进总列表（AgentMCPServerDirectory.list()）、进程也是宿主自己
-            // 拉起的，但界面上找不到它，于是既看不出它在跑，也调不了信任级别。
+            // 注册进总列表（AgentMCPServerDirectory.list()），进程由宿主在第一个
+            // 请求（页面、模型、「刷新工具」或插件 MCP 网关）到来时按需拉起，
+            // 启用本身不起进程；但界面上找不到它，于是既看不出它在跑，也调不了
+            // 信任级别。
             // 这一档不给编辑和删除——它的定义来自插件包里的 mcp.json，改这里
             // 改不动那份文件；serverRow 里那些编辑分支本来就按 source == .user
             // 卡着，所以复用同一行是安全的。
@@ -315,6 +317,18 @@ struct AgentMCPSettingsView: View {
                     }
                     .disabled(!server.isEnabled || isRefreshing.contains(server.id))
 
+                    // 插件 MCP 网关：给 Claude Code 等外部客户端一条现成的连接命令。
+                    if server.source == .plugin, server.isEnabled,
+                       let pluginID = AgentPluginMCPToolCatalog.pluginID(fromServerID: server.id),
+                       AgentPluginMCPGateway.shared.baseURL != nil {
+                        Button {
+                            copyGatewayCommand(pluginID: pluginID, server: server)
+                        } label: {
+                            Label(L10n.Settings.MCP.copyGatewayCommand, systemImage: "doc.on.doc")
+                        }
+                        .help(L10n.Settings.MCP.copyGatewayCommandHelp)
+                    }
+
                     if server.source == .user {
                         Button(role: .destructive) {
                             AgentMCPSettingsStore.deleteUserServer(id: server.id)
@@ -402,6 +416,17 @@ struct AgentMCPSettingsView: View {
             .labelsHidden()
         }
         .padding(.vertical, 8)
+    }
+
+    /// 命令里带网关 token：只放进剪贴板，不进状态栏文案、不进日志。
+    private func copyGatewayCommand(pluginID: String, server: AgentMCPServerConfig) {
+        guard let command = AgentPluginMCPGateway.shared.claudeCodeCommand(
+            pluginID: pluginID,
+            serverName: server.name
+        ) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        statusMessage = L10n.Settings.MCP.copiedGatewayCommand(server.name)
     }
 
     private func installPreset(_ preset: AgentMCPServerPreset) {

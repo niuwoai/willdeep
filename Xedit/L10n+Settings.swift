@@ -758,6 +758,21 @@ extension L10n {
                 localized: "settings.mcp.plugin-servers-footer",
                 defaultValue: "Provided by enabled plugins. They register while the plugin is enabled and disappear when it is turned off. Their definitions live in the plugin package, so they cannot be edited or deleted here."
             )
+            static let copyGatewayCommand = String(
+                localized: "settings.mcp.copy-gateway-command",
+                defaultValue: "Copy Claude Code Command"
+            )
+            static let copyGatewayCommandHelp = String(
+                localized: "settings.mcp.copy-gateway-command-help",
+                defaultValue: "Lets Claude Code, Codex, and other MCP clients on this Mac use this plugin's tools. WillDeep starts the plugin on the first request, so the plugin page does not need to be open."
+            )
+            static func copiedGatewayCommand(_ a1: String) -> String {
+                let template = String(
+                    localized: "settings.mcp.copied-gateway-command",
+                    defaultValue: "Copied the Claude Code command for %@. It contains an access key, so paste it only into your own terminal."
+                )
+                return String(format: template, a1)
+            }
             static let noServers = String(localized: "settings.mcp.no-servers", defaultValue: "No servers in this group.")
             static let logout = String(localized: "settings.mcp.logout", defaultValue: "Logout")
             static func toolsEnabled(_ a1: String) -> String {

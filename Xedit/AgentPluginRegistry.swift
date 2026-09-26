@@ -87,6 +87,9 @@ nonisolated enum AgentPluginRuntimeSnapshotStore {
         lock.lock()
         packages = next
         lock.unlock()
+        // 启用、停用、安装、卸载最后都落到这里：让插件 MCP 网关重写发现文件
+        // 里的 `servers`。网关没在运行（包括单测进程）时这是空操作。
+        AgentPluginMCPGateway.shared.pluginServersDidChange()
     }
 
     static func activePackages() -> [AgentPluginPackage] {
