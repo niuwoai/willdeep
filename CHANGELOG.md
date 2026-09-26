@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.405.0-rc3 - 2026-09-27
+
+### Changed
+
+- **内置「短剧工坊」插件升到 0.30.0-rc2。** `PluginExamples/video-studio` 从 cb8bd36（插件自编 0.29.0-rc2）指到 v0.30.0-rc2（236d6c3）。两个版本之间插件的变化：
+  - 外部 MCP 客户端（Claude Code、Codex 等）改连 rc1 的插件 MCP 网关。第一条请求到达时，宿主才拉起插件，不用先在 WillDeep 里打开短剧工坊。首页「最近创作」卡片的封面和剧名、短剧列表里的剧名，都能直接点进去继续创作。
+  - 插件本机 HTTP 入口的 `initialize` 不再清空宿主宣告的能力。原来经 HTTP 接入的客户端握手一次，代管出图和审核就全部失效。HTTP 请求改在独立工作线程执行，出图期间宿主请求照常应答，插件不会被当成无响应结束掉。
+  - 只传 `shotID` 调 `video.generate` 时，成片时长按镜头本身的时长提交，不再一律 4 秒。
+  - 宿主重启插件、新旧进程短暂并存时，旧进程退出只删自己写的连接文件。
+  - cb8bd36 那组 HTTP 保护原样保留：最多 32 个并发连接，读请求 15 秒，等待工具结果 900 秒后返回 504。0.30.0-rc1 是从 cb8bd36 分叉之前的提交长出来的，一度没有这组保护，插件在 0.30.0-rc2 补回，所以这次升级不会丢。
+- 配套关系：插件的按需激活依赖本版本起的网关（1.405.0-rc1）；willdeep-rs 侧需要 0.83.0-rc1。
+- 测试：插件仓库在 236d6c3 上 11 个 Ruby 测试脚本和 UI 249 项通过，tag 发版流水线（Build and Release）和 main 的 CI 都是绿的。本仓库：`plugin_command_contract_test.rb`（11 个插件，32 项检查）、`video_studio_drama_test.rb` 通过；插件、网关、MCP 相关 10 个套件共 122 项通过，覆盖 `VideoStudioBundledSchemaTests`、`AgentPluginSystemTests`、3 个网关套件与发现文件套件、`AgentMCPHostRequestsTests` 等，退出码 0。全量 XeditTests 没有在本地跑。
+
 ## 1.405.0-rc2 - 2026-09-26
 
 ### Fixed
