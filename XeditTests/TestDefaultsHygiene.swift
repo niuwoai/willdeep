@@ -26,6 +26,7 @@ enum TestDefaultsHygiene {
         "com.willdeep.tests.aipipe-queue.",
         "com.willdeep.tests.font-smoothing.",
         "com.willdeep.tests.learningReview.",
+        "com.willdeep.tests.someim-store.",
         "test.workspace.identity.",
         "willdeep-agent-sidebar-state-",
         "willdeep-dispatch-",

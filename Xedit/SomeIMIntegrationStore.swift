@@ -71,13 +71,75 @@ enum SomeIMIntegrationStore {
     private nonisolated(unsafe) static var testSharedSessionPersistFailureEnabled = false
     private nonisolated(unsafe) static var testSessionReadOutcome: SomeIMSessionReadOutcome?
     private nonisolated(unsafe) static var testPrivateFallbackPersistFailureEnabled = false
+    private nonisolated(unsafe) static var testDefaultsOverride: UserDefaults?
+
+    /// The unit-test host is a Debug WillDeep.app with the installed app's
+    /// bundle id, so its `UserDefaults.standard` *is* the installed app's
+    /// preferences, and its shared-group Keychain is the one every some.im app
+    /// signs in through. On 2026-09-26 each `xcodebuild test` run switched the
+    /// installed app's integration off via `logout()`, and its image generation
+    /// began failing with "some.im integration is disabled." So under XCTest
+    /// this store never reaches either, whether or not a test opted in:
+    /// defaults go to a throwaway suite, the shared session stays in memory.
+    nonisolated static let isRunningUnderXCTest =
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
+    /// Suite-name prefix of the throwaway defaults below. Registered in
+    /// `TestDefaultsHygiene.disposableSuitePrefixes`, which sweeps the leftovers.
+    nonisolated static let xctestDefaultsSuitePrefix = "com.willdeep.tests.someim-store."
+
+    /// Backing store for every test that did not install its own suite.
+    private static let xctestFallbackDefaults: UserDefaults? = {
+        guard isRunningUnderXCTest else { return nil }
+        return UserDefaults(suiteName: xctestDefaultsSuitePrefix + UUID().uuidString)
+    }()
     #endif
+
+    /// Every UserDefaults read and write in this store goes through here.
+    static var defaults: UserDefaults {
+        #if DEBUG
+        if let testDefaultsOverride { return testDefaultsOverride }
+        if let xctestFallbackDefaults { return xctestFallbackDefaults }
+        #endif
+        return .standard
+    }
+
+    #if DEBUG
+    /// How many times this process reached the real cross-app session store.
+    /// Must stay 0 under XCTest; `SomeIMStoreTestIsolationTests` checks it.
+    private nonisolated(unsafe) static var realSharedSessionStoreAccessCount = 0
+    static var _testRealSharedSessionStoreAccessCount: Int { realSharedSessionStoreAccessCount }
+    #endif
+
+    /// The only way this store reaches the shared Keychain session.
+    private static var sharedSessionStore: SomeIMSharedSessionStore {
+        #if DEBUG
+        realSharedSessionStoreAccessCount += 1
+        #endif
+        return SomeIMSharedSessionStore.shared
+    }
+
+    /// Whether the shared session lives in `testSharedSessionOverride` instead
+    /// of the shared Keychain group. Separate from the opt-in flag on purpose:
+    /// the login gates below still treat a test that did not opt in as signed
+    /// out, but its writes must not land in the real Keychain either.
+    private static var keepsSharedSessionInMemory: Bool {
+        #if DEBUG
+        return testSharedSessionOverrideEnabled || isRunningUnderXCTest
+        #else
+        return false
+        #endif
+    }
 
     /// Call once at app launch (before any credential access). Wires the shared
     /// Keychain access group, migrates any legacy per-app credentials, and starts
     /// forwarding cross-app session changes into `sessionDidChangeNotification`.
     static func configureSharedSession() {
         #if DEBUG
+        // The test host runs this from `applicationDidFinishLaunching`. Its
+        // migration would read the real shared session and write the real
+        // defaults, and the observer would feed other apps' logins into tests.
+        if isRunningUnderXCTest { return }
         // Debug installs are often ad-hoc signed on machines without a local
         // Apple development identity. In that case macOS ignores the invalid
         // access-group entitlement; use the app's ordinary Keychain namespace
@@ -86,10 +148,10 @@ enum SomeIMIntegrationStore {
         #else
         let accessGroup = sharedAccessGroup
         #endif
-        SomeIMSharedSessionStore.shared.configure(accessGroup: accessGroup)
+        sharedSessionStore.configure(accessGroup: accessGroup)
         migrateLegacyIfNeeded()
         guard sessionObservation == nil else { return }
-        sessionObservation = SomeIMSharedSessionStore.shared.observe { _ in
+        sessionObservation = sharedSessionStore.observe { _ in
             // Delivered on the main queue on every login/logout in this or any
             // other app. Drop the memoized session first — the observers this
             // fans out to immediately re-read it, and for a change made by
@@ -113,7 +175,7 @@ enum SomeIMIntegrationStore {
     }
 
     static func loadSettings() -> SomeIMIntegrationSettings {
-        guard let data = UserDefaults.standard.data(forKey: settingsKey),
+        guard let data = defaults.data(forKey: settingsKey),
               let decoded = try? JSONDecoder().decode(SomeIMIntegrationSettings.self, from: data) else {
             return SomeIMIntegrationSettings()
         }
@@ -123,7 +185,7 @@ enum SomeIMIntegrationStore {
     static func saveSettings(_ settings: SomeIMIntegrationSettings) {
         let normalized = settings.normalized
         if let data = try? JSONEncoder().encode(normalized) {
-            UserDefaults.standard.set(data, forKey: settingsKey)
+            defaults.set(data, forKey: settingsKey)
         }
         // `privateKeychainFallbackSession()` folds `baseURL` into the session it
         // synthesizes, so a settings change can invalidate a memoized session
@@ -132,7 +194,7 @@ enum SomeIMIntegrationStore {
     }
 
     static func loadAccount() -> SomeIMAccount? {
-        guard let data = UserDefaults.standard.data(forKey: accountKey) else { return nil }
+        guard let data = defaults.data(forKey: accountKey) else { return nil }
         return try? JSONDecoder().decode(SomeIMAccount.self, from: data)
     }
 
@@ -165,12 +227,12 @@ enum SomeIMIntegrationStore {
 
     static func saveAccount(_ account: SomeIMAccount?) {
         if let account, let data = try? JSONEncoder().encode(account) {
-            UserDefaults.standard.set(data, forKey: accountKey)
+            defaults.set(data, forKey: accountKey)
             // Keep the shared session's identity fields in step with the local
             // display cache (balance/credits stay local, per-app).
             mirrorIdentityToShared(email: account.email, tenantID: account.tenantID)
         } else {
-            UserDefaults.standard.removeObject(forKey: accountKey)
+            defaults.removeObject(forKey: accountKey)
         }
         // Same reason as `saveSettings`: the fallback session borrows email and
         // tenant from the account cache.
@@ -222,7 +284,7 @@ enum SomeIMIntegrationStore {
 
     static func loadAPIKey() -> String {
         #if DEBUG
-        if testSharedSessionOverrideEnabled {
+        if keepsSharedSessionInMemory {
             return currentSharedSession()?.apiKey ?? ""
         }
         #endif
@@ -305,7 +367,7 @@ enum SomeIMIntegrationStore {
 
     static func loadSessionToken() -> String {
         #if DEBUG
-        if testSharedSessionOverrideEnabled {
+        if keepsSharedSessionInMemory {
             return currentSharedSession()?.sessionToken ?? ""
         }
         #endif
@@ -363,13 +425,13 @@ enum SomeIMIntegrationStore {
     /// all apps) and drops this app's local account cache and enabled flag.
     static func logout() {
         #if DEBUG
-        if testSharedSessionOverrideEnabled {
+        if keepsSharedSessionInMemory {
             testSharedSessionOverride = nil
         } else {
-            SomeIMSharedSessionStore.shared.logout()
+            sharedSessionStore.logout()
         }
         #else
-        SomeIMSharedSessionStore.shared.logout()
+        sharedSessionStore.logout()
         #endif
         AgentCredentialStore.save("", account: legacyAPIKeyAccount)
         AgentCredentialStore.save("", account: legacySessionTokenAccount)
@@ -379,8 +441,8 @@ enum SomeIMIntegrationStore {
         // to outlive an actual sign-out.
         invalidateSharedSessionCache()
         sharedSessionMemo.forgetLastKnownGoodSession()
-        UserDefaults.standard.removeObject(forKey: accountKey)
-        UserDefaults.standard.removeObject(forKey: codingPlanStatusKey)
+        defaults.removeObject(forKey: accountKey)
+        defaults.removeObject(forKey: codingPlanStatusKey)
         var settings = loadSettings()
         if settings.enabled {
             settings.enabled = false
@@ -397,7 +459,7 @@ enum SomeIMIntegrationStore {
     }
 
     static func loadCodingPlanStatus() -> SomeIMCodingPlanStatus {
-        guard let data = UserDefaults.standard.data(forKey: codingPlanStatusKey),
+        guard let data = defaults.data(forKey: codingPlanStatusKey),
               let decoded = try? JSONDecoder().decode(SomeIMCodingPlanStatus.self, from: data) else {
             return .unknown
         }
@@ -406,7 +468,7 @@ enum SomeIMIntegrationStore {
 
     static func saveCodingPlanStatus(_ status: SomeIMCodingPlanStatus) {
         if let data = try? JSONEncoder().encode(status) {
-            UserDefaults.standard.set(data, forKey: codingPlanStatusKey)
+            defaults.set(data, forKey: codingPlanStatusKey)
         }
     }
 
@@ -489,7 +551,7 @@ enum SomeIMIntegrationStore {
         if let testSessionReadOutcome { return testSessionReadOutcome }
         // The test override is deliberately never cached: unit tests set it
         // directly and expect the very next read to see the new value.
-        if testSharedSessionOverrideEnabled {
+        if keepsSharedSessionInMemory {
             if let session = testSharedSessionOverride ?? privateKeychainFallbackSession() {
                 return .session(session)
             }
@@ -497,7 +559,7 @@ enum SomeIMIntegrationStore {
         }
         #endif
         return sharedSessionMemo.value {
-            let result = SomeIMSharedSessionStore.shared.read()
+            let result = sharedSessionStore.read()
             if let session = result.session { return .session(session) }
             // The shared group has nothing usable. This app's own Keychain
             // namespace is the fallback (ad-hoc signed builds never reach the
@@ -531,13 +593,13 @@ enum SomeIMIntegrationStore {
         if testSharedSessionPersistFailureEnabled {
             return persistPrivateKeychainFallbackSession(session)
         }
-        if testSharedSessionOverrideEnabled {
+        if keepsSharedSessionInMemory {
             testSharedSessionOverride = session
             NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
             return true
         }
         #endif
-        if SomeIMSharedSessionStore.shared.login(session) {
+        if sharedSessionStore.login(session) {
             return true
         }
         keychainLog.notice("shared-group Keychain write rejected (access group \(sharedAccessGroup, privacy: .public)) — likely errSecMissingEntitlement on an unsigned/mis-Teamed build; falling back to per-app Keychain")
@@ -608,6 +670,36 @@ enum SomeIMIntegrationStore {
     static func _setTestPrivateFallbackPersistFailure(_ enabled: Bool) {
         testPrivateFallbackPersistFailureEnabled = enabled
     }
+
+    /// Points every defaults read and write at `defaults` (a per-test
+    /// `UserDefaults(suiteName:)`). Pass nil to fall back to the process-wide
+    /// throwaway suite; cleaning up the suite is the caller's job.
+    static func _setTestDefaultsOverride(_ defaults: UserDefaults?) {
+        testDefaultsOverride = defaults
+    }
+
+    /// The process-wide test knobs above, so a synchronous test can change them
+    /// and put them back before any suite suspended at an `await` resumes.
+    struct _TestState {
+        fileprivate let sharedSessionOverrideEnabled: Bool
+        fileprivate let sharedSessionOverride: SomeIMSharedSession?
+        fileprivate let defaultsOverride: UserDefaults?
+    }
+
+    static func _captureTestState() -> _TestState {
+        _TestState(
+            sharedSessionOverrideEnabled: testSharedSessionOverrideEnabled,
+            sharedSessionOverride: testSharedSessionOverride,
+            defaultsOverride: testDefaultsOverride
+        )
+    }
+
+    static func _restoreTestState(_ state: _TestState) {
+        testSharedSessionOverrideEnabled = state.sharedSessionOverrideEnabled
+        testSharedSessionOverride = state.sharedSessionOverride
+        testDefaultsOverride = state.defaultsOverride
+        invalidateSharedSessionCache()
+    }
     #endif
 
     /// One-time move of legacy per-app Keychain credentials into the shared
@@ -617,16 +709,15 @@ enum SomeIMIntegrationStore {
     /// the legacy items and retries on the next signed launch.
     private static func migrateLegacyIfNeeded() {
         #if DEBUG
-        if testSharedSessionOverrideEnabled { return }
+        if keepsSharedSessionInMemory { return }
         #endif
         migrationLock.lock()
         defer { migrationLock.unlock() }
         if migrationAttempted { return }
         migrationAttempted = true
 
-        let defaults = UserDefaults.standard
         if defaults.bool(forKey: migrationDoneKey) { return }
-        if SomeIMSharedSessionStore.shared.current() != nil {
+        if sharedSessionStore.current() != nil {
             defaults.set(true, forKey: migrationDoneKey)
             return
         }
@@ -645,12 +736,12 @@ enum SomeIMIntegrationStore {
             tenantID: account?.tenantID,
             baseURL: loadSettings().baseURL
         )
-        let ok = SomeIMSharedSessionStore.shared.login(migrated)
+        let ok = sharedSessionStore.login(migrated)
         // Migration moves credentials between the two stores that
         // `currentSharedSession()` reads, so whatever it memoized before this
         // point is stale either way.
         invalidateSharedSessionCache()
-        if ok, SomeIMSharedSessionStore.shared.current()?.apiKey == legacyKey {
+        if ok, sharedSessionStore.current()?.apiKey == legacyKey {
             AgentCredentialStore.save("", account: legacyAPIKeyAccount)
             AgentCredentialStore.save("", account: legacySessionTokenAccount)
             defaults.set(true, forKey: migrationDoneKey)

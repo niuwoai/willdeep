@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.404.0-rc4 - 2026-09-26
+
+### Fixed
+
+- **本机跑一次 `xcodebuild test`，已安装的 WillDeep 里 some.im 集成就被关掉，插件生图随即报「some.im integration is disabled.」。** 单测宿主是同一个 bundle id（`com.willdeep.app`）的 Debug 版 WillDeep.app，它的 `UserDefaults.standard` 就是 `/Applications/WillDeep.app` 读的那个偏好域。`SomeIMBrowserLoginStatusTests` 每个用例前后各调一次 `SomeIMIntegrationStore.logout()`，`logout()` 会把设置里的 `enabled` 写成 false、删掉账号显示缓存和 Coding Plan 状态；浏览器登录用例还会把 `qa@example.com` 这类夹具账号写进同一个键。2026-09-26 00:57 和 01:38 两次跑测试，正好对上两次生图开始失败的时间。
+  - 现在单测进程里，`SomeIMIntegrationStore` 的所有 UserDefaults 读写都走 `defaults` 访问器：测试可以用 `_setTestDefaultsOverride` 注入自己的 `UserDefaults(suiteName:)`；没注入的，落到本进程专用的一次性 suite `com.willdeep.tests.someim-store.<UUID>`，不会回到 `.standard`。前缀已登记进 `TestDefaultsHygiene`，残留壳由下一轮清掉。
+  - 旧代码里，测试打开 override 也挡不住这些写入：`logout()` 在 override 下照样写 `.standard`。审计还找到另外几条路：`AgentProviderLibraryTests` 里的 `refreshSomeIMRelayRouting` 往 `.standard` 写 `enabled: true` 且不恢复；上百个测试构造的 `AppState()` 在订阅回调、启动 Task 里异步调 `saveCodingPlanStatus` / `saveSettings`，这时 override 往往已经关了。这些现在都落进一次性 suite。
+  - 共享 Keychain 会话同样隔离：单测进程里读、写、登出都只动内存里的测试会话，不调用 `SomeIMSharedSessionStore.shared`。旧代码只在 override 打开时才这样做，而 override 是进程级全局开关，别的套件在 `await` 空档里把它关掉后，正在跑的用例就会调真实的 `login` / `logout`，把所有 some.im App 一起登出。测试宿主启动时的 `configureSharedSession()`（迁移旧凭据、写迁移标记、订阅跨 App 登录广播）在单测进程里直接跳过。「测试没打开 override 就视为未登录」的几道门禁不变。
+  - 旧的每 App 凭据条目（`some-im/api-key`、`some-im/customer-session`）走 `AgentCredentialStore`，它在单测进程里从 2026-06-30 起就是内存存储，这次核对过，不用改。
+  - `SomeIMBrowserLoginStatusTests` 的 9 个用例改为各自注入一次性 suite，用完清理。
+  - 审计中发现、这次没改的同类问题（另开任务跟进）：`WillDeepTests`、`EditorCoreBehaviorTests` 的 `init` 每个用例都会从 `.standard` 删掉 `com.willdeep.recentFiles.v1`、`recentFolders.v1`、`session.v1`，也就是清空已安装 App 的最近文件、最近文件夹和编辑器会话；终端捷径测试删旧键 `com.willdeep.terminalShortcuts.v1`；`AgentSelfLearningTests`、`AgentWorkerAutoDispatchTests` 对 `.standard` 先改后恢复。
+  - 测试：新增 `SomeIMStoreTestIsolationTests`（4 项）：store 的 defaults 不是 `.standard`；在不打开任何 override 的情况下走一遍「开启集成 → 缓存账号 → 登录 → 登出」，真实偏好域里 4 个 some.im 键的快照前后一致；注入的 suite 确实收到写入；整个测试进程（含宿主启动）访问真实共享会话存储的次数为 0。这几项都在主线程上同步跑完，返回前恢复 store 的进程级测试状态，不会影响停在 `await` 上的其他套件。为此 store 新增 `_captureTestState` / `_restoreTestState`（仅 DEBUG）。
+  - 验证：碰 some.im 的 10 个套件（新套件、`SomeIMBrowserLoginStatusTests`、`AgentEntryModelSelectionTests`、`AgentProviderLibraryTests`、`WillDeepTests` 等）共 453 项通过。反验：临时去掉 `configureSharedSession()` 的 XCTest 守卫，「共享会话访问次数为 0」一项变红。defaults 那一半没有反验，因为跑旧代码会真的改写本机 App 的设置、登出共享会话；改为在全量测试前后只读比对已安装 App 偏好域里这 3 个键的哈希。全量 XeditTests 本地通过（Swift Testing 436 个套件 4617 项，退出码 0）；本机 `/Applications/WillDeep.app` 运行中，全量前后设置、账号缓存、Coding Plan 状态三个键的哈希一致，`enabled` 保持 true。
+
 ## 1.404.0-rc3 - 2026-09-26
 
 ### Fixed

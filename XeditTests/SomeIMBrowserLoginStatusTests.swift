@@ -751,12 +751,32 @@ struct CountryProbeTestCase: Sendable, CustomTestStringConvertible {
     }
 }
 
+/// The defaults suite the current test installed. The suite is `.serialized`,
+/// so one slot is enough.
+@MainActor private var someIMTestDefaults: (suite: UserDefaults, name: String)?
+
+/// Gives the test its own defaults suite and an in-memory shared session.
+/// `logout()` and browser login write the settings `enabled` flag and the
+/// account cache; without a suite of its own a test shares them with every
+/// other test in the process.
+@MainActor
 private func configureWritableSomeIMSessionStoreForTest() {
+    let name = SomeIMIntegrationStore.xctestDefaultsSuitePrefix + UUID().uuidString
+    if let suite = UserDefaults(suiteName: name) {
+        someIMTestDefaults = (suite, name)
+        SomeIMIntegrationStore._setTestDefaultsOverride(suite)
+    }
     SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
 }
 
+@MainActor
 private func restoreSomeIMSessionStoreAfterTest() {
     SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false)
+    SomeIMIntegrationStore._setTestDefaultsOverride(nil)
+    if let (suite, name) = someIMTestDefaults {
+        TestDefaultsHygiene.cleanup(suite: suite, named: name)
+        someIMTestDefaults = nil
+    }
 }
 
 private final class SomeIMBrowserLoginMockURLProtocol: URLProtocol {
