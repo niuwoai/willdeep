@@ -86,7 +86,19 @@ nonisolated final class AgentPluginMCPGateway: @unchecked Sendable {
             runningPort = nil
             runningToken = nil
             lock.unlock()
-            current?.cancel()
+            guard let current else { return }
+            // cancel() 是异步的：不等 listener 走到 .cancelled，端口可能还占着，紧接着
+            // 的 start() 绑原端口会失败、改绑别的端口，发现文件里的地址就变了，
+            // 「停掉再起沿用原端口」的承诺落空（单测曾因此偶发失败）。回调在
+            // networkQueue 上，这里在 stateQueue 上等，不会互锁。
+            let cancelled = DispatchSemaphore(value: 0)
+            current.stateUpdateHandler = { state in
+                if case .cancelled = state { cancelled.signal() }
+            }
+            current.cancel()
+            if cancelled.wait(timeout: .now() + Self.bindTimeout) == .timedOut {
+                AgentPluginMCPGateway.log.error("gateway stop: listener did not reach cancelled within \(Self.bindTimeout, privacy: .public)s")
+            }
         }
     }
 
