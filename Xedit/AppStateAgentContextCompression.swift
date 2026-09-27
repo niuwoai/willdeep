@@ -180,6 +180,7 @@ extension AppState {
         configurations: [AgentConfiguration]
     ) async {
         var didReclaimWindow = false
+        var compressionFailure: Error?
         defer {
             runtime.isCompressingContext = false
             persistAgentSession(runtime: runtime)
@@ -201,9 +202,13 @@ extension AppState {
                 // here would burn a request to hit the same ordered stop
                 // again — carry the handover into a new session instead. When
                 // that is refused (Goal, remote workspace, no handover) the
-                // session parks and the error banner explains why.
+                // session parks and the error banner explains why — except a
+                // Goal whose failure was transient: it waits on the Goal
+                // retry ladder and compresses again (AppStateAgentGoalWakes).
                 runtime.pendingContextRunwayResume = false
-                relayContextRunwayAfterCompressionFailure(for: runtime)
+                if !deferGoalAfterCompressionFailure(compressionFailure, for: runtime) {
+                    relayContextRunwayAfterCompressionFailure(for: runtime)
+                }
             }
             // A background job/media task/subagent finishing while
             // `isCompressingContext` was set had its auto-resume guarded
@@ -226,6 +231,7 @@ extension AppState {
             didReclaimWindow = true
             return
         }
+        compressionFailure = outcome.lastError
 
         if let lastError = outcome.lastError {
             runtime.errorMessage = "Context compression failed: \(lastError.localizedDescription)"
