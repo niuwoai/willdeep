@@ -9,6 +9,7 @@
 
 import WillDeepCore
 import Foundation
+import os
 
 extension AppState {
     /// True while context compression is running for the active session.
@@ -334,19 +335,98 @@ extension AppState {
         // 「值不值得压」的判断。
         let estimated = Self.estimateAgentTokens(messages: collapsed, tools: [])
         guard estimated >= threshold else { return }
-        guard let plan = compressionPlan(for: runtime, keepRecent: 4) else { return }
+        _ = await compressContextInTurn(for: runtime, reason: "managed escalation")
+    }
+
+    /// turn 内同步压缩的结果。`.failed` 与 `.nothingToCompress` 分开：
+    /// 前者是摘要模型/校验出了问题，同一 turn 里再试大概率还是同样的
+    /// 结果；后者只是当前没有可压的头部（消息太少），后续轮次多了消息
+    /// 就可能有。
+    enum InTurnCompressionOutcome {
+        case reclaimed
+        case nothingToCompress
+        case skippedAlreadyCompressing
+        case failed(Error)
+    }
+
+    /// turn 内同步压缩：await 到压缩完成才返回，供升档前压缩与发送前
+    /// 硬闸 / 溢出重试共用。与 runContextCompression 的区别同上——不接
+    /// between-turns 的恢复机制（队列消费 / runway 恢复），只做
+    /// 「压 → 写回 contextSummary/checkpoint」这一件事。`isCompressingContext`
+    /// 是 composer 与任务监视器已经认得的状态位，压缩期间照常点亮。
+    /// 任何失败都只记日志不抛，调用方自己决定原文照发还是别的。
+    @MainActor
+    func compressContextInTurn(for runtime: AgentRuntime, reason: String) async -> InTurnCompressionOutcome {
+        guard !runtime.isCompressingContext else { return .skippedAlreadyCompressing }
+        guard let plan = compressionPlan(for: runtime, keepRecent: 4) else {
+            Self.contextCompressionLog.notice(
+                "in-turn compression skipped: nothing to compress reason=\(reason, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) messages=\(runtime.messages.count)"
+            )
+            return .nothingToCompress
+        }
 
         runtime.isCompressingContext = true
         defer {
             runtime.isCompressingContext = false
             persistAgentSession(runtime: runtime)
         }
-        _ = await performCompression(
+        let outcome = await performCompression(
             for: runtime,
             head: plan.head,
             priorSummary: plan.priorSummary,
             configurations: contextCompressionConfigurationCandidates()
         )
+        if outcome.reclaimed {
+            Self.contextCompressionLog.notice(
+                "in-turn compression reclaimed window reason=\(reason, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) head=\(plan.head.count) tail=\(plan.tail.count)"
+            )
+            return .reclaimed
+        }
+        // lastError 为 nil 只剩一种情况：一个候选压缩配置都没有。
+        let error = outcome.lastError ?? AgentClientError.serverStatus(
+            AgentProviderHTTPError(
+                statusCode: 503, method: "POST", url: "-", providerID: "-", model: "-",
+                requestSummary: "In-turn context compression: no usable summary provider is configured.",
+                requestBody: "-", responseBody: "-"
+            )
+        )
+        Self.contextCompressionLog.error(
+            "in-turn compression failed reason=\(reason, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+        )
+        return .failed(error)
+    }
+
+    /// 发送前硬闸的判定阈值：used/window 达到这个比例就先压再发。
+    /// 1.0 是「必然 400」的线——超过窗口的请求 provider 一定拒收，发出
+    /// 去只是白等一个错误；低于它的由 runway 90% 有序停机与 between-turns
+    /// 的 75% 自动压缩负责，这里不重复插手。
+    nonisolated static let preSendCompressionUsedFraction = 1.0
+
+    /// 纯谓词：这一轮发请求前要不要先同步压一次。
+    ///
+    /// 两种情况都是「不压就必炸」：checkpoint 失效时 modelFacingHistory 会
+    /// 把整份本地 transcript 原样发出去（2026-09-27 的一次真实会话就这样
+    /// 向 1,048,576 窗口的模型发了 2,787,113 tokens）；估算或 provider
+    /// 锚定用量已达窗口时，请求本身就超出了模型能吃的上限。与
+    /// AgentContextRunwayPolicy 不同，这里不跳过 toolRound 0——溢出的
+    /// 请求在第 0 轮和第 20 轮一样会被拒。
+    nonisolated static func requiresPreSendCompression(
+        checkpointIsStale: Bool,
+        usedTokens: Int,
+        contextWindow: Int
+    ) -> Bool {
+        if checkpointIsStale { return true }
+        let used = Double(max(0, usedTokens))
+        let window = Double(max(1, contextWindow))
+        return used >= window * preSendCompressionUsedFraction
+    }
+
+    /// 硬闸的「checkpoint 失效」输入：装过 checkpoint、但当前校验不过。
+    /// 与 `staleCheckpointNeedsRecompression` 不同，它不看 isResponding /
+    /// 消息数——turn 内本来就在响应中，而失效的 checkpoint 哪怕消息再少
+    /// 也意味着摘要被丢掉。
+    func contextCheckpointIsStale(for runtime: AgentRuntime) -> Bool {
+        runtime.contextCheckpoint != nil && contextCheckpointText(for: runtime) == nil
     }
 
     /// 升档前压缩的触发下限：min(32k, 目标窗口的 25%)。

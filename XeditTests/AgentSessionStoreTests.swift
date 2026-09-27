@@ -31,6 +31,48 @@ struct AgentSessionStoreTests {
         ))
     }
 
+    /// A history file that exists but no longer decodes must never be
+    /// replaced by the metadata skeleton — the guard used to fail open
+    /// here and treat "unreadable" exactly like "absent".
+    @Test("empty skeleton never overwrites an unreadable history file")
+    func emptySkeletonRefusesToOverwriteUnreadableHistoryFile() throws {
+        let session = AgentSession(title: "Corrupt on disk")
+        let url = AgentSessionStore.fileURL(for: session.id)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let garbage = Data("{ not json at all".utf8)
+        try garbage.write(to: url)
+        defer { AgentSessionStore.delete(id: session.id) }
+
+        #expect(session.messages.isEmpty)
+        #expect(!AgentSessionStore.save(session))
+        #expect(try Data(contentsOf: url) == garbage)
+
+        AgentSessionStore.saveAsync(session)
+        AgentSessionStore.flushPendingWrites()
+        #expect(try Data(contentsOf: url) == garbage)
+
+        if case .undecodable = AgentSessionStore.storedSessionFileState(id: session.id) {
+        } else {
+            Issue.record("expected .undecodable, got \(AgentSessionStore.storedSessionFileState(id: session.id))")
+        }
+    }
+
+    @Test("stored file state distinguishes missing, unreadable and ok")
+    func storedSessionFileStateProbesDiskWithoutCollapsingToNil() throws {
+        let session = AgentSession(title: "Probe")
+        defer { AgentSessionStore.delete(id: session.id) }
+        AgentSessionStore.delete(id: session.id)
+        #expect(AgentSessionStore.storedSessionFileState(id: session.id) == .missing)
+
+        #expect(AgentSessionStore.save(session))
+        #expect(AgentSessionStore.storedSessionFileState(id: session.id) == .ok)
+        // An absent file still lets a fresh empty session write normally.
+        #expect(AgentSessionStore.load(id: session.id) != nil)
+    }
+
     // MARK: - deriveTitle
 
     /// Empty message list → fallback title. New chats land here.

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.405.0-rc9 - 2026-09-27
+
+### Fixed
+
+- **请求超出模型窗口不再直接发出去撞 400。** 一台用户机器上，一次普通回合向 1,048,576 窗口的模型发了 2,787,113 tokens，被 provider 以 `maximum context length` 拒收，而界面同时显示「正在自动压缩上下文」。取证：压缩管线本身是分块的（每块 ≤ 压缩模型窗口 × 0.35，超限还会对半砍重试），单条工具输出也封顶 32KB，都撑不到这个数；真正的路是检查点的 7 项校验（schema、会话、through 消息、工作区、执行 Agent、目标合同、前缀哈希）任一失配时 `modelFacingHistory` 静默回退成整份本地 transcript，而发送前只有建议性的 runway 提示（第 0 轮还不看），自动压缩又只在回合收尾跑——所以顺序是先超限、后压缩。现在主循环每轮发送前先过一道硬闸：检查点失效，或估算/服务端锚定用量 ≥ 窗口（`preSendCompressionUsedFraction = 1.0`），就先同步压缩再重组请求，第 0 轮同样看；provider 仍以长度拒收时，压缩一次、重发一次，再失败才照旧报错。同回合压缩失败不再重试，避免摘要模型坏了每轮白烧一次。升档前压缩与新闸门共用同一个 turn 内同步压缩 helper（`compressContextInTurn`）。
+  - 1.403.0-rc6/rc12 修的是两种具体的失配诱因；这一版补的是「失配之后不该整段重发」这道底。
+- **Agent 的 shell 与文件工具不能再删改 WillDeep 自己的数据目录。** 同一台机器上 `agent-sessions/<UUID>.json` 凭空消失；审计确认宿主的 store 从不删非空会话（空会话清扫要求零消息 + 无工作区 + 7 天未动，解不出来的文件也保留），唯一能删它的是 `run_command`——静默/完全访问档下 `rm -rf` 自动放行，而 `agent-sessions` 此前只在 `AgentSessionStore` 里出现，没有任何一层把它当受保护路径。现在 `~/Library/Application Support/WillDeep`（会话、例程、审计、记忆、插件数据）与 `~/.willdeep` 列为写保护（`AgentHostDataPathPolicy.protectedDirectories`）：shell 的 rm/mv/shred/chmod、cp/rsync 目的地、`sed -i`、`find -delete`、`dd of=`、`>` 重定向落到这里一律打字确认，完全访问的黑名单同口径兜底（`willdeep-own-data-destruction`）；`create_file` / `edit_file` / `apply_patch` / `write_file` 直接拒绝并说明原因；读取不受影响。路径按解析后的 token 比对（`~`、`$HOME`、`${HOME}`、相对路径按 cwd、realpath、末段通配退到父目录），不做裸子串。`~/.willdeep` 里混着用户会当项目编辑的 `skills/`，所以只挡 shell 破坏、不拒原生文件工具写入。
+  - 刻意不覆盖：`python -c` / `xargs rm` 之类把路径藏进另一层解释器或上游管道的形态，仍只走常规的破坏性命令确认。
+- **会话文件存在但解不开时，不再被空壳覆盖，弹窗也不再说「缺失」。** `wouldTruncateStoredTranscript` 原来把「读不到/解不出」当成「没有文件」放行，一个侧边栏空骨架就能把还在的历史字节盖掉；现在文件存在但无法读取即拒写（0 字节文件同样算无法解码）。「无法打开会话」弹窗按 `AgentSessionStore.storedSessionFileState` 区分两种文案：缺失（从备份恢复）与存在但无法读取（附解码错误，文件未动）。新增 i18n key `sidebar.session-unavailable.alert-message-unreadable`（en/es/fr/ja/zh-Hans）。
+- 测试：新增 `AgentPreSendContextGateTests`（6 项，含事故原文 2787113/1048576 与溢出 400 识别）、`AgentInTurnCompressionTests`（4 项，走真实 AppState、摘要走桩）、`AgentHostDataPathGuardTests`（10 种破坏拼法 × 门禁/黑名单、4 种读放行、文件工具拒写、无关 rm 不受影响、软链接/相对路径/无 cwd）、`AgentSessionStoreTests` 与 `AgentSessionStoreAsyncWriteTests` 各补垃圾字节不被覆盖、reason 判定用例。本地 `run_tests_fast.rb` 跑上述及 `AgentContextCheckpointTests`、`AgentApprovalModePolicyTests`、`AgentOpsCommandFalsePositiveTests`，结果见提交说明；WillDeepCore `swift test` 64 项通过。全量 XeditTests 没有在本地跑。
+
 ## 1.405.0-rc8 - 2026-09-27
 
 ### Changed

@@ -161,11 +161,19 @@ nonisolated enum AgentExternalFileWritePolicy {
         let fileName = canonicalURL.lastPathComponent.lowercased()
         let pathExtension = canonicalURL.pathExtension.lowercased()
 
+        // 宿主自己的数据目录按敏感路径对待：Smart/Goal 的"新建小文本文档"
+        // 快车道不得往 agent-sessions 里写；工具本身还会拒绝（见
+        // AgentExternalFileTools.writeFile），这里只是不让它先被自动批准。
+        let isHostDataPath = AgentHostDataPathPolicy.protectedRoot(
+            containing: canonicalURL,
+            nativeFileWritesOnly: true
+        ) != nil
+
         return Target(
             url: canonicalURL,
             existedBeforeWrite: existed,
             overwriteRequested: arguments["overwrite"]?.boolValue() ?? false,
-            isSensitive: isSensitivePath(path, fileName: fileName),
+            isSensitive: isHostDataPath || isSensitivePath(path, fileName: fileName),
             isLowRiskText: lowRiskTextExtensions.contains(pathExtension),
             parentExists: parentExists
         )
@@ -798,6 +806,19 @@ enum AgentSandboxPolicy {
                 reasons.append("Forceful git history or workspace mutation requires typed confirmation.")
             }
 
+            // 宿主自己的数据目录（会话历史、审计日志、`~/.willdeep`）：删、
+            // 移、截断、重定向覆盖一律打字确认。打字确认一票否决送裁判，
+            // 完全访问档另有 AgentMaliciousCommandDenylist 同口径兜底。读不
+            // 受影响——排障要看这些文件。
+            if let hit = AgentHostDataPathPolicy.mutationHit(
+                tokens: tokens,
+                workingDirectory: workingDirectory
+            ) {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append(hit.reason)
+            }
+
             if hasRedirection {
                 needsWorkspaceWrite = true
                 reasons.append("Shell redirection may write outside normal tool output.")
@@ -1133,6 +1154,11 @@ enum AgentSandboxPolicy {
 
             if forcefulGitMutation(tokens) ||
                 credentialHeads.contains(head) {
+                return false
+            }
+
+            // 工作区就是宿主数据目录时，"可重建目录清理"的豁免也不适用。
+            if AgentHostDataPathPolicy.mutationHit(tokens: tokens, workingDirectory: workingDirectory) != nil {
                 return false
             }
 
@@ -1667,8 +1693,8 @@ enum AgentSandboxPolicy {
             case .commandFailed(let code, let output):
                 return looksLikeSandboxDenial(exitStatus: code, output: output, sandboxMode: sandboxMode)
             case .commandTimeout, .missingArgument, .invalidArgument, .noWorkspace,
-                    .pathOutsideWorkspace, .symlinkOutsideWorkspace, .notFound,
-                    .notRegular, .binaryFile,
+                    .pathOutsideWorkspace, .symlinkOutsideWorkspace, .protectedHostDataPath,
+                    .notFound, .notRegular, .binaryFile,
                     .fileTooLarge, .unknownTool, .invalidRegex, .httpFailed:
                 return false
             }

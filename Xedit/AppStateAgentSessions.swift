@@ -32,8 +32,31 @@ import AppKit
 import Foundation
 
 struct AgentSessionLoadFailure: Identifiable, Equatable {
+    /// Why the history could not be materialized. The alert copy differs:
+    /// a missing file asks for a backup restore, an unreadable one says the
+    /// file is still there (and untouched) and carries the decode error.
+    enum Reason: Equatable {
+        case missing
+        case unreadable(String)
+    }
+
     let id: AgentSession.ID
     let title: String
+    let reason: Reason
+
+    static func probing(_ session: AgentSession) -> AgentSessionLoadFailure {
+        let reason: Reason
+        switch AgentSessionStore.storedSessionFileState(id: session.id) {
+        case .undecodable(let error):
+            reason = .unreadable(error)
+        case .missing, .ok:
+            // `.ok` only happens when a runtime failed to build for reasons
+            // other than the file (eviction race); the missing-file wording
+            // is the closest honest fallback the alert has.
+            reason = .missing
+        }
+        return AgentSessionLoadFailure(id: session.id, title: session.title, reason: reason)
+    }
 }
 
 /// Why the some.im provider is being reconciled against the shared session.
@@ -2162,10 +2185,7 @@ extension AppState {
             // returning success while the transcript delegates read nil and
             // render the new-chat dashboard.
             guard runtime(for: id) != nil else {
-                agentSessionLoadFailure = AgentSessionLoadFailure(
-                    id: targetSession.id,
-                    title: targetSession.title
-                )
+                agentSessionLoadFailure = .probing(targetSession)
                 return false
             }
             agentSessionLoadFailure = nil
@@ -2190,10 +2210,7 @@ extension AppState {
             // Keep the metadata row visible so a Time Machine/manual restore
             // can reconnect it later. The old silent return made a valid
             // click look broken and encouraged repeated clicks/restarts.
-            agentSessionLoadFailure = AgentSessionLoadFailure(
-                id: targetSession.id,
-                title: targetSession.title
-            )
+            agentSessionLoadFailure = .probing(targetSession)
             return false
         }
         agentSessionLoadFailure = nil

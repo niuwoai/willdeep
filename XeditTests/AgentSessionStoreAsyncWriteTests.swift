@@ -234,12 +234,47 @@ struct AgentSessionStoreAsyncWriteTests {
         #expect(appState.activeAgentSessionID == active.id)
         #expect(appState.agentSessionLoadFailure == AgentSessionLoadFailure(
             id: stale.id,
-            title: stale.title
+            title: stale.title,
+            reason: .missing
         ))
         #expect(appState.agentSessions.contains(where: { $0.id == stale.id }))
 
         appState.dismissAgentSessionLoadFailure()
         #expect(appState.agentSessionLoadFailure == nil)
+    }
+
+    @Test("unreadable history file reports the file as present, not missing")
+    func unreadableHistoryFileReportsUnreadableReason() throws {
+        let appState = AppState(rootDirectory: nil)
+        let active = appState.startNewAgentSession()
+        let broken = AgentSession(title: "Corrupt history")
+        let url = AgentSessionStore.fileURL(for: broken.id)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let garbage = Data("{ not json at all".utf8)
+        try garbage.write(to: url)
+        appState.markAgentSessionMetadataOnlyForTesting(broken.id, hasUserMessage: true)
+        defer {
+            AgentSessionStore.delete(id: active.id)
+            AgentSessionStore.delete(id: broken.id)
+        }
+        appState.agentSessions.insert(broken, at: 0)
+
+        #expect(!appState.selectAgentSession(id: broken.id))
+        #expect(appState.activeAgentSessionID == active.id)
+        let failure = try #require(appState.agentSessionLoadFailure)
+        #expect(failure.id == broken.id)
+        if case .unreadable(let error) = failure.reason {
+            #expect(!error.isEmpty)
+        } else {
+            Issue.record("expected .unreadable, got \(failure.reason)")
+        }
+        // The sidebar entry stays and the bytes on disk are untouched.
+        #expect(appState.agentSessions.contains(where: { $0.id == broken.id }))
+        AgentSessionStore.flushPendingWrites()
+        #expect(try Data(contentsOf: url) == garbage)
     }
 
     @Test("selecting an old conversation cannot evict its runtime before activation")

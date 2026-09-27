@@ -481,9 +481,7 @@ struct AgentSessionsSidebar: View {
                 appState.dismissAgentSessionLoadFailure()
             }
         } message: {
-            Text(L10n.Sidebar.sessionUnavailableAlertMessage(
-                appState.agentSessionLoadFailure?.title ?? L10n.Sidebar.defaultSessionTitle
-            ))
+            Text(sessionUnavailableAlertMessage)
         }
     }
 
@@ -521,6 +519,16 @@ struct AgentSessionsSidebar: View {
                 .padding(.top, 16)
         case .none:
             EmptyView()
+        }
+    }
+
+    private var sessionUnavailableAlertMessage: String {
+        let title = appState.agentSessionLoadFailure?.title ?? L10n.Sidebar.defaultSessionTitle
+        switch appState.agentSessionLoadFailure?.reason {
+        case .unreadable(let error):
+            return L10n.Sidebar.sessionUnavailableAlertMessageUnreadable(title, error)
+        case .missing, .none:
+            return L10n.Sidebar.sessionUnavailableAlertMessage(title)
         }
     }
 

@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import WillDeepCore
 
 nonisolated enum AgentExternalFileTools {
     /// Repeat authorization invariants at dispatch time, atomically write the
@@ -40,6 +41,17 @@ nonisolated enum AgentExternalFileTools {
         ) else {
             throw AgentToolError.invalidArgument(
                 "External target must be a regular file path outside the workspace with an existing parent directory."
+            )
+        }
+        // 宿主自己的数据目录：任何审批档位都不写，包括完全访问。审批层
+        // 已把它标成敏感路径，这里是执行时的最后一道，防止绕过审批的路径。
+        if let protectedRoot = AgentHostDataPathPolicy.protectedRoot(
+            containing: target.url,
+            nativeFileWritesOnly: true
+        ) {
+            throw AgentToolError.protectedHostDataPath(
+                path: target.url.path,
+                protectedRoot: protectedRoot.path
             )
         }
 

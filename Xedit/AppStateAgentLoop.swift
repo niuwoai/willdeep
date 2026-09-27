@@ -43,6 +43,7 @@
 import WillDeepCore
 import AppKit
 import Foundation
+import os
 
 extension AppState {
     @MainActor
@@ -365,6 +366,14 @@ extension AppState {
         /// Rounds already spent making the model answer the handoff with prose
         /// instead of a tool call. Bounded by `maximumHandoverRetries`.
         var contextRunwayHandoverRetryCount = 0
+        /// The pre-send hard gate ran a compression this turn and the
+        /// summariser failed. A failing summariser does not heal between
+        /// rounds, so the gate stops retrying for the rest of the turn; the
+        /// request is sent as-is and the overflow path below gets one more go.
+        var didFailPreSendCompressionThisTurn = false
+        /// One compress-and-resend per turn after a provider overflow 400.
+        /// Never loops: a second overflow surfaces the error as before.
+        var didRetryAfterContextOverflow = false
         /// Plan-on-demand asks once per turn; crossing the threshold again
         /// after the model ignored the first request must not nag every round.
         var didRequestPlanOnDemand = false
@@ -712,13 +721,6 @@ extension AppState {
                 runtime.messages[index].requestPrefixHash = cacheDiagnostics.hash
                 runtime.messages[index].requestStablePrefixCharacters = cacheDiagnostics.stableCharacters
             }
-            let history = modelFacingHistory(for: runtime, excludingMessageID: assistantID)
-            // No second attach on the request copy: `attachTurnContextIfNeeded`
-            // above already persisted this turn's context onto `runtime.messages`
-            // (setting the fresh user message's modelContext, or inserting a
-            // hidden host carrier on notification-only wake-ups), so the
-            // model-facing history and the next turn's replay share bytes.
-            var collapsedHistory = Self.collapseOldToolResults(in: history)
             let requestTools = AgentToolRegistry.tools(
                 activeExperts: activeExperts,
                 interactionMode: runtime.interactionMode,
@@ -731,22 +733,67 @@ extension AppState {
                     activeServers: AgentMCPServerDirectory.list()
                 )
             )
-            let requestWithoutRunwayHandoff = [AgentMessage(role: .system, content: systemPrompt)]
-                + collapsedHistory
-            let estimatedRequestTokens = Self.estimateAgentTokens(
-                messages: requestWithoutRunwayHandoff,
-                tools: requestTools
-            )
+            // The model-facing slice plus its two usage readings. A nested
+            // function because the pre-send gate below may compress and then
+            // needs exactly this rebuilt from the fresh summary — the request
+            // must be assembled from what compression left, not from the
+            // slice that tripped the gate.
+            //
+            // No second attach on the request copy: `attachTurnContextIfNeeded`
+            // above already persisted this turn's context onto `runtime.messages`
+            // (setting the fresh user message's modelContext, or inserting a
+            // hidden host carrier on notification-only wake-ups), so the
+            // model-facing history and the next turn's replay share bytes.
+            func assembleModelFacingRequest() -> (collapsedHistory: [AgentMessage], estimatedTokens: Int, anchoredTokens: Int?) {
+                let history = modelFacingHistory(for: runtime, excludingMessageID: assistantID)
+                let collapsed = Self.collapseOldToolResults(in: history)
+                let estimated = Self.estimateAgentTokens(
+                    messages: [AgentMessage(role: .system, content: systemPrompt)] + collapsed,
+                    tools: requestTools
+                )
+                let anchored = Self.providerAnchoredUsedTokens(
+                    messages: runtime.messages,
+                    contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
+                    contextSummaryInstalledAt: runtime.contextSummaryInstalledAt
+                )
+                return (collapsed, estimated, anchored)
+            }
+            var (collapsedHistory, estimatedRequestTokens, providerAnchoredTokens) = assembleModelFacingRequest()
             runtime.contextSystemPromptTokenEstimate = Self.estimateTextTokens(systemPrompt)
-            let providerAnchoredTokens = Self.providerAnchoredUsedTokens(
-                messages: runtime.messages,
-                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
-                contextSummaryInstalledAt: runtime.contextSummaryInstalledAt
-            )
             let contextWindow = Self.agentContextWindow(
                 model: turnConfiguration.model,
                 providerID: turnConfiguration.providerID
             )
+            // Pre-send hard gate. Everything else here is advisory: the
+            // runway policy adds a handoff prompt and still sends, and
+            // auto-compression only runs between turns. Neither stopped a
+            // real session from sending 2.7M tokens to a 1M-window model
+            // after its checkpoint went stale — modelFacingHistory fell back
+            // to the full transcript, logged "context checkpoint stale", and
+            // the 400 came back. So when the request cannot fit, or the
+            // summary it relies on is being dropped, compress synchronously
+            // first and rebuild. Not skipped on toolRound 0: an oversized
+            // request is refused on any round. A failed compression does not
+            // block the send — the turn must not dead-lock — it just means
+            // the overflow retry below is the last line.
+            if !didFailPreSendCompressionThisTurn,
+               Self.requiresPreSendCompression(
+                   checkpointIsStale: contextCheckpointIsStale(for: runtime),
+                   usedTokens: max(estimatedRequestTokens, providerAnchoredTokens ?? 0),
+                   contextWindow: contextWindow
+               ) {
+                Self.contextCompressionLog.notice(
+                    "pre-send gate: compressing before request runtime=\(runtime.id.uuidString, privacy: .public) round=\(toolRound) estimated=\(estimatedRequestTokens) anchored=\(providerAnchoredTokens ?? -1) window=\(contextWindow) staleCheckpoint=\(self.contextCheckpointIsStale(for: runtime))"
+                )
+                switch await compressContextInTurn(for: runtime, reason: "pre-send gate") {
+                case .reclaimed:
+                    (collapsedHistory, estimatedRequestTokens, providerAnchoredTokens) = assembleModelFacingRequest()
+                case .failed:
+                    didFailPreSendCompressionThisTurn = true
+                case .nothingToCompress, .skippedAlreadyCompressing:
+                    break
+                }
+            }
             let runwayDecision = AgentContextRunwayPolicy.evaluate(
                 usedTokens: max(estimatedRequestTokens, providerAnchoredTokens ?? 0),
                 contextWindow: contextWindow,
@@ -848,7 +895,9 @@ extension AppState {
                     toolRoundsSinceLastPlanUpdate = 0
                 }
             }
-            let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
+            // `var` so an overflow 400 can compress and rebuild the payload
+            // for its single retry (see the catch below).
+            var requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
             // Capture starts at the round boundary but joins only after prompt
             // assembly, preserving the guarded-mutation CAS point without
             // putting the Git subprocess wholly on the critical path.
@@ -934,6 +983,31 @@ extension AppState {
                         streamBuffer.flushPending()
                         try Task.checkCancellation()
                         guard runtime.acceptsResponseEvents(for: turnID) else { throw CancellationError() }
+                        // Provider says the request is too long. The gate
+                        // above works from estimates; the provider's
+                        // tokenizer is the ground truth, and this is where
+                        // it disagrees. Compress once, rebuild the payload
+                        // from the fresh summary and resend once. The
+                        // host-inserted notices (handoff, plan, nudge) live
+                        // in `runtime.messages`, so the rebuilt slice keeps
+                        // them without re-appending. Anything short of a
+                        // reclaimed window falls through to the normal
+                        // error path with the original error.
+                        if Self.isContextOverflowError(error), !didRetryAfterContextOverflow {
+                            didRetryAfterContextOverflow = true
+                            Self.contextCompressionLog.error(
+                                "provider rejected request for length: compressing and retrying once runtime=\(runtime.id.uuidString, privacy: .public) round=\(toolRound) estimated=\(estimatedRequestTokens) window=\(contextWindow)"
+                            )
+                            if case .reclaimed = await compressContextInTurn(for: runtime, reason: "overflow 400") {
+                                let rebuilt = assembleModelFacingRequest()
+                                collapsedHistory = rebuilt.collapsedHistory
+                                estimatedRequestTokens = rebuilt.estimatedTokens
+                                providerAnchoredTokens = rebuilt.anchoredTokens
+                                requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
+                                continue
+                            }
+                            throw error
+                        }
                         guard shouldRetryTransientNetworkError(
                             error,
                             for: runtime,

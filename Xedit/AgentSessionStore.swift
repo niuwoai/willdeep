@@ -1088,12 +1088,45 @@ nonisolated enum AgentSessionStore {
     /// produces for the sidebar, and several paths persist whatever is in
     /// `agentSessions[index]` without materializing it first — one stale
     /// metadata-only flag is enough to flush that skeleton over real history.
-    /// An empty session whose file is also empty (or absent) writes normally.
+    /// An empty session whose stored transcript is also empty (or whose file
+    /// is absent) writes normally. A file that exists but cannot be read or
+    /// decoded fails closed: the guard used to treat it like "absent" and let
+    /// the skeleton replace whatever history the bytes still held — the one
+    /// case where refusing costs nothing and overwriting is unrecoverable.
     private static func wouldTruncateStoredTranscript(_ session: AgentSession, at url: URL) -> Bool {
         guard session.messages.isEmpty else { return false }
-        guard let data = try? Data(contentsOf: url) else { return false }
-        guard let stored = try? decoder.decode(AgentSession.self, from: data) else { return false }
-        return !stored.messages.isEmpty
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        do {
+            let data = try Data(contentsOf: url)
+            let stored = try decoder.decode(AgentSession.self, from: data)
+            return !stored.messages.isEmpty
+        } catch {
+            print("AgentSessionStore: refused to overwrite unreadable session file \(url.lastPathComponent): \(error)")
+            return true
+        }
+    }
+
+    /// What `peekStoredSession` would find on disk for `id`, without the
+    /// nil-collapse that hides whether the file is gone or merely broken.
+    /// The sidebar's "conversation unavailable" alert needs the distinction:
+    /// a missing file is a restore-from-backup story, an undecodable one is
+    /// a bug report (and the file must stay untouched either way).
+    enum StoredSessionFileState: Equatable {
+        case missing
+        case undecodable(String)
+        case ok
+    }
+
+    static func storedSessionFileState(id: UUID) -> StoredSessionFileState {
+        if pendingWrites.peek(id) != nil { return .ok }
+        let url = directory.appendingPathComponent("\(id.uuidString).json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+        do {
+            _ = try decoder.decode(AgentSession.self, from: try Data(contentsOf: url))
+            return .ok
+        } catch {
+            return .undecodable(error.localizedDescription)
+        }
     }
 
     private static func metadataSession(from session: AgentSession) -> AgentSession {

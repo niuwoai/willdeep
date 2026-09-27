@@ -92,6 +92,18 @@ nonisolated public enum AgentMaliciousCommandDenylist {
         if let match = destructionMatch(normalized: normalized, segment: raw) {
             return match
         }
+        // 宿主自己的数据目录：会话历史、审计日志、例程。删它不是"清理构建
+        // 产物"，而且宿主没有回收站。按解析后的 token 比对（含 `~`、`$HOME`、
+        // realpath），不是裸子串——见 AgentHostDataPathPolicy。排在大范围
+        // 破坏之后：`rm -rf ~` 也会带走它，但那条该报的是抹家目录。
+        if let tokens = AgentShellCommandParser.shellTokens(from: raw),
+           let hit = AgentHostDataPathPolicy.mutationHit(tokens: tokens, workingDirectory: nil) {
+            return Match(
+                ruleID: "willdeep-own-data-destruction",
+                reason: "改写或删除 WillDeep 自己的数据目录 \(hit.protectedRoot)（\(hit.token)）——会话历史与审计日志没有回收站",
+                segment: raw
+            )
+        }
         if let match = takeoverMatch(normalized: normalized, segment: raw) {
             return match
         }

@@ -1488,6 +1488,10 @@ nonisolated enum L10n {
             let template = String(localized: "sidebar.session-unavailable.alert-message", defaultValue: "“%@” could not be opened because its local history file is missing. WillDeep kept the sidebar entry so you can restore the file from backup. No new data was written over it.")
             return String(format: template, title)
         }
+        static func sessionUnavailableAlertMessageUnreadable(_ title: String, _ error: String) -> String {
+            let template = String(localized: "sidebar.session-unavailable.alert-message-unreadable", defaultValue: "“%@” could not be opened because its local history file exists but could not be read (%@). WillDeep kept the sidebar entry and did not overwrite the file; restore it from a backup or report the error.")
+            return String(format: template, title, error)
+        }
         static let sessionUnavailableConfirm = String(localized: "sidebar.session-unavailable.confirm", defaultValue: "OK")
         static let sessionRowArchiveTooltip = String(localized: "sidebar.session-row.archive-tooltip", defaultValue: "Archive")
         static let sessionRowPinTooltip = String(localized: "sidebar.session-row.pin-tooltip", defaultValue: "Pin")

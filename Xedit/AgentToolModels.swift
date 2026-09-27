@@ -598,6 +598,10 @@ enum AgentToolError: LocalizedError {
     case noWorkspace
     case pathOutsideWorkspace(String)
     case symlinkOutsideWorkspace(path: String, resolved: String)
+    /// The target sits inside WillDeep's own data directory (session
+    /// history, audit logs). Reads are fine; native file tools never write
+    /// there, whatever the approval mode.
+    case protectedHostDataPath(path: String, protectedRoot: String)
     case notFound(String)
     case notRegular(String)
     case binaryFile(String)
@@ -626,6 +630,13 @@ enum AgentToolError: LocalizedError {
             by the sandbox, so the native file tools refuse it too. Tell the user to add \
             \(resolved) as a project folder (this app supports multiple folders per project), \
             then use its real path.
+            """
+        case .protectedHostDataPath(let path, let protectedRoot):
+            return """
+            Path \(path) is inside WillDeep's own data directory (\(protectedRoot)), which holds \
+            session history, routines and audit logs. Reading it is allowed for diagnostics, but \
+            no tool writes, edits or deletes there in any approval mode. If the user genuinely wants \
+            a file there changed, tell them to do it themselves outside the agent.
             """
         case .notFound(let path):
             return "Path does not exist: \(path)"
@@ -678,6 +689,11 @@ enum AgentToolError: LocalizedError {
             return .symlinkOutsideWorkspace(
                 path: AgentSecretStore.redact(path, secretValues: secretValues),
                 resolved: AgentSecretStore.redact(resolved, secretValues: secretValues)
+            )
+        case .protectedHostDataPath(let path, let protectedRoot):
+            return .protectedHostDataPath(
+                path: AgentSecretStore.redact(path, secretValues: secretValues),
+                protectedRoot: AgentSecretStore.redact(protectedRoot, secretValues: secretValues)
             )
         case .notFound(let path):
             return .notFound(AgentSecretStore.redact(path, secretValues: secretValues))

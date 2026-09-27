@@ -76049,6 +76049,7 @@
         }
       }
     },
+    "sidebar.session-unavailable.alert-message-unreadable" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "“%@” could not be opened because its local history file exists but could not be read (%@). WillDeep kept the sidebar entry and did not overwrite the file; restore it from a backup or report the error." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo abrir «%@» porque su archivo de historial local existe pero no se pudo leer (%@). WillDeep ha conservado la entrada en la barra lateral y no ha sobrescrito el archivo; restáuralo desde una copia de seguridad o informa del error." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "« %@ » n'a pas pu être ouvert car son fichier d'historique local existe mais n'a pas pu être lu (%@). WillDeep a conservé l'entrée dans la barre latérale et n'a pas écrasé le fichier ; restaurez-le depuis une sauvegarde ou signalez l'erreur." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "「%@」はローカルの履歴ファイルが存在するものの読み取れなかったため開けませんでした（%@）。WillDeep はサイドバーの項目を残し、ファイルを上書きしていません。バックアップから復元するか、このエラーを報告してください。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "“%@”的本地历史文件存在但无法读取（%@）。WillDeep 已保留侧边栏条目且未覆盖原文件；请从备份恢复或反馈这条错误。" } } } },
     "sidebar.session-unavailable.alert-title" : {
       "comment" : "Alert title shown when a session history file is missing",
       "extractionState" : "manual",

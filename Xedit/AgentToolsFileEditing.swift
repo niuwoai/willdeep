@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import WillDeepCore
 
 extension AgentToolRunner {
     // MARK: create_file
@@ -46,6 +47,7 @@ extension AgentToolRunner {
         // workspace-relative and rejects paths outside the workspace.
         let path = rawPath.hasPrefix("./") ? String(rawPath.dropFirst(2)) : rawPath
         let resolved = try context.resolveWorkspaceURL(path)
+        try refuseHostDataPath(resolved.url, spelledAs: path)
         let relativePath = relativeWorkspacePath(resolved.url, root: resolved.root)
         let diff = makeCreationDiff(path: relativePath, content: content)
 
@@ -93,6 +95,7 @@ extension AgentToolRunner {
 
         let path = rawPath.hasPrefix("./") ? String(rawPath.dropFirst(2)) : rawPath
         let resolved = try context.resolveWorkspaceURL(path)
+        try refuseHostDataPath(resolved.url, spelledAs: path)
         let root = resolved.root
         let url = resolved.url
         let relativePath = relativeWorkspacePath(url, root: root)
@@ -194,6 +197,7 @@ extension AgentToolRunner {
                     resolved: AgentWorkspacePathGuard.resolvedPath(of: url)
                 )
             }
+            try refuseHostDataPath(url, spelledAs: change.path)
             if change.isNewFile {
                 // Creation diff: the file must NOT already exist (use a
                 // modify diff to change an existing file).
@@ -250,6 +254,21 @@ extension AgentToolRunner {
             \(fileList)
             """
         )
+    }
+
+    /// 工作区可以是任何目录，包括宿主自己的数据目录（用户排障时会把它当
+    /// 项目打开）。读随便读，写一律拒绝——会话历史没有回收站。create_file、
+    /// edit_file 在进 apply_patch 管线前就拦，apply_patch 自己再拦一次。
+    private static func refuseHostDataPath(_ url: URL, spelledAs path: String) throws {
+        if let protectedRoot = AgentHostDataPathPolicy.protectedRoot(
+            containing: url,
+            nativeFileWritesOnly: true
+        ) {
+            throw AgentToolError.protectedHostDataPath(
+                path: path,
+                protectedRoot: protectedRoot.path
+            )
+        }
     }
 
     private static func relativeWorkspacePath(_ url: URL, root: URL) -> String {
