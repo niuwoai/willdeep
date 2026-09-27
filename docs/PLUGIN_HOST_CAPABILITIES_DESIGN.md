@@ -248,7 +248,7 @@ key，宿主允许插件 MCP 服务在处理 `tools/call` 期间**反过来向�
 
 ### 请求
 
-插件在工具调用还没返回时，往 stdout 写一行：
+插件在工具调用还没返回时（或处理自己 HTTP 入口来的请求时），往 stdout 写一行：
 
 ```json
 {"jsonrpc":"2.0","id":"img-1","method":"willdeep/images/generate",
@@ -269,18 +269,30 @@ key，宿主允许插件 MCP 服务在处理 `tools/call` 期间**反过来向�
 | -32000 | 出图失败，`message` 是原因（无 `ai.image` 权限、上游报错、参考图越界） |
 | -32001 | 宿主处理超过 600 秒 |
 
-### 超时
+### 并发与超时
 
-宿主等工具结果的计时在**每处理完一次反向请求后重新开始**：出一张图往往比服务的
-工具超时还长，不重置的话插件永远等不到第二张。单次反向请求本身封顶 600 秒，防止上游
-挂住后 MCP 连接的串行队列永远卡着。
+宿主读插件 stdout 时认出反向请求，**另起任务处理**，办完把响应写回 stdin；读 stdout 的
+线程不等它。所以宿主替插件出图的这一两分钟里，插件对其他请求（网关探活的 `tools/list`、
+页面读取）的应答照常送达（1.405.0-rc5 起）。此前宿主没在等 stdio 应答时收到的反向请求，
+是在读 stdout 的线程上同步办的：插件的其他应答全被堵在管道里，宿主等不到就判它超时、
+结束进程，正在出的图也跟着断了。
 
-插件一次工具调用可以串行发多条反向请求，但宿主处理期间该连接不接新工具调用，
-所以工具应当自己限制一次出图的张数。
+反向请求不必在工具调用期间发。插件经自己的 HTTP 入口处理请求时也可以发，宿主照样
+处理。插件对宿主 stdio 请求的应答最好不要等自己的反向请求办完：能在主循环即时应答的，
+就即时应答。
 
-实现：`Xedit/AgentMCPHostRequests.swift`、`Xedit/AgentMCPBridge.swift`（`waitForResponse` 的
-`onServerRequest`）；测试 `XeditTests/AgentMCPHostRequestsTests.swift` 用一个真实的 ruby stdio
-服务走完整往返。
+宿主等插件应答的超时，计的是「插件多久没动静」：有反向请求在办时暂停计时，最后一个
+办完后从那一刻重新计。出一张图往往比服务的工具超时还长，不这样算，插件永远等不到第二张。
+单次反向请求本身封顶 600 秒（超过回 -32001），防止上游挂住后，等插件应答的请求永远
+等下去。
+
+插件一次工具调用可以串行发多条反向请求。不过宿主对同一个插件的 stdio 请求是串行发的：
+一条工具调用在等结果时，其他 stdio 请求都排在它后面，所以工具应当自己限制一次出图的张数。
+
+实现：`Xedit/AgentMCPHostRequests.swift`（`respond(to:server:within:)`）、
+`Xedit/AgentMCPBridge.swift`（`MCPLineInbox` 的 `append` / `nextLine`）；测试
+`XeditTests/AgentMCPHostRequestsTests.swift` 用真实的 ruby stdio 服务走完整往返，其中一个
+服务照短剧工坊的线程模型，在工作线程里等宿主出图，主循环即时应答。
 
 ---
 

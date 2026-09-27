@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.405.0-rc5 - 2026-09-27
+
+### Fixed
+
+- **插件在等宿主出图时被宿主结束，那张图跟着断掉。** 2026-09-27 用短剧工坊 0.30.0-rc2 实测：外部客户端经网关调 `image.generate`，插件从自己 HTTP 入口的工作线程发反向请求 `willdeep/images/generate`，一次 60~120 秒。这期间网关只要再收到一条发给同一插件的请求（比如 `video.list`），就会先经宿主的 stdio 客户端发 `tools/list` 探活。探活等满插件的 `startup_timeout_sec`（10 秒）没等到应答，宿主结束了插件进程；插件那头报 `Host closed the connection before answering willdeep/images/generate`，网关回 `-32603 Plugin HTTP endpoint failed: 网络连接已中断`。一批图出下来，插件每隔几分钟换一个 PID。
+  - 原因在宿主。宿主没在等 stdio 应答时收到的反向请求，是在读插件 stdout 的线程上同步办的（`MCPLineInbox.append` → `AgentMCPHostRequests.respondSync`，信号量最长等 600 秒）。这条线程停住的一两分钟里，插件对 `tools/list` 的应答其实早就写出来了，只是没人读，`waitForResponse` 到点就 `terminate()`。插件 0.30.0-rc2 已经在主线程即时应答 stdio 请求，出图放在工作线程，所以插件这边不用改。
+  - 修法：反向请求一律交给独立任务处理，办完把响应写回 stdin，读 stdout 的线程不再等它。`respondSync` 换成不阻塞线程的 `respond(to:server:within:)`，600 秒上限不变，超过回 `-32001`。宿主自己的请求和反向请求的应答可能同时写 stdin，新增 `MCPStdinWriter`，一行 JSON 连同换行符在锁里一次写完，避免两行交错。
+  - 超时的算法相应调整：`MCPLineInbox.nextLine` 计的是「插件多久没动静」，有反向请求在办时暂停计时，最后一个办完后从那一刻重新计。原来只有等待方自己读到反向请求时才重置计时，现在不管反向请求在哪条路上到达，都按这个规则算。
+  - 网关的「确保已启动」不再去碰活着的连接：宿主已有这个插件服务的连接、握手做过、进程还在跑，就直接放行，不发 `tools/list`，这次也不刷新工具目录。插件没在运行时照旧发 `tools/list` 顺带拉起。探测原本会排在这条连接的串行队列后面，插件正经 stdio 等宿主出图时，要么干等一两分钟，要么超时把插件结束掉。
+  - 同一类问题的另一个入口一并修掉：插件对某条请求回了 JSON-RPC 错误（比如工具名不认识），连接池原来会把连接当坏的丢掉并结束进程，手上正在等出图的请求也跟着断。现在只有超时、写失败、握手失败这类连接真坏了的情况才重启，JSON-RPC 错误照常抛给调用方。
+- 文档：`docs/PLUGIN_HOST_CAPABILITIES_DESIGN.md` 的「超时」一节改为「并发与超时」，写明反向请求不占读线程、可以在工具调用之外发（插件 HTTP 入口），以及新的计时规则；`docs/decisions/0001-plugin-mcp-gateway.md` 的 macOS 实现备注补上探活跳过活连接这一条。
+- 测试：`AgentMCPHostRequestsTests` 新增 4 项。回归用例用一个照短剧工坊线程模型写的 ruby 假插件（主循环即时应答，工作线程等宿主出图）：宿主闲着时收到出图请求，出图 4 秒、插件超时 2 秒，期间发的 `tools/list` 必须在出图办完前拿到应答，之后插件收到出图结果且 PID 不变。另外 3 项：插件回 JSON-RPC 错误后 PID 不变；网关探活对活连接不发 `tools/list`，一条 stdio 工具调用正在等出图时探活立即返回、那张图照常办完，连接回收后再探会重新拉起；反向请求超过上限回 `-32001` 且不等实现办完。
+- 验证：`ruby scripts/run_tests_fast.rb` 跑 MCP、插件工具与网关相关的 10 个套件（`AgentMCPHostRequestsTests`、`AgentMCPBridgeCoreTests`、`AgentMCPResultRenderingTests`、`AgentMCPServerDirectoryTests`、`AgentPluginMCPToolCatalogTests`、`AgentPluginMCPToolApprovalTests` 与网关 4 个套件），91 项通过，退出码 0，日志与报告计数一致。`AgentMCPHostRequestsTests` 加 `-test-iterations 5` 连跑 5 轮全绿，当时负载均值 12~29。rebase 到 rc4（64c7a4e8）之后两项都复跑了一遍：10 个套件 91 项通过，5 轮连跑全绿，这次负载均值在 50~177 之间。
+  - 反验：提交后在生产代码里临时恢复三处旧行为：读线程上同步办反向请求且不暂停计时、JSON-RPC 错误照旧重启连接、探活总发 `tools/list`。结果回归用例在 `tools/list` 上以 `.commandTimeout` 失败，和现场一致；错误用例拿到的 PID 变了；探活用例断言失败。原有的端到端用例也变红，因为这次回退连暂停计时一起拿掉了，而新代码里这条路径靠的就是它；在改动前的代码上它是绿的。恢复后源码与提交一致。
+  - 没做的：全量 XeditTests 没有在本地跑；没有用真实的短剧工坊加外部客户端复现现场。
+- 未处理：同一插件的 stdio 请求仍然串行。一条经 stdio 的工具调用在等宿主出图时，页面对这个插件的读取、网关的 stdio 中转都要排在它后面，只是不会再因此被结束。插件公布了 HTTP 入口时，网关转发不走这条路。
+
 ## 1.405.0-rc4 - 2026-09-27
 
 ### Changed

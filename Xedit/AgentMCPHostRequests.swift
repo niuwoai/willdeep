@@ -10,9 +10,10 @@
 //  调不到页面桥，只能各自再配一份 key。
 //
 //  做法沿用 MCP 协议本来就有的「服务端向客户端发请求」（`sampling/createMessage`
-//  就是这个形状）：插件在处理 `tools/call` 期间，往 stdout 写一条带 `id` 的
-//  JSON-RPC 请求，宿主在等待工具结果的循环里认出它、处理、把响应写回 stdin，
-//  然后接着等原来那个工具结果。
+//  就是这个形状）：插件在处理 `tools/call`（或经它自己的 HTTP 入口来的请求）期间，
+//  往 stdout 写一条带 `id` 的 JSON-RPC 请求，宿主读 stdout 时认出它，另起任务处理，
+//  处理完把响应写回 stdin。读 stdout 的线程不等它，插件对别的请求的应答照常送达；
+//  宿主替插件办事的这段时间不计入插件自己的应答超时。
 //
 //  边界：
 //  - 只对**插件来源**的 stdio 服务开放；用户手工配置的 MCP 服务一律回
@@ -36,7 +37,9 @@ nonisolated enum AgentMCPHostRequests {
     static let supportedMethods = [imageGenerateMethod, aiCompleteMethod]
 
     /// 单次反向请求的处理上限。出一张图通常几十秒，带参考图要先上传；
-    /// 十分钟之外只可能是上游挂住了，不能让 MCP 连接的串行队列永远卡着。
+    /// 十分钟之外只可能是上游挂住了。宿主替服务端办事期间，等服务端应答的超时
+    /// 暂停计时（见 `AgentMCPBridge.MCPLineInbox`），没有上限的话，上游挂住一次，
+    /// 等这个服务端的请求就会一直等下去。
     static let maximumHandlingSeconds: TimeInterval = 600
 
     /// JSON-RPC 错误码。-32601 / -32602 是协议保留值，-32000 起是实现自定义。
@@ -120,25 +123,35 @@ nonisolated enum AgentMCPHostRequests {
         message["method"] is String && message["id"] != nil && !(message["id"] is NSNull)
     }
 
-    /// 同步版本，给 MCP 连接的串行队列用。那条队列本来就在阻塞等工具结果，
-    /// 在这里等反向请求处理完，顺序才对得上。
-    static func respondSync(to message: [String: Any], server: AgentMCPServerConfig) -> [String: Any] {
-        let box = ResponseBox()
-        let semaphore = DispatchSemaphore(value: 0)
+    /// 带处理上限的版本，给 stdio 连接用：超过 `limit` 就回 -32001，不再等实现
+    /// 那头（它可能还在跑，结果丢弃）。
+    ///
+    /// 这里不阻塞任何线程。原来的同步版本在读服务端 stdout 的线程上等信号量，
+    /// 出一张图的一两分钟里，服务端对别的请求的应答全都读不进来，宿主等不到
+    /// 应答就判它超时、把它结束，正在出的图也跟着断了（2026-09-27 短剧工坊）。
+    static func respond(
+        to message: [String: Any],
+        server: AgentMCPServerConfig,
+        within limit: TimeInterval
+    ) async -> [String: Any] {
         let request = SendableMessage(value: message)
-        // 继承调用线程的优先级：等待方阻塞在信号量上，干活的 Task 优先级更低就是优先级反转。
-        Task.detached(priority: Task.currentPriority) {
-            box.set(await respond(to: request.value, server: server))
-            semaphore.signal()
+        let timedOut = SendableMessage(value: errorResponse(
+            id: message["id"],
+            code: ErrorCode.timedOut,
+            message: "Host request \(message["method"] as? String ?? "") did not finish within \(Int(limit)) seconds."
+        ))
+        let response = await withCheckedContinuation { (continuation: CheckedContinuation<SendableMessage, Never>) in
+            let first = FirstResponse(continuation)
+            let timer = Task.detached {
+                try? await Task.sleep(nanoseconds: UInt64(limit * 1_000_000_000))
+                first.settle(timedOut)
+            }
+            Task.detached(priority: Task.currentPriority) {
+                first.settle(SendableMessage(value: await respond(to: request.value, server: server)))
+                timer.cancel()
+            }
         }
-        guard semaphore.wait(timeout: .now() + maximumHandlingSeconds) == .success, let response = box.get() else {
-            return errorResponse(
-                id: message["id"],
-                code: ErrorCode.timedOut,
-                message: "Host request \(message["method"] as? String ?? "") did not finish within \(Int(maximumHandlingSeconds)) seconds."
-            )
-        }
-        return response
+        return response.value
     }
 
     static func respond(to message: [String: Any], server: AgentMCPServerConfig) async -> [String: Any] {
@@ -212,11 +225,22 @@ nonisolated enum AgentMCPHostRequests {
         ]
     }
 
-    private final class ResponseBox: @unchecked Sendable {
+    /// 实现与计时器谁先到就用谁的响应，后到的丢弃；续体只恢复一次。
+    private final class FirstResponse: @unchecked Sendable {
         private let lock = NSLock()
-        private var value: [String: Any]?
-        func set(_ next: [String: Any]) { lock.lock(); value = next; lock.unlock() }
-        func get() -> [String: Any]? { lock.lock(); defer { lock.unlock() }; return value }
+        private var continuation: CheckedContinuation<SendableMessage, Never>?
+
+        init(_ continuation: CheckedContinuation<SendableMessage, Never>) {
+            self.continuation = continuation
+        }
+
+        func settle(_ response: SendableMessage) {
+            lock.lock()
+            let pending = continuation
+            continuation = nil
+            lock.unlock()
+            pending?.resume(returning: response)
+        }
     }
 
     /// JSON 对象本身不是 Sendable；这里只在一次交接里读，不会并发写。
