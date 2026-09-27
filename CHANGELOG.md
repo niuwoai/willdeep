@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.405.0-rc8 - 2026-09-27
+
+### Changed
+
+- **内置「短剧工坊」插件升到 0.32.0-rc2，两个宿主的插件不再抢同一份连接文件。** `PluginExamples/video-studio` 从 v0.32.0-rc1（73ecaa0）指到 v0.32.0-rc2（12ce2f8）。插件按 stdio `initialize` 的 `clientInfo.name` 认出拉起它的宿主，只写这个宿主的网关先读的那一处：WillDeep 拉起时照旧写 `~/Library/Application Support/WillDeep/plugin-data/willdeep-video-studio/mcp-http.json`，willdeep-rs 拉起时改写 `<WILLDEEP_HOME>/plugin-data/willdeep-video-studio/mcp-http.json`；文件里多了 `host`、`pid`、`parentPID`（契约修订 1）。
+  - 1.405.0-rc7 的 `parentPID` 检查从这一版起对 WillDeep 自己拉起的插件生效：之前内置的是 0.32.0-rc1，写文件不带 `parentPID`，检查形同虚设。
+  - 仍挡不住的：willdeep-rs 那边装的若还是 ≤ 0.32.0-rc1 的旧插件，照旧写 WillDeep 读的那份文件且不带 `parentPID`。willdeep-rs 0.84.0-rc2 同日发布，本机装的插件一起升到 0.32.0-rc2。
+- 测试：插件仓库在 12ce2f8 上 15 个 Ruby 测试脚本全部通过（`streamable_http_test.rb` 31 项），tag 发版流水线与 main 的 CI 都是绿的。本仓库这边，`version_consistency`、`plugin_command_contract_test.rb`（11 个插件，32 项检查）和 `video_studio_drama_test.rb` 通过；`ruby scripts/run_tests_fast.rb` 跑 `AgentPluginSystemTests`（56 项，仓库示例插件能过生产加载器）与网关 5 个套件加 `AgentMCPHostRequestsTests`（58 项），共 114 项通过，退出码 0，report 计数与日志一致。全量 XeditTests 没有在本地跑。
+
 ## 1.405.0-rc7 - 2026-09-27
 
 ### Fixed
