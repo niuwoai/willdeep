@@ -490,6 +490,12 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// circuit breaker (`AgentToolFailureGuidance`): past a few failures the
     /// host stops saying "try another approach" and asks for a report.
     var currentTurnToolFailureCounts: [String: Int] = [:]
+    /// Identical-call ledger for a turn outside Goal mode; a Goal keeps its
+    /// own on `currentGoal` (`AgentRepeatedCallGuard`).
+    var currentTurnRepeatedCallLedger = AgentRepeatedCallLedger()
+    /// Set when a Goal call repeated past the stall threshold; consumed by
+    /// the next continuation decision so that round is not progress.
+    var repeatedCallStallSinceLastContinuationDecision = false
     /// `prefixDigest` of the checkpoint already reported as stale, so the
     /// log stays one line per incident instead of one per request.
     var staleContextCheckpointDigest: String?

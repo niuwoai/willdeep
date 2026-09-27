@@ -1385,9 +1385,12 @@ extension AppState {
                 let succeededToolCallCount = runtime.toolCalls
                     .filter { $0.status == .succeeded }
                     .count
+                // Identical Goal calls past the stall threshold are not progress.
+                let repeatedCallStall = settleRepeatedCallStallForContinuationDecision(
+                    for: runtime, checklistAdvanced: didAdvanceGoalChecklist)
                 let progressEvidence = AgentPlanAutoContinuationPolicy.ProgressEvidence(
                     didExecuteTools: succeededToolCallCount
-                        > succeededToolCallCountAtLastContinuationDecision,
+                        > succeededToolCallCountAtLastContinuationDecision && !repeatedCallStall,
                     hasRunningBackgroundJobs: agentJobRegistry
                         .hasProgressRelevantAliveJobs(forRuntime: runtime.id)
                 )

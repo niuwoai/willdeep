@@ -44,6 +44,7 @@ extension AppState {
         runtime.completedForegroundOpsInspection = false
         runtime.currentTurnEmittedReadOnlyHandoffHint = false
         runtime.currentTurnToolFailureCounts = [:]
+        resetRepeatedCallGuardForDispatch(for: runtime, source: source)
         releaseFinishedForegroundWorker(for: runtime)
         // Classified from what the user actually typed. Tool-loop
         // continuations and system notices re-enter here with the same

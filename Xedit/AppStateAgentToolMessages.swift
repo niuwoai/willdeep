@@ -1300,6 +1300,9 @@ extension AppState {
         // Every tool result, hand-authored notices included, is something the
         // user can see land in the transcript.
         noteAgentVisibleOutput(for: runtime)
+        // Host note, so it goes after the untrusted-content envelope below.
+        let repeatedCallNote = repeatedToolCallNote(for: runtime, toolCallID: toolCallID,
+                                                    payload: payload, outcomeStatus: outcomeStatus)
         let sanitized = AgentInjectionDefense.sanitizedToolMessageContent(
             payload: payload,
             source: source
@@ -1339,7 +1342,7 @@ extension AppState {
         // sanitized text payload.
         let message = AgentMessage(
             role: .tool,
-            content: enveloped,
+            content: enveloped + repeatedCallNote,
             images: images,
             toolCallID: toolCallID,
             toolCallStatus: outcomeStatus,

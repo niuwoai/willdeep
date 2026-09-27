@@ -700,6 +700,9 @@ nonisolated struct AgentGoal: Codable, Equatable {
     var verification: AgentGoalVerification? = nil
     /// Explicit user grants, never supplied by model tool arguments.
     var taskAuthorizations: [AgentGoalTaskAuthorization]? = nil
+    /// Identical tool calls seen across this Goal's continuation turns
+    /// (`AgentRepeatedCallGuard`). Optional so older sessions decode.
+    var repeatedCallLedger: AgentRepeatedCallLedger? = nil
     /// A deliberate wait before the Goal resumes on its own (provider outage,
     /// no-progress backoff, compression retry). Persisted so a relaunch picks
     /// the wait back up instead of reading it as an interrupted turn.

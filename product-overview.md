@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-26 | Current version: v1.407.0-rc2
+> Last updated: 2026-09-26 | Current version: v1.408.0-rc1
 
 插件 MCP 网关（1.405.0-rc1）：WillDeep 启动时开一个只绑本机的 Streamable HTTP 入口（地址与 token 在 `~/Library/Application Support/WillDeep/mcp-gateway.json`），Claude Code、Codex 等外部 MCP 客户端连它就能调插件的 MCP 工具；第一条请求时宿主按需拉起插件，不必先打开插件页。设置 → MCP 的插件服务行可复制 Claude Code 连接命令。契约见 `docs/decisions/0001-plugin-mcp-gateway.md`。
 
