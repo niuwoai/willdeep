@@ -106,8 +106,11 @@ struct AgentTranscriptMediaOverlayTests {
         let containers = host.mountedContainers
         #expect(containers.count == 1)
         let container = try #require(containers.first)
-        #expect(container.playerView.player != nil)
-        #expect(container.playerView.controlsStyle == .inline)
+        // The picture has no controls of its own; the strip below does.
+        #expect(container.playerView?.player === container.player)
+        #expect(container.playerView?.controlsStyle == AVPlayerViewControlsStyle.none)
+        #expect(container.controlBar.fullScreenButton != nil)
+        Self.expectVisibleVolumeControl(in: container)
 
         let expected = try #require(host.placeholderFrame())
         #expect(container.frame == expected)
@@ -130,8 +133,10 @@ struct AgentTranscriptMediaOverlayTests {
         host.view.applyMessages([assistant], isDark: false)
         host.view.layoutSubtreeIfNeeded()
         let before = try #require(host.mountedContainers.first)
-        let player = try #require(before.playerView.player)
-        player.volume = 0.25
+        let player = before.player
+        #expect(before.playerView == nil)
+        before.controlBar.volumeSlider.doubleValue = 0.25
+        before.controlBar.changeVolume(before.controlBar.volumeSlider)
 
         // Search highlighting and a new message both replace the whole
         // attributed string.
@@ -141,9 +146,124 @@ struct AgentTranscriptMediaOverlayTests {
 
         let after = try #require(host.mountedContainers.first)
         #expect(after === before)
-        #expect(after.playerView.player === player)
-        #expect(after.playerView.player?.volume == 0.25)
+        #expect(after.player === player)
+        #expect(after.player.volume == 0.25)
+        #expect(after.controlBar.volumeSlider.doubleValue == 0.25)
         #expect(after.frame == host.placeholderFrame())
+    }
+
+    @Test
+    func everyMountedPlayerHasItsOwnVisibleVolumeControl() throws {
+        let fixture = try MediaFixture()
+        defer { fixture.remove() }
+        // A landscape clip, a narrow portrait-width clip and an audio bar.
+        let video = try fixture.file("wide.mp4")
+        let song = try fixture.file("song.m4a")
+        let host = TranscriptHost(height: 1_400)
+        defer { host.close() }
+        AgentTranscriptMediaSizeCache.store(CGSize(width: 1080, height: 1920), forPath: video.path)
+        defer { AgentTranscriptMediaSizeCache.store(nil, forPath: video.path) }
+
+        host.view.applyMessages([
+            AgentMessage(role: .assistant, content: "竖屏：\n\n![竖屏](\(video.path))\n\n音频：\n\n[音频](\(song.path))"),
+        ], isDark: false)
+        host.view.layoutSubtreeIfNeeded()
+
+        let containers = host.mountedContainers
+        #expect(containers.count == 2)
+        for container in containers {
+            Self.expectVisibleVolumeControl(in: container)
+        }
+        let narrow = try #require(containers.first { $0.playerView != nil })
+        #expect(narrow.frame.width < AgentTranscriptMediaMetrics.maxDisplayWidth)
+    }
+
+    @Test
+    func eachVolumeSliderDrivesOnlyItsOwnPlayer() throws {
+        let fixture = try MediaFixture()
+        defer { fixture.remove() }
+        let first = try fixture.file("first.mp3")
+        let second = try fixture.file("second.mp3")
+        let host = TranscriptHost()
+        defer { host.close() }
+
+        host.view.applyMessages([
+            AgentMessage(role: .assistant, content: "[一](\(first.path))\n\n[二](\(second.path))"),
+        ], isDark: false)
+        host.view.layoutSubtreeIfNeeded()
+        let containers = host.mountedContainers.sorted { $0.frame.minY < $1.frame.minY }
+        #expect(containers.count == 2)
+        let top = try #require(containers.first)
+        let bottom = try #require(containers.last)
+
+        top.controlBar.volumeSlider.doubleValue = 0.3
+        top.controlBar.changeVolume(top.controlBar.volumeSlider)
+        #expect(top.player.volume == 0.3)
+        #expect(bottom.player.volume == 1)
+
+        bottom.controlBar.toggleMute(nil)
+        #expect(bottom.player.isMuted)
+        #expect(!top.player.isMuted)
+        #expect(bottom.controlBar.volumeSlider.doubleValue == 0)
+        #expect(abs(top.controlBar.volumeSlider.doubleValue - 0.3) < Self.floatTolerance)
+    }
+
+    @Test
+    func evictedPlayerComesBackWithItsVolume() throws {
+        let fixture = try MediaFixture()
+        defer { fixture.remove() }
+        let clip = try fixture.file("resumed.m4a")
+        let resume = AgentTranscriptMediaResumeState(seconds: 0, volume: 0.4, isMuted: true)
+
+        let entry = AgentTranscriptMediaPlayerEntry(
+            mediaID: "m#media-0",
+            url: clip,
+            kind: .audio,
+            displayName: "resumed",
+            resumeState: resume
+        )
+        defer { entry.tearDown() }
+        #expect(entry.player.volume == 0.4)
+        #expect(entry.player.isMuted)
+        #expect(entry.resumeState.volume == 0.4)
+        // Muted reads as silent on the slider; unmuting restores 0.4.
+        #expect(entry.view.controlBar.volumeSlider.doubleValue == 0)
+        entry.view.controlBar.toggleMute(nil)
+        #expect(abs(entry.view.controlBar.volumeSlider.doubleValue - 0.4) < Self.floatTolerance)
+    }
+
+    /// `AVPlayer.volume` is a Float; the slider is a Double.
+    private static let floatTolerance = 0.000_1
+
+    @Test
+    func evictionRemovesTheTimeObserver() throws {
+        let fixture = try MediaFixture()
+        defer { fixture.remove() }
+        let entry = AgentTranscriptMediaPlayerEntry(
+            mediaID: "m#media-0",
+            url: try fixture.file("detached.mp4"),
+            kind: .video,
+            displayName: "detached",
+            resumeState: nil
+        )
+        #expect(entry.view.controlBar.isBound)
+        entry.tearDown()
+        #expect(!entry.view.controlBar.isBound)
+        #expect(entry.view.playerView?.player == nil)
+    }
+
+    /// The volume slider and mute button are on screen: not hidden, a real
+    /// width, and inside the container's (clipped) bounds.
+    private static func expectVisibleVolumeControl(in container: AgentTranscriptMediaPlayerContainerView) {
+        let bar = container.controlBar
+        for control in [bar.volumeSlider, bar.muteButton] as [NSView] {
+            #expect(!control.isHiddenOrHasHiddenAncestor)
+            #expect(control.frame.width > 0)
+            let inContainer = container.convert(control.frame, from: bar)
+            #expect(container.bounds.contains(inContainer), "\(inContainer) outside \(container.bounds)")
+        }
+        #expect(bar.frame.maxY == container.bounds.maxY)
+        #expect(bar.frame.height == AgentTranscriptMediaControlMetrics.barHeight)
     }
 
     @Test
@@ -179,7 +299,7 @@ struct AgentTranscriptMediaOverlayTests {
         ], isDark: false)
         host.view.layoutSubtreeIfNeeded()
         let container = try #require(host.mountedContainers.first)
-        let player = try #require(container.playerView.player)
+        let player = container.player
         player.play()
         #expect(player.rate != 0)
 
@@ -201,7 +321,7 @@ struct AgentTranscriptMediaOverlayTests {
             AgentMessage(role: .assistant, content: "看：\n\n![](\(clip.path))"),
         ], isDark: false)
         host.view.layoutSubtreeIfNeeded()
-        let player = try #require(host.mountedContainers.first?.playerView.player)
+        let player = try #require(host.mountedContainers.first?.player)
         player.play()
         #expect(player.rate != 0)
 

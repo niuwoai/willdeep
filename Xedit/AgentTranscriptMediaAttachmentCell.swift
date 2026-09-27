@@ -45,9 +45,10 @@ nonisolated enum AgentTranscriptMediaLayout {
         presentationSize: CGSize?,
         widthBudget: CGFloat
     ) -> NSSize {
+        let barHeight = AgentTranscriptMediaControlMetrics.barHeight
         switch kind {
         case .audio:
-            return NSSize(width: widthBudget, height: AgentTranscriptMediaMetrics.audioBarHeight)
+            return NSSize(width: widthBudget, height: barHeight)
         case .video:
             let aspect: CGFloat
             if let presentationSize, presentationSize.width > 0, presentationSize.height > 0 {
@@ -64,7 +65,8 @@ nonisolated enum AgentTranscriptMediaLayout {
             // Very tall clips would leave no room for the controls; the
             // player letterboxes instead.
             width = max(AgentTranscriptMediaMetrics.minimumVideoWidth, min(widthBudget, width))
-            return NSSize(width: width.rounded(), height: max(1, height.rounded()))
+            // The picture keeps the aspect ratio; the control strip sits under it.
+            return NSSize(width: width.rounded(), height: max(1, height.rounded()) + barHeight)
         }
     }
 
@@ -257,11 +259,18 @@ enum AgentTranscriptMediaPlaceholderArtwork {
         outline.addClip()
         switch kind {
         case .video:
+            // Flipped text-view space: the strip is at the bottom (max Y).
+            let barHeight = min(rect.height, AgentTranscriptMediaControlMetrics.barHeight)
+            let picture = NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height - barHeight)
+            NSColor.quaternaryLabelColor.setFill()
+            NSRect(x: rect.minX, y: picture.maxY, width: rect.width, height: barHeight).fill()
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: picture).addClip()
             NSColor.black.withAlphaComponent(AgentTranscriptMediaMetrics.videoPanelOpacity).setFill()
-            rect.fill()
+            picture.fill()
             if let cover {
                 cover.draw(
-                    in: aspectFillRect(for: cover.size, in: rect),
+                    in: aspectFillRect(for: cover.size, in: picture),
                     from: .zero,
                     operation: .sourceOver,
                     fraction: 1,
@@ -273,8 +282,9 @@ enum AgentTranscriptMediaPlaceholderArtwork {
                 "play.circle.fill",
                 pointSize: AgentTranscriptMediaMetrics.placeholderSymbolPointSize,
                 color: NSColor.white.withAlphaComponent(AgentTranscriptMediaMetrics.videoSymbolOpacity),
-                centeredIn: rect
+                centeredIn: picture
             )
+            NSGraphicsContext.restoreGraphicsState()
         case .audio:
             NSColor.quaternaryLabelColor.setFill()
             rect.fill()

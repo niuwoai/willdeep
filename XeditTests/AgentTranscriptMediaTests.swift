@@ -127,7 +127,7 @@ struct AgentTranscriptMediaTests {
         let attachment = rendered.attribute(.attachment, at: location, effectiveRange: nil) as? NSTextAttachment
         let cell = try #require(attachment?.attachmentCell as? AgentTranscriptMediaAttachmentCell)
         #expect(cell.payload.kind == .audio)
-        #expect(cell.cellSize().height == AgentTranscriptMediaMetrics.audioBarHeight)
+        #expect(cell.cellSize().height == AgentTranscriptMediaControlMetrics.barHeight)
     }
 
     @Test
@@ -361,19 +361,21 @@ struct AgentTranscriptMediaTests {
         let budget = AgentTranscriptMediaLayout.widthBudget(layoutWidth: 1040)
         #expect(budget == AgentTranscriptMediaMetrics.maxDisplayWidth)
 
+        // Picture keeps its ratio; the control strip is added underneath.
+        let bar = AgentTranscriptMediaControlMetrics.barHeight
         let unknown = AgentTranscriptMediaLayout.displaySize(kind: .video, presentationSize: nil, widthBudget: 560)
-        #expect(unknown == NSSize(width: 560, height: 315))
+        #expect(unknown == NSSize(width: 560, height: 315 + bar))
 
         let portrait = AgentTranscriptMediaLayout.displaySize(
             kind: .video,
             presentationSize: CGSize(width: 1080, height: 1920),
             widthBudget: 560
         )
-        #expect(portrait.height == AgentTranscriptMediaMetrics.maxVideoHeight)
+        #expect(portrait.height == AgentTranscriptMediaMetrics.maxVideoHeight + bar)
         #expect(portrait.width == (AgentTranscriptMediaMetrics.maxVideoHeight * 1080 / 1920).rounded())
 
         let audio = AgentTranscriptMediaLayout.displaySize(kind: .audio, presentationSize: nil, widthBudget: 400)
-        #expect(audio == NSSize(width: 400, height: AgentTranscriptMediaMetrics.audioBarHeight))
+        #expect(audio == NSSize(width: 400, height: bar))
     }
 
     @Test

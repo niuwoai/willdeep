@@ -47,8 +47,6 @@ nonisolated enum AgentTranscriptMediaMetrics {
     /// Below this the inline scrubber and volume control stop fitting.
     static let minimumWidth: CGFloat = 240
     static let minimumVideoWidth: CGFloat = 160
-    /// AVPlayerView's inline control bar plus a little air.
-    static let audioBarHeight: CGFloat = 40
     /// Used until the video's real dimensions have been read.
     static let defaultVideoAspectRatio: CGFloat = 16.0 / 9.0
     static let cornerRadius: CGFloat = 6

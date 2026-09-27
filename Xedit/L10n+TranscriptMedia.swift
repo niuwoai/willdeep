@@ -21,6 +21,19 @@ extension L10n {
             localized: "transcript-media.show-in-finder",
             defaultValue: "Show in Finder"
         )
+        // Player control strip: tooltips and accessibility labels.
+        static let play = String(localized: "transcript-media.control.play", defaultValue: "Play")
+        static let pause = String(localized: "transcript-media.control.pause", defaultValue: "Pause")
+        static let mute = String(localized: "transcript-media.control.mute", defaultValue: "Mute")
+        static let unmute = String(localized: "transcript-media.control.unmute", defaultValue: "Unmute")
+        static let volume = String(localized: "transcript-media.control.volume", defaultValue: "Volume")
+        static let playbackPosition = String(
+            localized: "transcript-media.control.position",
+            defaultValue: "Playback Position"
+        )
+        static let elapsedTime = String(localized: "transcript-media.control.elapsed", defaultValue: "Elapsed Time")
+        static let duration = String(localized: "transcript-media.control.duration", defaultValue: "Duration")
+        static let fullScreen = String(localized: "transcript-media.control.full-screen", defaultValue: "Full Screen")
         static func streamingVideo(_ name: String) -> String {
             let template = String(
                 localized: "transcript-media.streaming-video",

@@ -106,6 +106,7 @@ final class AgentTranscriptMediaPlayerEntry {
     let kind: AgentTranscriptMediaKind
     let player: AVPlayer
     let view: AgentTranscriptMediaPlayerContainerView
+    private let displayName: String
     private var statusObservation: NSKeyValueObservation?
 
     init(
@@ -123,18 +124,14 @@ final class AgentTranscriptMediaPlayerEntry {
         // Nothing starts on its own: the transcript is a document, not a feed.
         player.actionAtItemEnd = .pause
         self.player = player
+        self.displayName = displayName
         self.view = AgentTranscriptMediaPlayerContainerView(player: player, kind: kind, url: url)
         view.setAccessibilityLabel(displayName)
         if let resumeState {
-            player.volume = resumeState.volume
-            player.isMuted = resumeState.isMuted
-            if resumeState.seconds > 0 {
-                player.seek(to: CMTime(
-                    seconds: resumeState.seconds,
-                    preferredTimescale: AgentTranscriptMediaMetrics.timeScale
-                ))
-            }
+            Self.apply(resumeState, to: player)
+            view.controlBar.refreshFromPlayer()
         }
+        view.onFullScreen = { [weak self] in self?.enterFullScreen() }
         statusObservation = item.observe(\.status, options: [.new]) { [weak self] observed, _ in
             let failed = observed.status == .failed
             Task { @MainActor [weak self] in
@@ -150,6 +147,32 @@ final class AgentTranscriptMediaPlayerEntry {
             volume: player.volume,
             isMuted: player.isMuted
         )
+    }
+
+    static func apply(_ state: AgentTranscriptMediaResumeState, to player: AVPlayer) {
+        player.volume = state.volume
+        player.isMuted = state.isMuted
+        if state.seconds > 0 {
+            player.seek(to: CMTime(seconds: state.seconds, preferredTimescale: AgentTranscriptMediaMetrics.timeScale))
+        }
+    }
+
+    /// AVPlayerView has no public "enter full screen" call once its own
+    /// controls are off, so full screen is the standalone player window,
+    /// taken full screen at the same position and volume. Closing it hands
+    /// the position and volume back to the inline player.
+    func enterFullScreen() {
+        let state = resumeState
+        player.pause()
+        AgentTranscriptMediaPlayerWindowRegistry.shared.open(
+            payload: AgentTranscriptMediaPayload(localID: mediaID, url: url, kind: kind, displayName: displayName),
+            resumeState: state,
+            entersFullScreen: true
+        ) { [weak self] final in
+            guard let self else { return }
+            Self.apply(final, to: self.player)
+            self.view.controlBar.refreshFromPlayer()
+        }
     }
 
     /// Unconditional: `timeControlStatus` lags a `play()` by a runloop turn,
@@ -168,26 +191,45 @@ final class AgentTranscriptMediaPlayerEntry {
     }
 }
 
-/// AVPlayerView with rounded corners and an inline failure notice.
+/// The picture (video only) above an always-visible control strip, with
+/// rounded corners and an inline failure notice. Audio is the strip alone.
 final class AgentTranscriptMediaPlayerContainerView: NSView {
-    let playerView = AVPlayerView()
+    let player: AVPlayer
+    /// Video only. `.none` controls: it paints the picture, the strip below
+    /// owns the playback UI (AVPlayerView's inline volume never shows here).
+    let playerView: AVPlayerView?
+    let controlBar: AgentTranscriptMediaControlBar
+    /// What the strip's full-screen button does (video only).
+    var onFullScreen: (() -> Void)?
     private let failureLabel = NSTextField(labelWithString: L10n.TranscriptMedia.unsupportedFormat)
     private let revealButton = NSButton(title: L10n.TranscriptMedia.showInFinder, target: nil, action: nil)
     private let url: URL
 
-    init(player: AVPlayer, kind: AgentTranscriptMediaKind, url: URL) {
+    init(player: AVPlayer, kind: AgentTranscriptMediaKind, url: URL, roundsCorners: Bool = true) {
+        self.player = player
         self.url = url
+        self.controlBar = AgentTranscriptMediaControlBar(player: player, kind: kind)
+        if kind == .video {
+            let playerView = AVPlayerView()
+            playerView.player = player
+            playerView.controlsStyle = .none
+            playerView.videoGravity = .resizeAspect
+            playerView.allowsPictureInPicturePlayback = false
+            self.playerView = playerView
+        } else {
+            self.playerView = nil
+        }
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = AgentTranscriptMediaMetrics.cornerRadius
-        layer?.masksToBounds = true
-
-        playerView.player = player
-        playerView.controlsStyle = .inline
-        playerView.videoGravity = .resizeAspect
-        playerView.showsFullScreenToggleButton = kind == .video
-        playerView.allowsPictureInPicturePlayback = false
-        addSubview(playerView)
+        if roundsCorners {
+            layer?.cornerRadius = AgentTranscriptMediaMetrics.cornerRadius
+            layer?.masksToBounds = true
+        }
+        if let playerView {
+            addSubview(playerView)
+        }
+        addSubview(controlBar)
+        controlBar.onFullScreen = { [weak self] in self?.onFullScreen?() }
 
         failureLabel.textColor = .secondaryLabelColor
         failureLabel.isHidden = true
@@ -213,19 +255,24 @@ final class AgentTranscriptMediaPlayerContainerView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        playerView.frame = bounds
+        let barHeight = min(bounds.height, AgentTranscriptMediaControlMetrics.barHeight)
+        controlBar.frame = NSRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight)
+        playerView?.frame = NSRect(x: 0, y: 0, width: bounds.width, height: bounds.height - barHeight)
     }
 
     var showsPlaybackFailure = false {
         didSet {
             failureLabel.isHidden = !showsPlaybackFailure
             revealButton.isHidden = !showsPlaybackFailure
-            playerView.isHidden = showsPlaybackFailure
+            playerView?.isHidden = showsPlaybackFailure
+            controlBar.isHidden = showsPlaybackFailure
         }
     }
 
+    /// Drops the picture's player reference and the strip's observers.
     func detachPlayer() {
-        playerView.player = nil
+        playerView?.player = nil
+        controlBar.detach()
     }
 
     @objc private func revealInFinder(_ sender: Any?) {
