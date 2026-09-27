@@ -83,6 +83,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     /// re-selected: bump the token to fire again with the same id.
     var scrollToUserMessageToken: Int = 0
     var scrollToUserMessageID: UUID? = nil
+    /// Local workspace root that relative `![](clip.mp4)` paths resolve against.
+    var mediaBaseURL: URL? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     func makeNSView(context: Context) -> AgentChatHistoryNSTextView {
@@ -114,7 +116,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount,
             allowsLocalCommandButtons: allowsLocalCommandButtons,
-            activeScheduledTaskIDs: activeScheduledTaskIDs
+            activeScheduledTaskIDs: activeScheduledTaskIDs,
+            mediaBaseURL: mediaBaseURL
         )
         view.applySearch(
             query: searchQuery,
@@ -152,7 +155,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             // 首次挂载传了、后续更新没传,远端会话切回本地时「运行 / 送进
             // 终端」按钮不会跟着回来;这次补参数顺手对齐。
             allowsLocalCommandButtons: allowsLocalCommandButtons,
-            activeScheduledTaskIDs: activeScheduledTaskIDs
+            activeScheduledTaskIDs: activeScheduledTaskIDs,
+            mediaBaseURL: mediaBaseURL
         )
         nsView.applySearch(
             query: searchQuery,
@@ -213,6 +217,9 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentLatestTurnReportToolCount: Int? = nil
     private var currentAllowsLocalCommandButtons = true
     private var currentActiveScheduledTaskIDs: Set<UUID>? = nil
+    private var currentMediaBaseURL: URL?
+    /// Inline players over media placeholders — see AgentTranscriptMediaOverlay.swift.
+    private(set) lazy var mediaOverlay = AgentTranscriptMediaOverlayController(textView: self)
     private var currentLayoutWidth = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
     private var currentBaseAttributedString = NSAttributedString()
     private var currentSearchQuery = ""
@@ -296,6 +303,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        mediaOverlay.textViewFrameDidChange()
         guard newSize.width > 0 else { return }
         let resolvedWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(newSize.width)
         guard resolvedWidth != currentLayoutWidth else { return }
@@ -307,11 +315,13 @@ final class AgentChatHistoryNSTextView: NSTextView {
     override func layout() {
         super.layout()
         invalidateIntrinsicContentSize()
+        mediaOverlay.textViewDidLayout()
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.acceptsMouseMovedEvents = true
+        mediaOverlay.hostWindowDidChange()
     }
 
     override func updateTrackingAreas() {
@@ -416,10 +426,11 @@ final class AgentChatHistoryNSTextView: NSTextView {
         guard range.location != NSNotFound,
               range.length > 0,
               NSMaxRange(range) <= (textStorage?.length ?? 0),
-              let storageString = textStorage?.string else {
+              let textStorage else {
             return super.writeSelection(to: pboard, type: type)
         }
-        let raw = (storageString as NSString).substring(with: range)
+        // Players copy back as their Markdown line, not U+FFFC.
+        let raw = AgentTranscriptCopySubstitution.plainText(of: textStorage.attributedSubstring(from: range))
         // Bullets go back to Markdown dashes so a copied list is still a list
         // when pasted into an editor or a terminal.
         let plain = AgentCopyTextSanitizer.restoringMarkdownListMarkers(
@@ -433,7 +444,10 @@ final class AgentChatHistoryNSTextView: NSTextView {
         let point = convert(event.locationInWindow, from: nil)
         let marker = generatedImageReferenceMarker(at: point)
         let selectedText = currentSelectedConversationText()
-        guard marker != nil || selectedText != nil else {
+        let saveImageItem = AgentImageSaveAction.menuItem(
+            in: self, at: point, action: #selector(saveTranscriptImageFromMenu(_:))
+        ) { [currentMessages] id in currentMessages.lazy.flatMap(\.images).first { $0.id == id } }
+        guard marker != nil || selectedText != nil || saveImageItem != nil else {
             return super.menu(for: event)
         }
         let menu = super.menu(for: event) ?? NSMenu()
@@ -459,6 +473,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
             item.representedObject = marker
             menu.addItem(item)
         }
+        if let saveImageItem { menu.addItem(saveImageItem) }
         return menu
     }
 
@@ -496,10 +511,10 @@ final class AgentChatHistoryNSTextView: NSTextView {
         guard range.location != NSNotFound,
               range.length > 0,
               NSMaxRange(range) <= (textStorage?.length ?? 0),
-              let storageString = textStorage?.string else {
+              let textStorage else {
             return nil
         }
-        let rawText = (storageString as NSString).substring(with: range)
+        let rawText = AgentTranscriptCopySubstitution.plainText(of: textStorage.attributedSubstring(from: range))
         // 选区取的是渲染串,带着排版专用的零宽断点。这条出口会回流给模型
         // (「加入任务」/引用选区),所以净化之后必须重新打断注入标记。
         let cleaned = AgentCopyTextSanitizer.sanitizeForModelRoundTrip(rawText)
@@ -570,7 +585,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         progressPlan: AgentPlan? = nil,
         latestTurnReportToolCount: Int? = nil,
         allowsLocalCommandButtons: Bool = true,
-        activeScheduledTaskIDs: Set<UUID>? = nil
+        activeScheduledTaskIDs: Set<UUID>? = nil,
+        mediaBaseURL: URL? = nil
     ) {
         let turnContextMessages = assistantTurnContextMessages ?? messages
         let fp = Self.inputFingerprint(
@@ -584,7 +600,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount,
             allowsLocalCommandButtons: allowsLocalCommandButtons,
-            activeScheduledTaskIDs: activeScheduledTaskIDs
+            activeScheduledTaskIDs: activeScheduledTaskIDs,
+            mediaBaseURL: mediaBaseURL
         )
         if fp == lastInputFingerprint {
             return
@@ -602,6 +619,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         currentLatestTurnReportToolCount = latestTurnReportToolCount
         currentAllowsLocalCommandButtons = allowsLocalCommandButtons
         currentActiveScheduledTaskIDs = activeScheduledTaskIDs
+        currentMediaBaseURL = mediaBaseURL
         renderCurrentMessages()
     }
 
@@ -623,9 +641,11 @@ final class AgentChatHistoryNSTextView: NSTextView {
         progressPlan: AgentPlan?,
         latestTurnReportToolCount: Int?,
         allowsLocalCommandButtons: Bool,
-        activeScheduledTaskIDs: Set<UUID>?
+        activeScheduledTaskIDs: Set<UUID>?,
+        mediaBaseURL: URL?
     ) -> Int {
         var hasher = Hasher()
+        hasher.combine(mediaBaseURL?.path)
         hasher.combine(isDark)
         hasher.combine(baseFontSize)
         hasher.combine(fontID)
@@ -644,6 +664,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             }
         }
         for m in messages {
+            // Same media fields + file status as the renderer's messageHash.
+            AgentTranscriptMediaFingerprint.combine(message: m, baseURL: mediaBaseURL, into: &hasher)
             hasher.combine(m.id)
             hasher.combine(m.role.rawValue)
             hasher.combine(m.content.count)
@@ -748,7 +770,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             progressPlan: currentProgressPlan,
             latestTurnReportToolCount: currentLatestTurnReportToolCount,
             allowsLocalCommandButtons: currentAllowsLocalCommandButtons,
-            activeScheduledTaskIDs: currentActiveScheduledTaskIDs
+            activeScheduledTaskIDs: currentActiveScheduledTaskIDs,
+            mediaBaseURL: currentMediaBaseURL
         )
         var hasher = Hasher()
         hasher.combine(attr.string)
@@ -1163,6 +1186,8 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if AgentTranscriptMediaLinkRouter.handleClick(in: self, at: charIndex) { return true }
+
         if let citation = textStorage.attribute(
             .agentChatHistoryAttachmentCitation,
             at: charIndex,
@@ -1204,6 +1229,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             value = nil
         }
         guard let value else { return false }
+        if AgentTranscriptMediaLinkRouter.isMediaLink(value) { return true }
         return [
             AgentChatHistoryCodeCopyChrome.linkValue,
             AgentChatHistoryCodeRunChrome.runLinkValue,

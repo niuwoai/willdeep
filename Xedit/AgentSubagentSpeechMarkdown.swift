@@ -142,6 +142,11 @@ enum AgentSubagentSpeechMarkdown {
                 size: baseSize
             )
 
+        case .media:
+            // Same reasoning as images: a status card names the clip, it
+            // does not play it.
+            return plain(block.media?.displayName ?? block.text, size: baseSize)
+
         case .paragraph:
             return inline(block.text, size: baseSize, weight: .regular)
         }

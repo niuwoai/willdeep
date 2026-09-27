@@ -771,6 +771,18 @@ enum AgentAssistantMarkdownRenderer {
                 placeholder.foregroundColor = .secondary
                 result += placeholder
 
+            case .media:
+                // Never a player here: this path rebuilds on every token, and
+                // rich SwiftUI content while streaming is what ran memory away
+                // before. The settled TextKit history mounts the real player.
+                appendSeparator()
+                var placeholder = AttributedString(
+                    AgentTranscriptMediaHistoryRenderer.streamingPlaceholderLabel(for: block.media)
+                )
+                placeholder.font = bodyFont
+                placeholder.foregroundColor = .secondary
+                result += placeholder
+
             case .table:
                 // GFM tables render as monospaced `cell │ cell` rows
                 // with a `─┼─` rule under the header — SwiftUI Text

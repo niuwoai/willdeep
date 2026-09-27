@@ -373,7 +373,8 @@ struct AgentChatTranscript: View {
                                     AgentScheduledTaskCardNavigation.open(cardID: taskID, in: appState)
                                 },
                                 scrollToUserMessageToken: minimapScrollToken,
-                                scrollToUserMessageID: minimapScrollUserMessageID
+                                scrollToUserMessageID: minimapScrollUserMessageID,
+                                mediaBaseURL: appState.agentTranscriptMediaBaseURL
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                                 .popover(isPresented: $showTurnReportPopover, arrowEdge: .top) {

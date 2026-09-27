@@ -315,7 +315,10 @@ private final class AgentImagePreviewWindowController: NSWindowController, NSWin
         imageID = attachment.id
         let image = Self.previewImage(for: attachment)
         let title = Self.windowTitle(for: attachment)
-        let content = AgentImagePreviewWindowContent(image: image, title: title)
+        let saveSource = AgentImageSaveSource(.attachment(attachment))
+        let content = AgentImagePreviewWindowContent(image: image, title: title) {
+            AgentImageSaveAction.presentSavePanel(for: saveSource, in: NSApp.keyWindow)
+        }
         let hostingView = NSHostingView(rootView: content)
 
         let window = NSWindow(
@@ -377,6 +380,7 @@ private struct AgentImagePreviewWindowContent: View {
 
     let image: NSImage?
     let title: String
+    let onSave: () -> Void
     @State private var zoom: CGFloat = 1
 
     var body: some View {
@@ -417,6 +421,13 @@ private struct AgentImagePreviewWindowContent: View {
             }
             .buttonStyle(.borderless)
             .help(L10n.ImagePreview.fitButton)
+            if image != nil {
+                Button(action: onSave) {
+                    Label(L10n.ImageSave.saveAs, systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.ImageSave.saveAs)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

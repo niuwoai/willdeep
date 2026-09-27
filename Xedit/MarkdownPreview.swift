@@ -46,6 +46,9 @@ struct MarkdownPreviewBlock: Equatable {
         /// alt text; `imageSource` carries the raw source string. Only
         /// local files actually render — see `MarkdownInlineImage`.
         case image
+        /// A standalone `![alt](clip.mp4)` or `[label](song.m4a)` line that
+        /// points at a local video / audio file. `media` carries the details.
+        case media
     }
 
     let kind: Kind
@@ -72,6 +75,8 @@ struct MarkdownPreviewBlock: Equatable {
     /// Raw source string for `.image` blocks — a path, `file://` URL, or
     /// remote URL exactly as the author wrote it. Nil for every other kind.
     var imageSource: String? = nil
+    /// The parsed reference for `.media` blocks. Nil for every other kind.
+    var media: MarkdownMediaReference? = nil
 }
 
 enum MarkdownPreviewParser {
@@ -176,6 +181,15 @@ enum MarkdownPreviewParser {
                 flushParagraph()
                 endListContext()
                 blocks.append(heading)
+                i += 1; continue
+            }
+
+            // Checked before images: `![](clip.mp4)` has image syntax but
+            // must play, not decode. Like images, only a whole line counts.
+            if let media = MarkdownInlineMedia.parseStandaloneMediaLine(trimmedLine) {
+                flushParagraph()
+                endListContext()
+                blocks.append(MarkdownPreviewBlock(kind: .media, text: media.label, media: media))
                 i += 1; continue
             }
 
@@ -612,6 +626,8 @@ struct MarkdownPreviewBlockView: View {
                 source: block.imageSource ?? "",
                 typography: typography
             )
+        case .media:
+            MarkdownMediaBlockView(media: block.media, typography: typography)
         }
     }
 

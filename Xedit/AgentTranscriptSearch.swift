@@ -40,7 +40,11 @@ nonisolated enum AgentTranscriptSearch {
                 range: range
             )
             guard match.location != NSNotFound, match.length > 0 else { break }
-            ranges.append(match)
+            // U+FFFC is a player / picture placeholder, not text: a hit that
+            // lands on one would highlight a video and count as a result.
+            if !containsAttachmentCharacter(nsText, in: match) {
+                ranges.append(match)
+            }
             searchLocation = match.location + match.length
         }
         return ranges
@@ -83,6 +87,15 @@ nonisolated enum AgentTranscriptSearch {
             attributedString: highlighted,
             matchRanges: ranges
         )
+    }
+
+    private static let attachmentCharacter = unichar(0xFFFC)
+
+    private static func containsAttachmentCharacter(_ text: NSString, in range: NSRange) -> Bool {
+        for index in range.location..<NSMaxRange(range) where text.character(at: index) == attachmentCharacter {
+            return true
+        }
+        return false
     }
 
     static func clampedActiveIndex(_ index: Int?, count: Int) -> Int? {

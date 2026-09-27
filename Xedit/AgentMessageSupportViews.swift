@@ -217,7 +217,8 @@ enum AgentCopyTextSanitizer {
               NSMaxRange(range) <= textStorage.length else {
             return nil
         }
-        let cleaned = sanitize(textStorage.attributedSubstring(from: range))
+        // Inline players come back as their Markdown line, not a cover image.
+        let cleaned = sanitize(AgentTranscriptCopySubstitution.restoring(textStorage.attributedSubstring(from: range)))
         let fullRange = NSRange(location: 0, length: cleaned.length)
         let data = documentType == .rtfd
             ? cleaned.rtfd(from: fullRange, documentAttributes: [:])

@@ -124,8 +124,11 @@ enum AgentChatHistoryRenderer {
     /// hash everything fresh — the cost is dominated by content bytes,
     /// which the render cache itself (one big NSAttributedString
     /// keyed by the full hash) prevents us from re-rendering anyway.
-    private static func messageHash(_ m: AgentMessage) -> Int {
+    private static func messageHash(_ m: AgentMessage, mediaBaseURL: URL?) -> Int {
         var hasher = Hasher()
+        // Inline media resolves against the file system: a clip appearing,
+        // vanishing or being re-encoded changes the render with no content edit.
+        AgentTranscriptMediaFingerprint.combine(message: m, baseURL: mediaBaseURL, into: &hasher)
         hasher.combine(m.id)
         hasher.combine(m.role.rawValue)
         hasher.combine(m.content)
@@ -275,7 +278,8 @@ enum AgentChatHistoryRenderer {
         progressPlan: AgentPlan? = nil,
         latestTurnReportToolCount: Int? = nil,
         allowsLocalCommandButtons: Bool = true,
-        activeScheduledTaskIDs: Set<UUID>? = nil
+        activeScheduledTaskIDs: Set<UUID>? = nil,
+        mediaBaseURL: URL? = nil
     ) -> NSAttributedString {
         let clampedSize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
         let resolvedLayoutWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(layoutWidth)
@@ -290,8 +294,9 @@ enum AgentChatHistoryRenderer {
         // 同一段文本在本地会话有「运行」按钮、在远端会话没有，两份结果
         // 不能共用一个缓存条目。
         hasher.combine(allowsLocalCommandButtons)
+        hasher.combine(mediaBaseURL?.path)
         for m in messages {
-            hasher.combine(messageHash(m))
+            hasher.combine(messageHash(m, mediaBaseURL: mediaBaseURL))
             // 定时任务的「打开 / 已完成」不在消息上,在例程表里:同一条消息
             // 在例程还在与已自完成两种状态下是两份渲染,不能共用缓存。
             if let card = m.scheduledTask {
@@ -346,7 +351,8 @@ enum AgentChatHistoryRenderer {
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount,
             allowsLocalCommandButtons: allowsLocalCommandButtons,
-            activeScheduledTaskIDs: activeScheduledTaskIDs
+            activeScheduledTaskIDs: activeScheduledTaskIDs,
+            mediaBaseURL: mediaBaseURL
         )
 
         // Critical section #2: insertion + LRU eviction. If a parallel
@@ -381,7 +387,8 @@ enum AgentChatHistoryRenderer {
         progressPlan: AgentPlan?,
         latestTurnReportToolCount: Int?,
         allowsLocalCommandButtons: Bool,
-        activeScheduledTaskIDs: Set<UUID>?
+        activeScheduledTaskIDs: Set<UUID>?,
+        mediaBaseURL: URL?
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         // Only the newest assistant/system message keeps its turn-progress
@@ -809,7 +816,8 @@ enum AgentChatHistoryRenderer {
                             codeBackgroundColor: codeBackgroundColor,
                             isDark: isDark,
                             layoutWidth: layoutWidth,
-                            allowsLocalCommandButtons: allowsLocalCommandButtons
+                            allowsLocalCommandButtons: allowsLocalCommandButtons,
+                            mediaBaseURL: mediaBaseURL
                         )
                     }
                 }
@@ -1510,7 +1518,8 @@ enum AgentChatHistoryRenderer {
         codeBackgroundColor: NSColor,
         isDark: Bool,
         layoutWidth: CGFloat,
-        allowsLocalCommandButtons: Bool
+        allowsLocalCommandButtons: Bool,
+        mediaBaseURL: URL?
     ) {
         // 这里**不**走 AgentLongTokenBreaker。它是给 SwiftUI Text 防卡死的，
         // TextKit 的 byWordWrapping 碰到超长单词会自己退回按字符断行：
@@ -1529,6 +1538,7 @@ enum AgentChatHistoryRenderer {
 
         var didAppendBlock = false
         var tableBlockIndex = 0
+        var mediaOrdinal = 0
         func appendBlockSeparator() {
             if didAppendBlock {
                 result.append(NSAttributedString(
@@ -1737,6 +1747,14 @@ enum AgentChatHistoryRenderer {
                     secondaryColor: secondaryColor,
                     layoutWidth: layoutWidth
                 )
+
+            case .media:
+                appendBlockSeparator()
+                AgentTranscriptMediaHistoryRenderer.appendMediaBlock(
+                    block.media, ordinal: mediaOrdinal, to: result, bodyFont: bodyFont,
+                    secondaryColor: secondaryColor, layoutWidth: layoutWidth, baseURL: mediaBaseURL
+                )
+                mediaOrdinal += 1
 
             case .table:
                 appendBlockSeparator()

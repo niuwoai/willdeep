@@ -201,6 +201,7 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
 
         super.init(window: window)
         window.delegate = self
+        textView.delegate = self
         keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: false)
         previousPageButton.target = self
         previousPageButton.action = #selector(showPreviousPage)
@@ -285,7 +286,11 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
     ) -> NSAttributedString {
         let result = NSMutableAttributedString(attributedString: AgentChatHistoryRenderer.render(
             messages: messages,
-            isDark: false
+            isDark: false,
+            mediaBaseURL: AgentTranscriptMediaResolver.localBaseURL(
+                workspaceLocation: session.workspaceLocation,
+                workspaceRootPath: session.workspaceRootPath
+            )
         ))
         let bodyFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let secondaryColor = NSColor.secondaryLabelColor
@@ -400,6 +405,7 @@ final class AgentSingleMessageReaderWindowController: NSWindowController, NSWind
 
         super.init(window: window)
         window.delegate = self
+        textView.delegate = self
         keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: false)
 
         textView.textStorage?.setAttributedString(Self.render(message: message))
