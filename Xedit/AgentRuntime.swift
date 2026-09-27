@@ -604,7 +604,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
             restoredPlan?.status = .approved
         }
         self.currentPlan = restoredPlan
-        self.currentGoal = session.currentGoal
+        // A verifier that died with the previous process leaves `.verifying`
+        // behind; put that candidate back into the verification queue.
+        self.currentGoal = session.currentGoal.map { AgentGoalVerificationRelaunchPolicy.normalizedForRestore($0) }
         self.goalRoadmap = session.goalRoadmap
         self.goalTurnRecoveryCheckpoint = session.goalTurnRecoveryCheckpoint
         let restoredGoalPlanningState = session.goalPlanningState?.normalizedForRestore(

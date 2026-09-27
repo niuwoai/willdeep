@@ -17,6 +17,8 @@ nonisolated enum AgentGoalLaunchRecoveryAction: Equatable {
     case restartPlanning
     case resumePhasePlanning
     case resumeExecution
+    /// Host verification of a completion candidate died with the process.
+    case resumeVerification
     case discardStaleCheckpoint
     /// The Goal was deliberately waiting (outage retry, backoff, compression
     /// retry): resume it if the wait is due, otherwise wait out the rest.
@@ -55,12 +57,21 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
             // The checkpoint is the only launch-time authority to restart an
             // executing Plan. Without it, the same shape may simply mean the
             // user pressed Stop and chose to leave the Plan unfinished.
-            return hasCheckpoint ? .resumeExecution : .none
+            if hasCheckpoint { return .resumeExecution }
+            return AgentGoalVerificationRelaunchPolicy.needsRecovery(goal) ? .resumeVerification : .none
         }
 
         if let plan = session.currentPlan, plan.status == .proposed {
             // Explicit Plan approval never survives as implied permission.
             return hasCheckpoint ? .discardStaleCheckpoint : .none
+        }
+
+        // An interrupted verification is its own durable checkpoint: Stop and
+        // every failure settle the candidate before returning, so only a dead
+        // process leaves it behind. Without this the finished Plan below
+        // falls through to "discard" and the Goal never completes acceptance.
+        if AgentGoalVerificationRelaunchPolicy.needsRecovery(goal) {
+            return .resumeVerification
         }
 
         if session.currentPlan == nil,
@@ -265,7 +276,7 @@ extension AppState {
                 restoredSession: liveSession
             )
 
-            if [.restartPlanning, .resumePhasePlanning, .resumeExecution].contains(liveAction),
+            if [.restartPlanning, .resumePhasePlanning, .resumeExecution, .resumeVerification].contains(liveAction),
                runtime.isResponding || runtime.isAwaitingProviderSlot || runtime.isCompressingContext
                 || runtime.requestTask != nil || !runtime.queuedMessages.isEmpty {
                 retryWhenIdle = true
@@ -332,6 +343,22 @@ extension AppState {
                 )
                 accepted = runtime.isResponding || runtime.isAwaitingProviderSlot
                 if accepted { resumedSessionIDs.append(runtime.id) }
+            case .resumeVerification:
+                guard !runtime.isResponding, !runtime.isAwaitingProviderSlot else { continue }
+                dispatchAgentMessage(
+                    for: runtime,
+                    text: AgentGoalLaunchRecoveryPolicy.verificationContinuationNotice(),
+                    images: [],
+                    source: .hostInstruction
+                )
+                accepted = runtime.isResponding || runtime.isAwaitingProviderSlot
+                if accepted {
+                    // One continuation per interruption; the resumed turn's
+                    // own goal-check re-enters host verification.
+                    runtime.currentGoal?.verification?.relaunchRecoveryPending = nil
+                    persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+                    resumedSessionIDs.append(runtime.id)
+                }
             }
         }
         return resumedSessionIDs

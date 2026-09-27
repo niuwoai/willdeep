@@ -16,6 +16,11 @@ nonisolated struct AgentGoalVerification: Codable, Equatable {
     var findings: [String] = []
     var receipts: [Receipt] = []
     var evidence: [Evidence] = []
+    /// Set when a restore found this candidate stuck in `.verifying` with no
+    /// verifier alive in this process and put it back to `.pending`. Launch
+    /// recovery owes the Goal one continuation for it and clears the mark
+    /// once that continuation is accepted. Optional so old sessions decode.
+    var relaunchRecoveryPending: Bool? = nil
 
     struct Receipt: Codable, Equatable {
         let criterionID: UUID

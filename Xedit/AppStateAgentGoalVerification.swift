@@ -29,9 +29,14 @@ extension AppState {
         let legacyChanged = captureAgentGoalEvaluationFromLatestMessage(for: runtime, finishReason: finishReason)
         guard runtime.session.dispatchTaskID == nil else { return legacyChanged }
         guard let candidate = runtime.currentGoal?.verification, candidate.phase == .pending else { return false }
+        // A restore elsewhere in this process must not reset a candidate
+        // this verifier still owns (AgentGoalVerificationRelaunch.swift).
+        AgentGoalVerificationInFlightRegistry.shared.begin(candidate.id)
+        defer { AgentGoalVerificationInFlightRegistry.shared.end(candidate.id) }
         do {
             try requireCurrentGoalCandidate(candidate, runtime: runtime)
             runtime.currentGoal?.verification?.phase = .verifying
+            runtime.currentGoal?.verification?.relaunchRecoveryPending = nil
             persistAgentSession(runtime: runtime)
             let location = runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
             guard case .local(let path)? = location else {
