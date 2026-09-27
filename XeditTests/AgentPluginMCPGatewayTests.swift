@@ -96,10 +96,12 @@ struct GatewayTempDirectory {
         )
     }
 
-    func writeEndpoint(pluginID: String, url: String, token: String) throws {
+    /// `extra` 是插件 0.32.0-rc2 起附带的 `host` / `pid` / `parentPID` 等字段。
+    func writeEndpoint(pluginID: String, url: String, token: String, extra: [String: Any] = [:]) throws {
         let directory = pluginDataRoot.appendingPathComponent(pluginID, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let data = try JSONSerialization.data(withJSONObject: ["url": url, "token": token])
+        let object = extra.merging(["url": url, "token": token]) { _, fixed in fixed }
+        let data = try JSONSerialization.data(withJSONObject: object)
         try data.write(to: directory.appendingPathComponent("mcp-http.json"))
     }
 
@@ -135,13 +137,17 @@ enum GatewayTestSupport {
     static func router(
         host: GatewayFakeHost = GatewayFakeHost(),
         forwarder: GatewayFakeForwarder = GatewayFakeForwarder(),
-        temp: GatewayTempDirectory
+        temp: GatewayTempDirectory,
+        gatewayProcessID: Int32 = ProcessInfo.processInfo.processIdentifier
     ) -> AgentPluginMCPGatewayRouter {
         var router = AgentPluginMCPGatewayRouter(
             token: token,
             host: host,
             forwarder: forwarder,
-            endpoints: AgentPluginMCPGatewayEndpointReader(pluginDataRoot: temp.pluginDataRoot)
+            endpoints: AgentPluginMCPGatewayEndpointReader(
+                pluginDataRoot: temp.pluginDataRoot,
+                gatewayProcessID: gatewayProcessID
+            )
         )
         router.makeSessionID = { "session-fixed" }
         return router
@@ -621,5 +627,155 @@ struct AgentPluginMCPGatewayDispatchTests {
         try temp.writeEndpoint(pluginID: "p", url: "http://127.0.0.1:50001/mcp", token: "")
         #expect(reader.endpoint(pluginID: "p") == nil)
         #expect(reader.endpoint(pluginID: "../p") == nil)
+    }
+}
+
+// MARK: - 连接文件归属（契约修订 1）
+
+/// 2026-09-27：WillDeep macOS 与 willdeep-rs 拉起的两个插件进程写同一份
+/// mcp-http.json，macOS 网关照着转发进了 willdeep-rs 拉起的那个，`video.generate`
+/// 报「Video API key is not configured.」。插件 0.32.0-rc2 起在文件里写
+/// `parentPID`（拉起它的宿主进程）；≤ 0.32.0-rc1 的插件被 willdeep-rs 拉起时仍写
+/// macOS 这份，只能靠网关按 `parentPID` 认出来。
+@Suite("插件 MCP 网关：连接文件的拉起者（parentPID）")
+struct AgentPluginMCPGatewayEndpointOwnershipTests {
+    private static let pluginID = "willdeep-video-studio"
+    private static let gatewayPID: Int32 = 4242
+    private static let otherHostPID: Int32 = 5151
+    private static let callBody = #"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"video.generate","arguments":{}}}"#
+
+    private func reader(_ temp: GatewayTempDirectory, gatewayProcessID: Int32 = Self.gatewayPID) -> AgentPluginMCPGatewayEndpointReader {
+        AgentPluginMCPGatewayEndpointReader(pluginDataRoot: temp.pluginDataRoot, gatewayProcessID: gatewayProcessID)
+    }
+
+    private func writeEndpoint(
+        _ temp: GatewayTempDirectory,
+        port: Int = 50_001,
+        token: String = "plugin-token",
+        host: String = "willdeep-macos",
+        parentPID: Any
+    ) throws {
+        try temp.writeEndpoint(
+            pluginID: Self.pluginID,
+            url: "http://127.0.0.1:\(port)/mcp",
+            token: token,
+            extra: ["host": host, "pid": 60_001, "parentPID": parentPID]
+        )
+    }
+
+    @Test("parentPID 是网关所在进程：照常读出 url 和 token，host / pid 等附加字段不影响")
+    func acceptsOwnPlugin() throws {
+        let temp = GatewayTempDirectory()
+        defer { temp.remove() }
+        try writeEndpoint(temp, parentPID: Self.gatewayPID)
+        let endpoint = try #require(reader(temp).endpoint(pluginID: Self.pluginID))
+        #expect(endpoint.url.absoluteString == "http://127.0.0.1:50001/mcp")
+        #expect(endpoint.token == "plugin-token")
+    }
+
+    @Test("parentPID 是别的进程（别的宿主拉起的插件写的）：当作没公布")
+    func ignoresOtherHostsPlugin() throws {
+        let temp = GatewayTempDirectory()
+        defer { temp.remove() }
+        try writeEndpoint(temp, host: "willdeep-rs", parentPID: Self.otherHostPID)
+        #expect(reader(temp).endpoint(pluginID: Self.pluginID) == nil)
+        // host 字段不作数：自称 willdeep-macos、拉起者却不是本进程，同样不认。
+        try writeEndpoint(temp, host: "willdeep-macos", parentPID: Self.otherHostPID)
+        #expect(reader(temp).endpoint(pluginID: Self.pluginID) == nil)
+    }
+
+    @Test("不带 parentPID 的文件（插件 ≤ 0.32.0-rc1）照旧接受")
+    func acceptsFilesWithoutParentPID() throws {
+        let temp = GatewayTempDirectory()
+        defer { temp.remove() }
+        try temp.writeEndpoint(pluginID: Self.pluginID, url: "http://127.0.0.1:50001/mcp", token: "t")
+        #expect(reader(temp).endpoint(pluginID: Self.pluginID)?.token == "t")
+        try temp.writeEndpoint(pluginID: Self.pluginID, url: "http://127.0.0.1:50001/mcp", token: "t",
+                               extra: ["host": "willdeep-macos", "pid": 60_001])
+        #expect(reader(temp).endpoint(pluginID: Self.pluginID)?.token == "t")
+    }
+
+    @Test("parentPID 不是能核对的整数：字符串、布尔、小数、null、数组、超出 pid 范围都不转发")
+    func rejectsUnverifiableParentPID() throws {
+        let temp = GatewayTempDirectory()
+        defer { temp.remove() }
+        // 2^32 + 4242：按位截断会恰好撞上 4242。
+        let unverifiable: [Any] = ["4242", 4242.5, NSNull(), [4242], Int64(4_294_971_538), -1]
+        for value in unverifiable {
+            try writeEndpoint(temp, parentPID: value)
+            #expect(reader(temp).endpoint(pluginID: Self.pluginID) == nil, "\(value)")
+        }
+        // JSON 的 true 读回来是 NSNumber，不能被当成 pid 1。
+        try writeEndpoint(temp, parentPID: true)
+        #expect(reader(temp, gatewayProcessID: 1).endpoint(pluginID: Self.pluginID) == nil)
+    }
+
+    @Test("默认按当前进程核对 parentPID")
+    func defaultsToCurrentProcess() throws {
+        let temp = GatewayTempDirectory()
+        defer { temp.remove() }
+        let current = ProcessInfo.processInfo.processIdentifier
+        let reader = AgentPluginMCPGatewayEndpointReader(pluginDataRoot: temp.pluginDataRoot)
+        #expect(reader.gatewayProcessID == current)
+        try writeEndpoint(temp, parentPID: current)
+        #expect(reader.endpoint(pluginID: Self.pluginID) != nil)
+        try writeEndpoint(temp, parentPID: current &+ 1)
+        #expect(reader.endpoint(pluginID: Self.pluginID) == nil)
+    }
+
+    @Test("复现 2026-09-27：连接文件是 willdeep-rs 拉起的插件写的，不转过去，经 stdio 中转回自己的插件")
+    func relaysInsteadOfForwardingToOtherHostsPlugin() async throws {
+        let temp = GatewayTempDirectory()
+        defer { temp.remove() }
+        try writeEndpoint(temp, host: "willdeep-rs", parentPID: Self.otherHostPID)
+        let host = GatewayFakeHost()
+        host.relayResult = .success(#"{"content":[{"type":"text","text":"submitted"}]}"#)
+        let forwarder = GatewayFakeForwarder()
+        let router = GatewayTestSupport.router(host: host, forwarder: forwarder, temp: temp, gatewayProcessID: Self.gatewayPID)
+
+        let outcome = await router.handle(GatewayTestSupport.request(body: Self.callBody))
+        #expect(outcome.disposition == .relayed)
+        #expect(forwarder.calls.isEmpty)
+        #expect(host.ensureCalls == ["willdeep-video-studio/video-studio"])
+        #expect(host.relayCalls.map(\.method) == ["tools/call"])
+        #expect(GatewayTestSupport.json(outcome.response)?["id"] as? Int == 9)
+    }
+
+    @Test("连接文件是自己拉起的插件写的：照常转发，带插件自己的 token")
+    func forwardsToOwnPlugin() async throws {
+        let temp = GatewayTempDirectory()
+        defer { temp.remove() }
+        try writeEndpoint(temp, parentPID: Self.gatewayPID)
+        let host = GatewayFakeHost()
+        let ok = Data(#"{"jsonrpc":"2.0","id":9,"result":{}}"#.utf8)
+        let forwarder = GatewayFakeForwarder([.success(.init(status: 200, contentType: "application/json", body: ok))])
+        let router = GatewayTestSupport.router(host: host, forwarder: forwarder, temp: temp, gatewayProcessID: Self.gatewayPID)
+
+        let outcome = await router.handle(GatewayTestSupport.request(body: Self.callBody))
+        #expect(outcome.disposition == .forwarded)
+        #expect(outcome.response.body == ok)
+        #expect(forwarder.calls.map(\.token) == ["plugin-token"])
+        #expect(host.relayCalls.isEmpty)
+    }
+
+    @Test("重读时文件已被别的宿主拉起的插件改写：不转过去，退回 stdio 中转")
+    func rereadRejectsOtherHostsRewrite() async throws {
+        let temp = GatewayTempDirectory()
+        defer { temp.remove() }
+        try writeEndpoint(temp, port: 50_001, token: "own", parentPID: Self.gatewayPID)
+        let host = GatewayFakeHost()
+        let forwarder = GatewayFakeForwarder([.failure(AgentPluginMCPGatewayForwardError.connectionRefused)])
+        // 自己的插件刚退出，另一个宿主拉起的插件抢着写了同一份文件。
+        forwarder.beforeEachCall = { index in
+            if index == 0 {
+                try? writeEndpoint(temp, port: 50_002, token: "other", host: "willdeep-rs", parentPID: Self.otherHostPID)
+            }
+        }
+        let router = GatewayTestSupport.router(host: host, forwarder: forwarder, temp: temp, gatewayProcessID: Self.gatewayPID)
+
+        let outcome = await router.handle(GatewayTestSupport.request(body: Self.callBody))
+        #expect(outcome.disposition == .relayed)
+        #expect(forwarder.calls.map(\.token) == ["own"])
+        #expect(host.relayCalls.count == 1)
     }
 }

@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import os
 
 /// 网关对外暴露的一个插件 MCP 服务。
 nonisolated struct AgentPluginMCPGatewayServer: Equatable, Sendable {
@@ -63,10 +64,16 @@ nonisolated protocol AgentPluginMCPGatewayForwarder: Sendable {
 /// 读插件数据目录下的 `mcp-http.json`。
 nonisolated struct AgentPluginMCPGatewayEndpointReader: Sendable {
     static let fileName = "mcp-http.json"
+    static let parentPIDKey = "parentPID"
     private static let maximumFileBytes = 64 * 1024
+    /// 文件是插件写的，记日志时字段截断，免得一份怪文件把日志撑满。
+    private static let loggedFieldLimit = 32
 
     /// `plugin-data` 目录；每个插件的数据目录是它下面的 `<pluginID>/`。
     let pluginDataRoot: URL
+    /// 网关所在进程，也就是拉起插件的进程：`AgentMCPBridge` 直接 spawn 插件
+    /// `mcp.json` 里的命令（短剧工坊是 `/usr/bin/ruby`），中间没有 shell。
+    var gatewayProcessID: Int32 = ProcessInfo.processInfo.processIdentifier
 
     func endpoint(pluginID: String) -> AgentPluginMCPGatewayEndpoint? {
         guard AgentPluginMCPGatewayRouter.isValidPluginID(pluginID) else { return nil }
@@ -82,7 +89,31 @@ nonisolated struct AgentPluginMCPGatewayEndpointReader: Sendable {
               let url = Self.loopbackURL(rawURL) else {
             return nil
         }
+        // 契约修订 1：文件写明了拉起者、却不是本进程，就是别的宿主（如 willdeep-rs）
+        // 拉起的插件写的。转过去会落进一个没有本宿主注入的设置、反向请求也发回
+        // 别的宿主的进程（2026-09-27「Video API key is not configured.」），所以当作
+        // 没公布，走 stdio 中转回到自己拉起的插件。不带这个字段的旧文件照旧接受。
+        if let rawParentPID = object[Self.parentPIDKey],
+           !Self.parentPID(rawParentPID, matches: gatewayProcessID) {
+            let parentPID = String(String(describing: rawParentPID).prefix(Self.loggedFieldLimit))
+            let host = String((object["host"] as? String ?? "-").prefix(Self.loggedFieldLimit))
+            AgentPluginMCPGateway.log.info(
+                "plugin endpoint ignored: plugin=\(pluginID, privacy: .public) parentPID=\(parentPID, privacy: .public) gatewayPID=\(gatewayProcessID, privacy: .public) host=\(host, privacy: .public)"
+            )
+            return nil
+        }
         return AgentPluginMCPGatewayEndpoint(url: url, token: token)
+    }
+
+    /// `parentPID` 必须是等于 `processID` 的整数；布尔、小数、字符串、null 都不算，
+    /// 认不出拉起者的文件同样不转发。
+    static func parentPID(_ raw: Any, matches processID: Int32) -> Bool {
+        guard let number = raw as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              let value = Int32(exactly: number.doubleValue) else {
+            return false
+        }
+        return value == processID
     }
 
     /// 契约：只认 `http://127.0.0.1:<端口>/…`。这份文件是插件写的，宿主不能

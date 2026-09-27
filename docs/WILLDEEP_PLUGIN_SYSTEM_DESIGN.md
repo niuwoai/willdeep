@@ -302,6 +302,8 @@ MCP 客户端（`AgentMCPBridge` 的连接池）拉起：页面 `executeCommand`
   `initialize`、`ping`、通知由网关自己应答；其余请求先经宿主 MCP 客户端发一次
   `tools/list` 确保插件已起（顺手刷新聊天用的插件工具目录），再转发到插件自己公布的
   `plugin-data/<pluginID>/mcp-http.json` 入口；插件没公布入口时经 stdio 中转。
+  这份文件带 `parentPID` 却不是本进程（别的宿主拉起的插件写的）时，同样按没公布处理
+  （1.405.0-rc7，契约修订 1）。
 - 插件侧无需任何改动。设置 → MCP 的插件服务行提供「复制 Claude Code 连接命令」。
 
 契约与 macOS 实现备注见 [decisions/0001-plugin-mcp-gateway.md](decisions/0001-plugin-mcp-gateway.md)。

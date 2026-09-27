@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.405.0-rc7 - 2026-09-27
+
+### Fixed
+
+- **插件 MCP 网关不再把请求转给别的宿主拉起的插件进程。** 2026-09-27 WillDeep 和 willdeep-rs（`willdeep --web`）同时开着，两边拉起的短剧工坊进程写同一份 `plugin-data/willdeep-video-studio/mcp-http.json`，后写的赢。网关照着这份文件转发，请求落进了 willdeep-rs 拉起的那个进程，`video.generate` 报「Video API key is not configured.」：Key 是 WillDeep 注入给自己拉起的进程的插件设置。插件 0.32.0-rc2 起按宿主分开写连接文件，文件里多了 `host`、`pid`、`parentPID` 三个字段（契约修订 1）。
+  - 宿主这边：`AgentPluginMCPGatewayEndpointReader` 读到 `parentPID` 时，要求它是等于本进程 pid 的整数，否则当作插件没公布 HTTP 入口，经 stdio 中转回到自己拉起的插件。「没送到」之后重读的那一次也按这条判断。不带 `parentPID` 的文件（插件 ≤ 0.32.0-rc1）照旧接受。被略过时记一行 `plugin endpoint ignored`，带插件 ID、文件里的 `parentPID` 和 `host`、本进程 pid，不记 token。
+  - `parentPID` 确实等于 App 的 pid，这点核对过：`AgentMCPBridge` 用 `Process` 直接执行插件 `mcp.json` 里的命令，短剧工坊是 `/usr/bin/ruby`（Mach-O 本体，不是转发壳），中间没有 shell。本机 `ps` 看到的插件父进程就是 `/Applications/WillDeep.app/Contents/MacOS/WillDeep`。
+  - 这条检查挡不住的情况：willdeep-rs 拉起的旧插件（≤ 0.32.0-rc1）仍会写 WillDeep 读的那份文件，而且不带 `parentPID`，会被放行。要等 willdeep-rs 那边装的插件升到 0.32.0-rc2 才算堵上。
+- 文档：`docs/decisions/0001-plugin-mcp-gateway.md` 同步了插件仓库的修订 1，macOS 实现备注里写明这条检查能挡住和挡不住的情况。原件「宿主侧建议」的标题写着「尚未实现」，副本改成注明 macOS 已实现第 1 条。`docs/WILLDEEP_PLUGIN_SYSTEM_DESIGN.md`、`docs/PLUGIN_DEVELOPER_GUIDE.md` 各补了一句。
+- 内置短剧工坊仍是 0.32.0-rc1：插件 0.32.0-rc2 还没合进插件仓库 main，也没打 tag。下次挪 `PluginExamples/video-studio` 必须挪到 v0.32.0-rc2 或更新，WillDeep 自己拉起的插件才会写 `parentPID`。
+- 测试：`AgentPluginMCPGatewayTests.swift` 新增套件「连接文件的拉起者（parentPID）」，共 8 项。读取器层面：`parentPID` 是本进程时照常读出，host / pid 等附加字段不影响；是别的进程时读不出，自称 `willdeep-macos` 也不例外；不带 `parentPID` 的文件照旧接受；字符串、小数、null、数组、-1、2^32+4242（按位截断会撞上）读不出，JSON 的 `true` 也不会被当成 pid 1；默认按 `ProcessInfo` 的 pid 核对。路由层面：复现当日现场，文件由 willdeep-rs 拉起的插件写入时不调转发器、经 stdio 中转并保留 id；文件是自己的插件写的时照常转发，带插件的 token；第一次连接被拒后文件被别的宿主拉起的插件改写，重读后不转过去，退回 stdio。
+  - `ruby scripts/run_tests_fast.rb` 跑网关 5 个套件和 MCP、插件工具相关的 6 个套件（`AgentMCPHostRequestsTests`、`AgentMCPBridgeCoreTests`、`AgentMCPResultRenderingTests`、`AgentMCPServerDirectoryTests`、`AgentPluginMCPToolCatalogTests`、`AgentPluginMCPToolApprovalTests`），共 99 项通过（原 91 项加新增 8 项）。退出码 0，日志和 `report.json` 的计数一致，日志里逐项核对过新增的 8 项确实跑了。
+  - 反验：把检查临时改成读一个不存在的键，只跑新套件，8 项里 5 项失败（16 处断言），正好是该拦却放行的 5 项；另外 3 项是接受的情形，照常通过。恢复代码后 11 个套件又跑了一遍，99 项通过。
+  - 没做的：全量 XeditTests 没有在本地跑，也没有同时开着 WillDeep 和 willdeep-rs 复现现场。
+
 ## 1.405.0-rc6 - 2026-09-27
 
 ### Changed
