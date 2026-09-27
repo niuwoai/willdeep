@@ -29,6 +29,9 @@ extension AppState {
         source: AgentMessageSource = .operatorInput
     ) {
         if source != .operatorInput && dispatchContinuationIsSuspended(runtime) { return }
+        // A message — the user's or the host's — supersedes a Goal wait, even
+        // one that has to queue for a provider slot first.
+        cancelGoalWake(for: runtime, reason: "dispatch")
         runtime.currentTurnPlanningOnly = source == .operatorInput
             && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
         // Slash-staged delegation directive applies to exactly this turn.

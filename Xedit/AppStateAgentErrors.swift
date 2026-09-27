@@ -25,6 +25,14 @@ nonisolated enum AgentTransientRetryLane: Equatable, Sendable {
     case unattended
 
     static let goalDelayNanoseconds: UInt64 = 3_000_000_000
+    #if DEBUG
+    /// Test seam for suites that drive a real Goal turn through its in-turn
+    /// retries (AgentGoalOvernightResilienceTests): a failing turn otherwise
+    /// sleeps 5 × 3 real seconds before the Goal-level wait takes over.
+    /// Task-local, so the unstructured turn Tasks a test starts inherit it
+    /// and parallel suites never see it.
+    @TaskLocal static var testDelayOverrideNanoseconds: UInt64?
+    #endif
     /// 5s, 15s, 45s, 1m30s, 2m30s — ≈5 minutes of coverage in total.
     static let unattendedDelaysNanoseconds: [UInt64] = [
         5_000_000_000,
@@ -445,6 +453,9 @@ extension AppState {
         runtime: AgentRuntime,
         attempt: Int
     ) -> UInt64 {
+        #if DEBUG
+        if let override = AgentTransientRetryLane.testDelayOverrideNanoseconds { return override }
+        #endif
         if Self.isTLSHandshakeError(error) {
             return Self.tlsHandshakeRetryDelayNanoseconds
         }
@@ -467,7 +478,7 @@ extension AppState {
             && (message.reasoningContent ?? "").isEmpty
     }
 
-    static func isTLSHandshakeError(_ error: Error) -> Bool {
+    nonisolated static func isTLSHandshakeError(_ error: Error) -> Bool {
         guard let urlError = error as? URLError else { return false }
         switch urlError.code {
         case .secureConnectionFailed, .serverCertificateUntrusted,
@@ -481,6 +492,12 @@ extension AppState {
     }
 
     func isTransientAgentNetworkError(_ error: Error) -> Bool {
+        Self.isTransientProviderError(error)
+    }
+
+    /// The one transient classification, shared by the in-turn retry above
+    /// and the Goal-level wait (`AgentGoalWakePolicy.isGoalRetryable`).
+    nonisolated static func isTransientProviderError(_ error: Error) -> Bool {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .timedOut, .networkConnectionLost, .notConnectedToInternet,

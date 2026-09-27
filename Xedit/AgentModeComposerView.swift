@@ -79,6 +79,10 @@ struct AgentChatComposer: View {
                 if appState.shouldShowComposerGoalCard, let goal = appState.agentCurrentGoal {
                     AgentComposerGoalCard(goal: goal)
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                    if let wake = goal.scheduledWake {
+                        AgentComposerGoalWakeNotice(wake: wake)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                    }
                 }
 
                 if let foregroundWorker = appState.foregroundWorkerCall {

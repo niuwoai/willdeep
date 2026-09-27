@@ -20,7 +20,8 @@ extension AppState {
         if session.id == callerID || session.id == activeAgentSessionID { return "active_session" }
         if session.isPinned { return "pinned" }
         if session.presentationScope != .workspace { return "dedicated_workflow" }
-        if session.lastTurnFailure != nil || session.goalTurnRecoveryCheckpoint != nil { return "awaiting_attention" }
+        if session.lastTurnFailure != nil || session.goalTurnRecoveryCheckpoint != nil
+            || session.currentGoal?.scheduledWake != nil { return "awaiting_attention" }
         if pendingDispatchQueue.contains(where: { $0.runtimeID == session.id }) { return "queued_dispatch" }
         if !agentJobRegistry.aliveJobs(forRuntime: session.id).isEmpty
             || agentJobRegistry.pendingCompletionCount(forRuntime: session.id) > 0

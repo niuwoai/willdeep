@@ -194,9 +194,12 @@ extension AppState {
         )
     }
 
+    /// A Goal waiting to retry is still running: the card shows pause, and
+    /// pause (Stop) is what takes the wait down.
     var isAgentGoalExecutionActive: Bool {
         activeRuntime?.isResponding == true
             || activeRuntime?.isAwaitingProviderSlot == true
+            || activeRuntime?.currentGoal?.scheduledWake != nil
     }
 
     var shouldShowGoalRunningStatusBar: Bool {

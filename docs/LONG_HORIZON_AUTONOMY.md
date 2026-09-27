@@ -1,6 +1,6 @@
 # 长程自主执行设计（long-horizon.v1）
 
-> Last updated: 2026-08-22 | 状态：**部分落地**（XA1/XA2 与 RA1 已进代码，其余仍为设计草案；§7 假设 1–3 已按默认值实现）
+> Last updated: 2026-09-28 | 状态：**部分落地**（XA1/XA2 与 RA1 已进代码；§2.2 退避真等待、§2.4 Goal 级等待重试、XA4 的睡眠抑制与唤醒补跑、§3.1 单段墙钟可配已于 2026-09 落地；其余仍为设计草案；§7 假设 1–3、5 已按默认值实现）
 > 适用范围：Xedit（WillDeep macOS App，本仓库，1.284.0-rc4）与 willdeep-rs（CLI/Runtime，`~/Sites/willdeep-rs`，0.39.0-rc3）
 > 落地进度见 §6.1 / §6.2 的「状态」列；实测摩擦数据见 [AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md](AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md)。
 > 本文件是双端共享的 canonical 规范；willdeep-rs 侧的引用与落地映射见其 `docs/LONG_HORIZON_AUTONOMY.md`。
@@ -77,6 +77,8 @@
 | 3–4 | 只读对账 | 强制一轮 reconciliation：封锁 write / danger 工具（复用现有 `allowsToolRiskDuringProgressReconciliation`），要求模型用 git / 文件系统实际状态核对清单，纠正虚假勾选或遗漏 |
 | 5+ | 退避重试 | 指数等待（默认 1 / 5 / 15 分钟，上限 15 分钟）后重试；等待期间不占用 provider 槽 |
 
+> **5+ 档已落地（2026-09）。** 此前 `.backoff` 档只升级话术、续推照发不误；现在 `prepareNextAgentGoalPlanningCycleIfNeeded` 与 `continueGoalOnBudgetInsteadOfRoundLimit` 在 `.backoff` 档把续推提示词挂到一个真等待上（`AppStateAgentGoalWakes.swift` 的 `deferGoalContinuationForBackoff`）：第 5 轮无进展等 1 分钟、第 6 轮 5 分钟、第 7 轮起 15 分钟。等待是持久化在 Goal 上的 `AgentGoalScheduledWake`（到期时间、次数、要发的提示词），不占 provider 槽、不占回合；Stop 立即取消；**任何一个回合开始都取消等待**——用户发消息、后台任务完成唤醒、点重试，统统算进展事件。与原稿的偏差：① 无进展轮次计数仍是 runtime 级（重启后从第 1 档重新数），但已经挂上的等待本身跨重启存活；② 这套等待机制同时服务 §2.4 的 provider 故障与压缩失败，三者共用 1 / 5 / 15 分钟梯子（`AgentGoalWakePolicy.retryDelays`）。
+
 **进展证据的定义沿用并扩展 `ProgressEvidence`**（`AgentContextBuilder.swift:1346`）：本轮有工具成功执行、或有后台 job / 子代理存活、或清单勾选状态发生变化，三者任一即算活跃。「在等一个长 CI」因此天然不会进入退避——这正是现有硬暂停最常见的误伤场景。
 
 ### 2.3 continuation steering 的内容契约
@@ -90,6 +92,15 @@
 
 第 4 段是关键：长程运行中最常见的失败不是模型拒绝干活，而是模型用一段漂亮的总结冒充进展。
 
+### 2.4 Goal 级等待重试（2026-09 落地，原稿未列）
+
+原稿只管「模型想停」，没管「provider 不让跑」。实测一夜无人值守的 Goal 最常见的死法是后者：回合内的瞬时重试只有 5 次 × 3 秒，断网或 provider 抽风超过约 15 秒，回合报错结束，恢复检查点被清掉，Goal 就此停住。现在：
+
+- **触发**：Goal 回合的 provider 错误属于瞬时分类（复用回合内同一套：408 / 429 / 5xx、断网、超时、空流、停流、TLS），且回合内重试已经用完。分类另外剔掉只是「长得像瞬时」的：响应体带余额 / 配额 / 欠费 / 审核标记的 429 或 5xx（`AgentGoalWakePolicy.terminalProviderBodyMarkers`），以及上下文超限。鉴权失败、400、余额不足、内容审核等照旧报错停下。
+- **行为**：不出错误卡，不结束 Goal；按 1 / 5 / 15 / 15 … 分钟等待后发一条宿主续推指令重新发起回合，直到墙钟预算耗尽为止。到期时若墙钟已尽，回合自己的预算闸把请求转成有序收尾（软停），不另写一套。连续失败次数（`AgentGoal.consecutiveTransientFailures`）只在 provider 真的回应了一个 Goal 回合之后归零。
+- **不变量**：等待期间不占 provider 槽；恢复检查点保留（等待中崩溃仍能恢复）；Stop / 暂停立即取消等待且不会被任何唤醒拉起；用户发消息则取消等待走正常用户回合。只作用于原生执行器、非调度台节点的 Goal；调度台节点仍由其调度器与 unattended 车道负责。
+- **界面**：Goal 卡片下方一行「服务暂时不可用，将在 X 分钟后自动重试（第 N 次）」，悬停显示原始错误摘要；卡片的播放/暂停键在等待期显示为暂停，按下即取消等待。
+
 ## 3. 预算与软停
 
 ### 3.1 预算维度
@@ -98,7 +109,7 @@
 
 | 维度 | 默认值 | 说明 |
 |---|---|---|
-| `wallClock` | 4 小时/段（可配置至 72 小时） | 从 Goal 进入执行态起算，暂停期间不计；跨重启累计 |
+| `wallClock` | 4 小时/段（可配置至 72 小时） | 从 Goal 进入执行态起算，暂停期间不计；跨重启累计。**配置入口已落地（2026-09）**：设置 → Agent → 目标「单段运行时长上限」，1 / 2 / 4 / 8 / 12 / 24 小时，默认 4，存 `AppDefaults`（`AgentGoalRunSettings`）。新 Goal 与按「继续」开的新段取当前设置；已在跑的段保持开段时的上限。偏差：上限只给到 24 小时而非 72——超过一天的无人值守应当分段，每段有交接快照 |
 | `tokens` | 无默认上限（可配置） | 累计 prompt + completion，锚定 provider 报告的真实用量而非本地估算 |
 | `cost` | 无默认上限（可配置） | 依赖 `COST_ENGINE_DESIGN.md` 落地；未落地前该维度为空，不阻塞其余两维 |
 
@@ -192,7 +203,7 @@ Xedit 目前有三个互不相通的「清单」，长程运行中会让用户�
 
 | 项 | 现状 | 措施 |
 |---|---|---|
-| 睡眠抑制 | **完全没有**（`beginActivity` / `IOPMAssertion` 在 `Xedit/*.swift` 中零命中），Mac 一睡循环停摆，且主循环没有 `AgentRoutineScheduler` 那样的 catch-up | Goal 执行期间持有 `ProcessInfo.beginActivity(.idleSystemSleepDisabled)`，暂停 / 软停即释放；唤醒后补一次 catch-up 扫描 |
+| 睡眠抑制 | **已落地（2026-09）**。此前完全没有（`beginActivity` / `IOPMAssertion` 零命中），Mac 一睡循环停摆，主循环也没有 catch-up | 任一 Goal 执行中（回合进行、排队等槽、压缩、§2.2 / §2.4 的等待）就持有 `ProcessInfo.beginActivity(options: [.idleSystemSleepDisabled])`，停止 / 暂停 / 软停 / 完成即释放；进程内只有一个活动（`AgentSleepInhibitor`），每个 AppState 在上面只占一把钥匙（`AgentSleepInhibitionLedger`），自己按「正在执行的 Goal 全集」同步——重复同步是空操作，两个窗口不会互相释放，30 秒调度节拍兜底同步，漏掉的释放最多滞留一个节拍。不禁止显示器睡眠，不对抗合盖。唤醒：监听 `NSWorkspace.didWakeNotification`，按持久化的墙钟到期时间补跑——已到期的立即触发、未到期的按余量重挂、同一个等待只触发一次；计时器睡在连续时钟上，30 秒节拍同时兜底漏掉的唤醒通知。重启时由 Goal 启动恢复接手（新增第六态 `restoreScheduledWake`，优先于检查点） |
 | roadmap 续接 | 封顶 6 phase × 6 步 = 36 步（`AgentPlanGoalModels.swift` 的 `AgentGoalRoadmap.maximumPhaseCount` / `maximumStepsPerPhase`），跑满即无路可走，只能用户改 Goal | phase 全部完成但清单未尽时，归档已完成 phase 到 goal-teams 归档目录，追加下一批 phase；Goal 不因 roadmap 满而失败 |
 | 工具轮上限 | 单 turn 256 轮（`AppState.swift:17`），撞顶给 banner 后停 | 撞顶不再是终态：走 §2 续推判定，预算未尽则开新 turn 继续 |
 | 重启可续 | Xedit 有 checkpoint 五态恢复；**rs 侧动过工具的任务一律 `Interrupted`** | rs 侧改为由计划态驱动恢复（§6.2 RA4），而非 turn 重放 |
@@ -206,7 +217,7 @@ Xedit 目前有三个互不相通的「清单」，长程运行中会让用户�
 | XA1 | 续推契约：硬暂停降级为退避阶梯；四出口判定；continuation steering 四段内容契约。**新逻辑落独立文件**（如 `AgentGoalContinuationBudget.swift`），不回塞 loop / planning 主文件 | `AgentContextBuilder.swift:1333-1440`（现策略）、`AppStateAgentGoalPlanning.swift:663`（硬暂停）、`AppStateAgentLoop.swift:649`（turn 局部计数）、`:1301-1345`（续推决策点） |
 | XA2 | `AgentGoalExecutionBudget`：wall-clock + token 两维先行；软停状态与状态快照；后台完成事件自动续期；Composer 补「续期并继续」动作 | `AppStateAgentLoop.swift:305-362`（后台唤醒链路）、`AgentModeComposerView.swift`（恢复入口）、`AppStateAgentContextCompression.swift:92`（真实 usage 锚定惯例） |
 | XA3 **（已落地 1.286.0-rc1，`checklist`/`evidence` 除外）** | `update_plan` 工具；围栏块降级为兼容路径；三套清单归一 | `AgentToolRegistry.swift`（工具注册）、`AgentContextBuilder.swift:951`（现解析器）、`AppStateAgentSessions.swift:619/779/804`（捕获入口）、`BundledSkills/todo/SKILL.md` |
-| XA4 | 多天工程包：睡眠抑制 + 唤醒 catch-up；roadmap 续接；256 轮撞顶改为可续；成本维度接 COST_ENGINE 最小版 | `AgentPlanGoalModels.swift`（roadmap 上限）、`AppState.swift:17`（轮上限）、`AgentRoutineScheduler.swift`（catch-up 参照）、`docs/COST_ENGINE_DESIGN.md` |
+| XA4 **（睡眠抑制 + 唤醒 catch-up 已落地 2026-09，其余未做）** | 多天工程包：睡眠抑制 + 唤醒 catch-up；roadmap 续接；256 轮撞顶改为可续；成本维度接 COST_ENGINE 最小版。落地部分见 §5 睡眠抑制行与 §2.4；代码在 `AgentSleepInhibitor.swift`、`AgentGoalWakeCoordinator.swift`、`AppStateAgentGoalWakes.swift` | `AgentPlanGoalModels.swift`（roadmap 上限）、`AppState.swift:17`（轮上限）、`AgentRoutineScheduler.swift`（catch-up 参照）、`docs/COST_ENGINE_DESIGN.md` |
 
 ### 6.2 willdeep-rs
 
@@ -229,11 +240,11 @@ Xedit 目前有三个互不相通的「清单」，长程运行中会让用户�
 
 | # | 假设 | 默认值 | 备注 |
 |---|---|---|---|
-| 1 | wall-clock 预算 | 4 小时/段，可配置至 72 小时 | 段内自动续推，跨段需触发恢复 |
+| 1 | wall-clock 预算 | 4 小时/段，可配置至 72 小时 | 段内自动续推，跨段需触发恢复。配置入口已落地，实际给 1–24 小时（见 §3.1） |
 | 2 | 退避阶梯 | 1–2 轮引导 / 3–4 轮只读对账 / 5+ 指数退避（1、5、15 分钟封顶） | 有进展证据即归零 |
 | 3 | 软停后自动恢复 | 仅 wall-clock 维度耗尽且由后台任务完成事件触发时自动续期；token / 成本维度耗尽必须用户确认 | 花钱的闸门不自动放行 |
 | 4 | 围栏块共存期 | 保留 2 个 minor 版本，其后只读兼容 | 以「仅围栏块的 turn 占比」决定摘除时机 |
-| 5 | 睡眠抑制范围 | 仅 Goal 执行中启用 `idleSystemSleepDisabled`；不阻止合盖睡眠 | 用户合盖是明确意图，不对抗 |
+| 5 | 睡眠抑制范围 | 仅 Goal 执行中启用 `idleSystemSleepDisabled`；不阻止合盖睡眠 | 用户合盖是明确意图，不对抗。**已按此实现**；「执行中」含等待重试 / 退避期 |
 | 6 | roadmap 续接 | 满 6 phase 后归档并追加下一批，不因跑满而失败 | 归档进 goal-teams 目录 |
 | 7 | 清单唯一真源 | `AgentPlan.steps` / `AgentGoal.checklist`；`todo` skill 降为投影 | `schedule_task` 保持 cron 语义不变 |
 

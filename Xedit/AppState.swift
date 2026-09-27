@@ -507,6 +507,9 @@ final class AppState: ObservableObject {
     /// resulting conversation id so the Scheduled page can reopen that run.
     @Published var agentRoutineRuns: [AgentRoutineRunRecord] = []
     let agentRoutineScheduler = AgentRoutineScheduler()
+    /// Goal waits (outage retry, no-progress backoff, compression retry) and
+    /// the idle-sleep inhibition while a Goal executes. AppStateAgentGoalWakes.swift.
+    let agentGoalWakeCoordinator = AgentGoalWakeCoordinator()
 
     /// Goal-first dispatch console state. The coordinator owns durable task
     /// metadata while AppState remains responsible for creating/running the
@@ -926,10 +929,13 @@ final class AppState: ObservableObject {
                 AgentRoutineRunStore.save(reconciled)
             }
         }
-        // The turn watchdog shares the scheduler's 30-second tick.
+        // The turn watchdog shares the scheduler's 30-second tick, and so does
+        // the Goal-wait safety net (a missed system-wake notification).
         agentRoutineScheduler.onTick = { [weak self] in
             self?.scanAgentTurnsForStalls()
+            self?.catchUpGoalWakes(rearmPending: false)
         }
+        configureAgentGoalWakes()
         agentRoutineScheduler.start(initialRoutines: agentRoutines) { [weak self] routineID in
             self?.fireRoutine(id: routineID) != nil
         }

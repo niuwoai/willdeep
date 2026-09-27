@@ -1382,6 +1382,7 @@ extension AppState {
         pausingOwningDispatchProject: Bool = true
     ) {
         cancelPendingGoalLaunchRecovery(for: runtime)
+        cancelGoalWakeForUserStop(runtime)
         runtime.goalAuthorizationRevision = UUID()
         if runtime.currentGoal?.taskAuthorizations != nil {
             runtime.currentGoal?.taskAuthorizations = nil
@@ -2343,6 +2344,8 @@ extension AppState {
         }
         protectedIDs.formUnion(pendingDispatchQueue.map(\.runtimeID))
         protectedIDs.formUnion(titleSummarizationsInFlight)
+        // A Goal waiting to resume is not idle; its wait lives on this runtime.
+        protectedIDs.formUnion(agentRuntimes.values.filter { $0.currentGoal?.scheduledWake != nil }.map(\.id))
         let idle = agentRuntimes.values
             .filter { runtime in
                 !protectedIDs.contains(runtime.id)

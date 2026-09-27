@@ -409,6 +409,8 @@ struct EditorSettingsView: View {
 
             AgentSessionRetentionSettingsSection()
 
+            AgentGoalRunSettingsSection()
+
             Section(L10n.Settings.sectionConversationTitle) {
                 LabeledContent(L10n.Settings.AgentBehavior.titleModelLabel) {
                     TextField("", text: $agentTitleModelBuffer, prompt: Text(L10n.Settings.AgentBehavior.titleModelPlaceholder))

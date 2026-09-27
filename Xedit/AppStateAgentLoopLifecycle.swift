@@ -178,7 +178,9 @@ extension AppState {
         runtime.requestTask = nil
         runtime.activeTurnID = nil
         runtime.activeTurnConfiguration = nil
-        runtime.goalTurnRecoveryCheckpoint = nil
+        // A Goal parked on a wait is still executing; its checkpoint must
+        // survive a crash during the wait (AppStateAgentGoalWakes.swift).
+        if runtime.currentGoal?.scheduledWake == nil { runtime.goalTurnRecoveryCheckpoint = nil }
         runtime.shouldConsumeQueueAfterStop = false
         auditDelegationPolicyForFinishedTurn(in: runtime)
         // Turn finished — one fewer concurrent worker on this checkout.
@@ -235,5 +237,6 @@ extension AppState {
         if !wasUserStopped {
             requestAgentInputSuggestionIfNeeded(for: runtime)
         }
+        noteGoalTurnFinished(for: runtime, turnID: turnID)
     }
 }

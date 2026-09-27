@@ -38,7 +38,7 @@ nonisolated struct AgentGoalContinuationBudget: Codable, Equatable {
     var modelAdmissionPaused: Bool?
 
     init(
-        wallClockLimit: TimeInterval? = AgentGoalContinuationPolicy.defaultWallClockLimit,
+        wallClockLimit: TimeInterval? = AgentGoalRunSettings.configuredWallClockLimit(),
         maximumContinuations: Int = AgentGoalContinuationPolicy.defaultMaximumContinuations,
         segmentStartedAt: Date? = nil,
         continuationsUsed: Int = 0,
@@ -53,7 +53,9 @@ nonisolated struct AgentGoalContinuationBudget: Codable, Equatable {
         self.modelAdmissionPaused = modelAdmissionPaused
     }
 
-    static let standard = AgentGoalContinuationBudget()
+    /// A new budget with the operator's current segment limit (Settings →
+    /// Agent → Goal). Computed, not stored: the setting can change at runtime.
+    static var standard: AgentGoalContinuationBudget { AgentGoalContinuationBudget() }
 
     /// A fresh segment that keeps the configured limits but drops all spend.
     var restarted: AgentGoalContinuationBudget {
@@ -62,11 +64,21 @@ nonisolated struct AgentGoalContinuationBudget: Codable, Equatable {
             maximumContinuations: maximumContinuations
         )
     }
+
+    /// A fresh segment under a newly chosen wall-clock limit — what Play does,
+    /// so a limit raised in Settings applies from the next segment on.
+    func restarted(wallClockLimit newLimit: TimeInterval?) -> AgentGoalContinuationBudget {
+        var budget = restarted
+        budget.wallClockLimit = newLimit
+        return budget
+    }
 }
 
 nonisolated enum AgentGoalContinuationPolicy {
-    /// One segment defaults to four hours; the operator can widen it.
-    static let defaultWallClockLimit: TimeInterval = 4 * 60 * 60
+    /// One segment defaults to four hours; Settings → Agent → Goal widens or
+    /// narrows it (`AgentGoalRunSettings`).
+    static let defaultWallClockLimit: TimeInterval = TimeInterval(AgentGoalRunSettings.defaultHours)
+        * AgentGoalRunSettings.secondsPerHour
     static let defaultMaximumContinuations = 64
     /// Rounds without progress that are answered with plain guidance.
     static let guidanceRounds = 2

@@ -6,7 +6,8 @@
 //  distinguishes a model turn that was genuinely live when the process ended
 //  from an incomplete Plan that the user intentionally paused. Goal Teams
 //  planning has its own persisted phase ledger and is restarted only from
-//  phases that represented in-flight work.
+//  phases that represented in-flight work. A Goal that was deliberately
+//  waiting (AgentGoalScheduledWake) is neither: its wait is picked back up.
 //
 
 import Foundation
@@ -17,6 +18,9 @@ nonisolated enum AgentGoalLaunchRecoveryAction: Equatable {
     case resumePhasePlanning
     case resumeExecution
     case discardStaleCheckpoint
+    /// The Goal was deliberately waiting (outage retry, backoff, compression
+    /// retry): resume it if the wait is due, otherwise wait out the rest.
+    case restoreScheduledWake
 }
 
 nonisolated enum AgentGoalLaunchRecoveryPolicy {
@@ -28,6 +32,7 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
 
     static func action(for session: AgentSession) -> AgentGoalLaunchRecoveryAction {
         let hasCheckpoint = session.goalTurnRecoveryCheckpoint != nil
+        let hasScheduledWake = session.currentGoal?.scheduledWake != nil
         guard session.archivedAt == nil,
               session.presentationScope != .dispatchBoard,
               session.interactionMode == .goal,
@@ -35,7 +40,13 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
               let goal = session.currentGoal,
               !goal.isEmpty,
               !isGoalComplete(goal) else {
-            return hasCheckpoint ? .discardStaleCheckpoint : .none
+            return hasCheckpoint || hasScheduledWake ? .discardStaleCheckpoint : .none
+        }
+
+        // A persisted wait is intent, not an interrupted turn: it outranks
+        // the checkpoint, which only survives the wait as a crash backstop.
+        if hasScheduledWake {
+            return .restoreScheduledWake
         }
 
         if let plan = session.currentPlan,
@@ -268,7 +279,13 @@ extension AppState {
                 continue
             case .discardStaleCheckpoint:
                 runtime.goalTurnRecoveryCheckpoint = nil
+                cancelGoalWake(for: runtime, reason: "stale at launch")
                 persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+                accepted = true
+            case .restoreScheduledWake:
+                if restoreGoalWakeAfterLaunch(for: runtime) {
+                    resumedSessionIDs.append(runtime.id)
+                }
                 accepted = true
             case .restartPlanning:
                 guard !runtime.isResponding else { continue }

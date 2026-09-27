@@ -294,11 +294,12 @@ extension AppState {
 
         runtime.clearTurnError()
         runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
-        // Resuming opens a new execution segment: keep the configured limits
-        // but hand back a full budget, otherwise a Goal that soft-stopped once
-        // would stop again on its very next round.
+        // Resuming opens a new execution segment: hand back a full budget,
+        // otherwise a Goal that soft-stopped once would stop again on its very
+        // next round. The segment takes the limit currently set in Settings.
         if var resumedGoal = runtime.currentGoal {
-            resumedGoal.continuationBudget = (resumedGoal.continuationBudget ?? .standard).restarted
+            resumedGoal.continuationBudget = (resumedGoal.continuationBudget ?? .standard)
+                .restarted(wallClockLimit: AgentGoalRunSettings.configuredWallClockLimit())
             runtime.currentGoal = resumedGoal
         }
         if var plan = runtime.currentPlan, plan.isInterrupted {
@@ -740,6 +741,8 @@ extension AppState {
             End with one `goal-check` block. If progress is impossible without user input or an external state change, explain the concrete blocker and do not pretend an item is complete.\(escalation)
             """
         }
+        // §2.2 rung 3 waits 1 / 5 / 15 minutes before this continuation.
+        if deferGoalContinuationForBackoff(outcome: evaluation.outcome, prompt: prompt, for: runtime) { return }
         if runtime.isResponding {
             // Dedup against this prompt's own opening line: a queued
             // continuation must not swallow the handover request, which is a
@@ -847,6 +850,8 @@ extension AppState {
             """
         }
 
+        // §2.2 rung 3 waits 1 / 5 / 15 minutes before this continuation.
+        if deferGoalContinuationForBackoff(outcome: evaluation.outcome, prompt: prompt, for: runtime) { return true }
         if runtime.isResponding {
             let dedupPrefix = String(prompt.prefix(while: { !$0.isNewline }))
             guard !runtime.queuedMessages.contains(where: {

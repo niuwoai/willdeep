@@ -62,6 +62,7 @@ extension AppState {
         // Refresh the same-checkout collision hint so the foreground composer
         // reflects a background session now working in its directory.
         refreshAgentWorkspaceCollision()
+        noteGoalTurnStarted(for: runtime)
         _ = startAgentGoalPlanningIfNeeded(for: runtime)
         // 本回合的遥测累计。回合内可能跑多轮 provider 请求（工具调用循环），
         // token 累加、降级次数累加；下面的 defer 在每条退出路径上提交一次。
@@ -1082,6 +1083,7 @@ extension AppState {
                    stopExpiredGoalToolRound(for: runtime, assistantID: assistantID) { return }
                 if stopOnModelAdmissionFailure(error, runtime: runtime, assistantID: assistantID) { return }
                 turnTelemetry.noteFailure(error)
+                if deferGoalTurnForProviderOutage(error, runtime: runtime, assistantID: assistantID) { return }
                 setAgentError(error, for: runtime)
                 if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
                    runtime.messages[index].content.isEmpty,
@@ -1256,13 +1258,10 @@ extension AppState {
                     // model produced nothing at all. Never leave dead air:
                     // reuse the same actionable, retryable error so the user
                     // always gets feedback instead of a silent no-reply.
-                    setAgentError(
-                        AgentClientError.emptyStream(
-                            providerID: configuration.providerID,
-                            model: turnConfiguration.model
-                        ),
-                        for: runtime
-                    )
+                    // A Goal parks on its outage wait instead, like the catch path.
+                    let emptyStream = AgentClientError.emptyStream(providerID: configuration.providerID, model: turnConfiguration.model)
+                    if deferGoalTurnForProviderOutage(emptyStream, runtime: runtime, assistantID: assistantID) { return }
+                    setAgentError(emptyStream, for: runtime)
                     _ = retryDispatchPlanningAfterWillDeepFailureIfNeeded(for: runtime)
                     return
                 }
