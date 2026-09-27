@@ -518,9 +518,21 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// worker you ran three turns ago is still evidence that you tried, and
     /// the 1M budget is spent against the session, not the turn.
     var deepAdmissionObservation = AgentDeepAdmissionObservation()
-    /// Goal may continue across several provider turns, but repeated
-    /// no-change self-checks must pause instead of spinning forever.
-    var consecutiveGoalRoundsWithoutChecklistProgress: Int = 0
+    /// Rounds without checklist progress drive the Goal backoff ladder. The
+    /// value lives on the Goal's continuation budget, so it is persisted with
+    /// the session and survives relaunch; a new Goal or segment starts at 0.
+    var consecutiveGoalRoundsWithoutChecklistProgress: Int {
+        get { currentGoal?.continuationBudget?.roundsWithoutChecklistProgress ?? 0 }
+        set {
+            guard var goal = currentGoal else { return }
+            let stored = newValue > 0 ? newValue : nil
+            guard goal.continuationBudget?.roundsWithoutChecklistProgress != stored else { return }
+            var budget = goal.continuationBudget ?? .standard
+            budget.roundsWithoutChecklistProgress = stored
+            goal.continuationBudget = budget
+            currentGoal = goal
+        }
+    }
 
     /// Per-call registrations prevent overlapping delegated approvals from
     /// overwriting another command's continuation within the same session.

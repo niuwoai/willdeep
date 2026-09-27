@@ -71,6 +71,8 @@
 
 无进展轮次不再是「计到 2 就停」，而是驱动一个阶梯。计数器持久化在 Goal 上（跨 turn、跨重启存活），任一轮出现进展证据即归零：
 
+> **计数器持久化：已落地（Xedit）。** 此前计数只在 `AgentRuntime` 内存里，重启或 runtime 被逐出后归零，阶梯退回「引导」档（预算的硬边界 `continuationsUsed` / `segmentStartedAt` 本来就持久化，不受影响）。现存于 `AgentGoalContinuationBudget.roundsWithoutChecklistProgress`（可选字段，旧会话解码为 0），`AgentRuntime.consecutiveGoalRoundsWithoutChecklistProgress` 改为读写它的计算属性。与原稿的偏差：计数挂在预算段上而不是 Goal 本体，用户按 Play 开新段（`restarted`）或换 Goal 时一并清零。
+
 | 连续无进展轮次 | 档位 | 行为 |
 |---|---|---|
 | 1–2 | 引导 | 注入 continuation，要求模型**对照清单指名下一个未完成项**，并说明上一轮为何没有进展 |

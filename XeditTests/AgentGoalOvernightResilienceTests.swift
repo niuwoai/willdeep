@@ -247,8 +247,17 @@ struct AgentGoalOvernightResilienceTests {
         #expect(f.activity.begins == 1)
         #expect(f.activity.ends == 0)
         #expect(f.app.agentGoalWakeCoordinator.inhibitingRuntimeIDs == [f.runtime.id])
-        // Persisted with the Goal, so a relaunch sees the wait.
-        #expect(AgentSessionStore.peekStoredSession(id: f.runtime.id)?.currentGoal?.scheduledWake == wake)
+        // Persisted with the Goal, so a relaunch sees the wait. The store
+        // encodes dates as ISO 8601 without fractional seconds: once the async
+        // write has reached the file, the decoded dates are whole seconds, so
+        // compare identity exactly and time to the second.
+        let persistedWake = try #require(AgentSessionStore.peekStoredSession(id: f.runtime.id)?.currentGoal?.scheduledWake)
+        #expect(persistedWake.id == wake.id)
+        #expect(persistedWake.reason == wake.reason)
+        #expect(persistedWake.attempt == wake.attempt)
+        #expect(persistedWake.instruction == wake.instruction)
+        #expect(abs(persistedWake.dueAt.timeIntervalSince(wake.dueAt)) < 1)
+        #expect(abs(persistedWake.scheduledAt.timeIntervalSince(wake.scheduledAt)) < 1)
 
         f.withoutInTurnDelay {
             f.app.catchUpGoalWakes(rearmPending: false, now: wake.dueAt.addingTimeInterval(1))

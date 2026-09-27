@@ -30,6 +30,11 @@ nonisolated struct AgentGoalContinuationBudget: Codable, Equatable {
     var segmentStartedAt: Date?
     /// Continuations already spent in this segment.
     var continuationsUsed: Int
+    /// Consecutive acceptance rounds without checklist progress: the rung of
+    /// the backoff ladder. Kept here so a relaunch or runtime eviction cannot
+    /// drop a stuck Goal back to plain guidance; `restarted` clears it.
+    /// Optional for backwards-compatible decoding of old sessions.
+    var roundsWithoutChecklistProgress: Int? = nil
     /// Wrap-up guidance was already delivered, so the next natural stop is
     /// accepted instead of being refused again.
     var wrapUpDispatched: Bool

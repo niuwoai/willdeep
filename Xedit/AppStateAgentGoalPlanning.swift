@@ -694,8 +694,10 @@ extension AppState {
         // Rounds without progress no longer end the Goal. They escalate how
         // hard the host pushes back; only a spent budget stops execution, and
         // it stops by asking for a handover rather than by giving up.
+        // Read the live budget: the round counter above was just written
+        // into it, and the `goal` snapshot would silently revert it.
         let evaluation = AgentGoalContinuationPolicy.evaluate(
-            budget: goal.continuationBudget ?? .standard,
+            budget: runtime.currentGoal?.continuationBudget ?? .standard,
             now: Date(),
             consecutiveRoundsWithoutProgress: runtime.consecutiveGoalRoundsWithoutChecklistProgress
         )
