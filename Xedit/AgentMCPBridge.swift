@@ -92,15 +92,79 @@ enum AgentMCPBridge {
         let toolName = try requiredString("tool", in: arguments)
         let rawArguments = arguments["arguments_json"]?.stringValue() ?? "{}"
         let toolArguments = try parseJSONObject(rawArguments)
+        return try await callToolForModel(
+            server: server,
+            toolName: toolName,
+            arguments: toolArguments,
+            summary: "\(server.name).\(toolName)",
+            style: .indented
+        )
+    }
+
+    /// 插件 MCP 工具的一等入口（`mcp__<服务器>__<工具>`），给模型用。
+    ///
+    /// 与 `callPluginTool` 分开：那条给插件页面 / MCP App，要的是原始 MCP
+    /// result（`executeCommand` 的既有契约），这条给模型，二进制块要剥掉。
+    static func callPluginToolForModel(
+        pluginID: AgentPluginID,
+        serverName: String,
+        toolName: String,
+        arguments: [String: Any]
+    ) async throws -> AgentToolResult {
+        let server = try AgentMCPServerDirectory.pluginServer(pluginID: pluginID, named: serverName)
+        return try await callToolForModel(
+            server: server,
+            toolName: toolName,
+            arguments: arguments,
+            summary: "\(serverName)/\(toolName)",
+            style: .compact
+        )
+    }
+
+    /// 模型那条路的 `tools/call`：取完整结果，图片挂成附件，音频与资源二进制
+    /// 落盘，文本里只留说明。
+    private static func callToolForModel(
+        server: AgentMCPServerConfig,
+        toolName: String,
+        arguments: [String: Any],
+        summary: String,
+        style: AgentMCPToolResultContent.PayloadStyle,
+        storage: AgentMCPToolResultContent.Storage = .standard
+    ) async throws -> AgentToolResult {
         let result = try await runRequest(
             server: server,
             method: "tools/call",
             params: [
                 "name": toolName,
-                "arguments": toolArguments
-            ]
+                "arguments": arguments
+            ],
+            rendering: .complete
         )
-        return AgentToolResult(summary: "\(server.name).\(toolName)", payload: result)
+        let toolResult = await AgentMCPToolResultContent.toolResult(
+            summary: summary,
+            resultJSON: result,
+            style: style,
+            storage: storage
+        )
+        return try AgentMCPToolResultContent.enforcePayloadLimit(toolResult, style: style)
+    }
+
+    /// 测试入口：对手工构造的服务配置走一遍模型那条路的 `tools/call`。
+    static func callToolForModelTesting(
+        server: AgentMCPServerConfig,
+        toolName: String,
+        arguments: [String: Any],
+        style: AgentMCPToolResultContent.PayloadStyle,
+        storage: AgentMCPToolResultContent.Storage
+    ) async throws -> AgentToolResult {
+        try await callToolForModel(
+            server: server,
+            toolName: toolName,
+            arguments: arguments,
+            summary: "\(server.name).\(toolName)",
+            style: style,
+            storage: storage
+        )
     }
 
     /// Read an MCP resource for a plugin sidebar or MCP App page. Keeping
@@ -161,6 +225,10 @@ enum AgentMCPBridge {
     /// Direct command entry used only after the plugin page host has shown a
     /// user confirmation. It deliberately accepts a resolved server/tool pair
     /// rather than arbitrary JSON-RPC methods.
+    ///
+    /// Returns the raw MCP result, binary blocks included: pages and MCP Apps
+    /// render them themselves. The model-facing counterpart is
+    /// `callPluginToolForModel`.
     static func callPluginTool(
         pluginID: AgentPluginID,
         serverName: String,
@@ -849,22 +917,28 @@ enum AgentMCPBridge {
         case modelFacing
         /// 紧凑、完整。宁可报错也不交出半份 JSON。
         case pageFacing
+        /// 紧凑、完整、不设页面上限：模型那条路的 `tools/call` 要先经
+        /// `AgentMCPToolResultContent` 把图片、音频等二进制块剥出来再给模型。
+        /// 先截断再剥就晚了——48000 字符里一张图都放不下，切口还会落在
+        /// base64 中间，JSON 解不开，二进制块只能原样留在文本里。
+        case complete
     }
 
     /// 页面那条路的硬上限。超过就抛错，**不截断**：一个明确的失败可以查，
     /// 一份看着像 JSON 的半截数据只会让人去查错的地方。
     nonisolated static let pageFacingResultLimit = 32 * 1024 * 1024
 
-    nonisolated static func compactJSON(_ value: Any) throws -> String {
+    /// `limit` 为 nil 时不设上限。
+    nonisolated static func compactJSON(_ value: Any, limit: Int? = pageFacingResultLimit) throws -> String {
         guard JSONSerialization.isValidJSONObject(value),
               let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
               let text = String(data: data, encoding: .utf8) else {
             throw AgentToolError.invalidArgument("MCP result is not representable as JSON")
         }
-        guard data.count <= pageFacingResultLimit else {
+        if let limit, data.count > limit {
             throw AgentToolError.commandFailed(
                 -1,
-                "MCP result is \(data.count) bytes, over the \(pageFacingResultLimit) byte page limit"
+                "MCP result is \(data.count) bytes, over the \(limit) byte page limit"
             )
         }
         return text
@@ -874,6 +948,11 @@ enum AgentMCPBridge {
         switch rendering {
         case .modelFacing: return prettyJSON(value)
         case .pageFacing: return try compactJSON(value)
+        case .complete:
+            // 协议里 result 总是对象；万一不是，按模型那份的老办法转成文本，
+            // 解析器认不出就原样交出去。
+            guard JSONSerialization.isValidJSONObject(value) else { return prettyJSON(value) }
+            return try compactJSON(value, limit: nil)
         }
     }
 

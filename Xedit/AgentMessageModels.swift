@@ -324,7 +324,9 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private nonisolated static func attachmentDirectory(for id: UUID) throws -> URL {
+    /// The app-owned directory for one attachment. Also the fallback store for
+    /// MCP tool-result media when `~/.willdeep/captures` is not writable.
+    nonisolated static func attachmentDirectory(for id: UUID) throws -> URL {
         let environment = ProcessInfo.processInfo.environment
         if NSClassFromString("XCTestCase") != nil || NSClassFromString("XCTest") != nil
             || environment["XCTestConfigurationFilePath"] != nil || environment["XCTestBundlePath"] != nil {

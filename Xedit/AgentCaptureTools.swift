@@ -27,10 +27,27 @@ enum AgentCaptureTools {
     }
 
     /// Anthropic's recommended max long edge — larger buys no quality but
-    /// costs tokens and memory linearly.
-    private static let maxLongEdge: CGFloat = 1568
-    private static let jpegQuality: CGFloat = 0.82
+    /// costs tokens and memory linearly. Shared with MCP tool-result images
+    /// (`AgentMCPToolResultContent`), which follow the same wire rules.
+    nonisolated static let maxLongEdge: CGFloat = 1568
+    nonisolated static let jpegQuality: CGFloat = 0.82
     private static let maxOCRLines = 20
+
+    /// Where captured images live: `~/.willdeep/captures/<id>/` holding
+    /// `original.<ext>` plus the downscaled `preview.jpg` the model sees.
+    /// `AgentImageAttachment.removeStoredFileIfNeeded` recognises exactly
+    /// this layout, so anything else stored here must follow it too.
+    nonisolated static var defaultCapturesRoot: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".willdeep/captures", isDirectory: true)
+    }
+    nonisolated static let originalFilenameStem = "original"
+    nonisolated static let previewFilename = "preview.jpg"
+    nonisolated static let previewMIMEType = "image/jpeg"
+
+    nonisolated static func captureDirectory(for captureID: UUID, in capturesRoot: URL) -> URL {
+        capturesRoot.appendingPathComponent(captureID.uuidString.lowercased(), isDirectory: true)
+    }
 
     /// Extra locations appended to PATH so `adb` / `xcrun` resolve even when
     /// the host process was launched from Finder (no login shell PATH).
@@ -158,11 +175,9 @@ enum AgentCaptureTools {
         originalURL: URL,
         previewData: Data,
         captureID: UUID = UUID(),
-        capturesRoot: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".willdeep/captures", isDirectory: true)
+        capturesRoot: URL = defaultCapturesRoot
     ) throws -> PersistedCapture {
-        let captureDirectory = capturesRoot
-            .appendingPathComponent(captureID.uuidString.lowercased(), isDirectory: true)
+        let captureDirectory = Self.captureDirectory(for: captureID, in: capturesRoot)
         try FileManager.default.createDirectory(
             at: captureDirectory,
             withIntermediateDirectories: true
@@ -172,7 +187,7 @@ enum AgentCaptureTools {
             ? "png"
             : originalURL.pathExtension.lowercased()
         let persistedOriginalURL = captureDirectory
-            .appendingPathComponent("original.\(originalExtension)", isDirectory: false)
+            .appendingPathComponent("\(originalFilenameStem).\(originalExtension)", isDirectory: false)
         if originalURL.standardizedFileURL != persistedOriginalURL.standardizedFileURL {
             do {
                 try FileManager.default.moveItem(at: originalURL, to: persistedOriginalURL)
@@ -182,11 +197,11 @@ enum AgentCaptureTools {
             }
         }
 
-        let previewURL = captureDirectory.appendingPathComponent("preview.jpg", isDirectory: false)
+        let previewURL = captureDirectory.appendingPathComponent(previewFilename, isDirectory: false)
         try previewData.write(to: previewURL, options: [.atomic])
         let attachment = AgentImageAttachment(
             id: captureID,
-            mimeType: "image/jpeg",
+            mimeType: previewMIMEType,
             filePath: previewURL.standardizedFileURL.path,
             byteCount: previewData.count,
             source: .capture,
@@ -199,9 +214,7 @@ enum AgentCaptureTools {
     }
 
     static func discardPersistedCaptureArtifacts(in result: AgentToolResult) {
-        let capturesRoot = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".willdeep/captures", isDirectory: true)
-            .standardizedFileURL
+        let capturesRoot = defaultCapturesRoot.standardizedFileURL
         for image in result.images {
             guard let filePath = image.filePath else { continue }
             let imageURL = URL(fileURLWithPath: filePath)

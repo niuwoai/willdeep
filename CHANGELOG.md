@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.405.0-rc11 - 2026-09-28
+
+### Fixed
+
+- **MCP 工具返回的图片，模型终于看得到了。** `call_mcp_tool` 和插件的一等工具（`mcp__*`）以前把 `tools/call` 的结果 JSON 原样当工具输出：`image` 块、`audio` 块和 `resource.blob` 里的 base64 被当成文本放进上下文，模型看不到图，还白占上下文；`call_mcp_tool` 那份输出又在 48000 字符处截断，一张图都装不下，留给模型的是一段 base64 碎片。现在先取完整结果，再逐块处理（新文件 `AgentMCPToolResultContent`）：
+  - 图片按截图的规则处理（长边 1568、铺白底编成 JPEG），挂成工具结果的图片附件，支持视觉的 provider 直接看到像素，回合结束后照截图的路径出现在 transcript 里；原图和预览图存在 `~/.willdeep/captures/<id>/`，这里写不进去时退到 App 自己的附件目录。
+  - 音频和资源 blob 解码后存到同一处，文本里只留类型、体积和路径（例如 `[audio 1: audio/mpeg, 3 KB, saved to …]`），模型可以在回复里引用这个路径。
+  - 坏 base64、类型不认、单块超 20MB、单次超过 8 张图，都在文本里写明为什么略过，不会崩。
+  - 其余字段一个不动。没有二进制块的结果，输出和改动前逐字节一致；`call_mcp_tool` 仍是缩进 JSON、仍在 48000 字符处截断，插件一等工具仍是紧凑 JSON。
+  - 插件页面 / MCP App 那条路（`callPluginTool`，`executeCommand` 的既有契约）不受影响，拿到的仍是原始 MCP result；给模型的另走 `callPluginToolForModel`。
+  - 插件一等工具原来走页面那条路，结果超过 32MB 会报错、不交半份 JSON。为了先剥二进制，改成取完整结果，这道上限挪到剥完之后再守（`enforcePayloadLimit`）：剥掉图片音频后仍超限的纯文本照旧报错，已经落盘的图一并删掉。
+- 测试：新增 `AgentMCPToolResultContentTests`（22 项：纯图 / 图文混排 / 大图 / 超数量 / 类型不符 / 坏数据 / 音频 / 资源 blob / 超单块上限 / 两处目录都写不进 / 原样通过的几种结果 / isError / 紧凑格式 / 剥离后的体积上限 / data URL 与折行 base64，外加一个用 Ruby 假 stdio 服务端跑的端到端用例：同一次调用，页面那条路拿到原始 base64，模型那条路拿到剥过的文本和 1 张附件）。反验：把剥离关掉，新 suite 里 17 项变红。rebase 到 1.405.0-rc10 之后本地 `run_tests_fast.rb` 跑新 suite 与 `AgentMCPHostRequestsTests`、`AgentMCPBridgeCoreTests`、`AgentMCPResultRenderingTests`、`AgentMCPServerDirectoryTests`、`AgentPluginMCPToolCatalogTests`、`AgentPluginMCPToolApprovalTests`、`AgentComputerUseToolTests`、`AgentToolsCoreTests`、`ImageWorkflowTests`：10 个 suite 共 177 项通过，退出码 0，report 计数与日志一致。此前一轮里 `AgentMCPHostRequestsTests` 的「工具调用期间反向出图」撞过一次 1 秒静默超时（走的是页面那条路，这次没动；同轮日志里大量用例卡顿约 1.25 秒，机器满载），原样重跑即通过。全量 XeditTests 没有在本地跑。
+  - 已知限制：资源 blob 即使是图片也只落盘、不挂附件；认不出类型的 blob 存成 `.bin` 而不是略过，免得丢数据；纯文本 provider 看不到附件，只能靠文本里的路径。端到端用例没覆盖插件一等工具入口（要真装一个插件），它和 `call_mcp_tool` 共用同一个内部函数。
+
 ## 1.405.0-rc10 - 2026-09-27
 
 ### Fixed

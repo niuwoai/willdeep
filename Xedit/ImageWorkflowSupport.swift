@@ -14,8 +14,9 @@ import Vision
 
 enum ImageWorkflowSupport {
     private static let maxCompressedImageBytes = 64 * 1_024 * 1_024
-    private static let maxDecodedPixels = 40_000_000
-    private static let maxImageDimension = 16_384
+    /// Decoded-pixel safety budget; MCP tool-result images use the same one.
+    nonisolated static let maxDecodedPixels = 40_000_000
+    nonisolated static let maxImageDimension = 16_384
 
     enum Failure: Error, LocalizedError {
         case missingImage(path: String)

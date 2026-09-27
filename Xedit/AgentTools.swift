@@ -753,13 +753,12 @@ enum AgentToolRunner {
             let parsed = (try? JSONSerialization.jsonObject(
                 with: Data(rawArguments.utf8), options: []
             )) as? [String: Any] ?? [:]
-            let payload = try await AgentMCPBridge.callPluginTool(
+            return try await AgentMCPBridge.callPluginToolForModel(
                 pluginID: route.pluginID,
                 serverName: route.serverName,
                 toolName: route.toolName,
                 arguments: parsed
             )
-            return AgentToolResult(summary: "\(route.serverName)/\(route.toolName)", payload: payload)
         case "list_mcp_servers":
                 result = try AgentMCPBridge.listServers()
             case "list_mcp_tools":
@@ -793,6 +792,10 @@ enum AgentToolRunner {
                 if name == "capture_screenshot",
                    localObservationGuard != nil {
                     AgentCaptureTools.discardPersistedCaptureArtifacts(in: result)
+                }
+                // MCP 结果里的图片在返回前就已落盘；结果作废，图也不留。
+                if name == "call_mcp_tool", localObservationGuard != nil {
+                    result.images.forEach { $0.removeStoredFileIfNeeded() }
                 }
                 throw error
             }
