@@ -368,6 +368,10 @@ struct AgentChatTranscript: View {
                                 allowsLocalCommandButtons: appState.allowsLocalAgentChatCommandButtons,
                                 onRunShellCommand: appState.runAgentChatShellCommand,
                                 onSendShellCommandToTerminal: appState.sendAgentChatShellCommandToTerminal,
+                                activeScheduledTaskIDs: Set(appState.agentRoutines.map(\.id)),
+                                onOpenScheduledTask: { taskID in
+                                    AgentScheduledTaskCardNavigation.open(cardID: taskID, in: appState)
+                                },
                                 scrollToUserMessageToken: minimapScrollToken,
                                 scrollToUserMessageID: minimapScrollUserMessageID
                             )
@@ -398,6 +402,20 @@ struct AgentChatTranscript: View {
                         // 的 .workflowReport 分支只剩流式 assistant 一个入口,
                         // workflow 卡片(进度、失败原因、研究报告)整体不可见。
                         ForEach(activeWorkflowMessages(in: rendered)) { message in
+                            AgentModeMessageView(
+                                message: message,
+                                isStreamingThisMessage: false,
+                                baseFontSize: appState.agentChatBaseFontSize
+                            )
+                                .id(message.id)
+                                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                        }
+
+                        // 待裁决的设计门卡片(采纳 / 打开文档 / 跳过)同样走
+                        // SwiftUI:按钮要能点。裁决一落,消息折回上面的 TextKit
+                        // 历史,由 formatter 烘焙成文档路径 + 依据 + 结论
+                        // (AgentTranscriptCardHistoryRenderer)。
+                        ForEach(pendingSpecProposalMessages(in: rendered)) { message in
                             AgentModeMessageView(
                                 message: message,
                                 isStreamingThisMessage: false,
@@ -924,6 +942,9 @@ private struct AgentScrollToLatestButton: View {
             hasher.combine(message.toolCallStatus)
             hasher.combine(message.isHostInstruction)
             hasher.combine(message.isLocalTranscriptEvent)
+            // 设计门的 choice 决定这条消息挂 SwiftUI 表面还是进 TextKit 历史
+            // (needsLiveSurface),裁决落下时可见列表必须重建。
+            hasher.combine(message.specProposal?.choice?.rawValue)
         }
         return hasher.finalize()
     }
@@ -1159,8 +1180,18 @@ private struct AgentScrollToLatestButton: View {
             // 运行中的 workflow 卡片由下方的 SwiftUI 工作态表面渲染,
             // 不进 TextKit 历史(避免同一条消息出现两次)。
             if isActiveWorkflowMessage(message) { return nil }
+            // 待裁决的设计门卡片同理:三个按钮要能点,挂在下方的 SwiftUI
+            // 表面;裁决后折回历史由 formatter 烘焙。
+            if AgentTranscriptCardHistoryRenderer.needsLiveSurface(message) { return nil }
             return activeToolPresentation?.hidingToolCalls(in: message) ?? message
         }
+    }
+
+    /// 还在等用户采纳 / 跳过的设计提案。1.405.0-rc10 之前这些消息进了
+    /// TextKit 历史,而 formatter 没有它的正文分支,只剩一个「DSN」头像行:
+    /// 门禁在等一个用户根本看不见的决定。
+    private func pendingSpecProposalMessages(in rendered: [AgentMessage]) -> [AgentMessage] {
+        rendered.filter(AgentTranscriptCardHistoryRenderer.needsLiveSurface)
     }
 
     /// planning/running 状态的 workflow 消息 —— 需要实时进度的那部分。

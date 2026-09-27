@@ -73,6 +73,11 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var onRunShellCommand: ((String) -> Void)? = nil
     /// 点「送进终端」：打开侧边终端面板并把命令送过去执行。
     var onSendShellCommandToTerminal: ((String) -> Void)? = nil
+    /// 定时任务卡片画「打开」还是「已完成」看例程还在不在。nil 表示调用方
+    /// 不知道(transcript 阅读窗口没有 AppState),卡片只留正文当记录。
+    var activeScheduledTaskIDs: Set<UUID>? = nil
+    /// 点定时任务卡片的「打开」:跳到定时任务页的详情。
+    var onOpenScheduledTask: ((UUID) -> Void)? = nil
     /// Imperative "scroll to this user message" trigger from the left-edge
     /// user-input minimap. The token debounces so the same target can be
     /// re-selected: bump the token to fire again with the same id.
@@ -96,6 +101,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onSearchResultCountChange = onSearchResultCountChange
         view.onRunShellCommand = onRunShellCommand
         view.onSendShellCommandToTerminal = onSendShellCommandToTerminal
+        view.onOpenScheduledTask = onOpenScheduledTask
         configure(view)
         view.applyMessages(
             messages,
@@ -107,7 +113,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             lineHeightMultiple: lineHeightMultiple,
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount,
-            allowsLocalCommandButtons: allowsLocalCommandButtons
+            allowsLocalCommandButtons: allowsLocalCommandButtons,
+            activeScheduledTaskIDs: activeScheduledTaskIDs
         )
         view.applySearch(
             query: searchQuery,
@@ -131,6 +138,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.onSearchResultCountChange = onSearchResultCountChange
         nsView.onRunShellCommand = onRunShellCommand
         nsView.onSendShellCommandToTerminal = onSendShellCommandToTerminal
+        nsView.onOpenScheduledTask = onOpenScheduledTask
         nsView.applyMessages(
             messages,
             isDark: colorScheme == .dark,
@@ -140,7 +148,11 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             fontID: fontID,
             lineHeightMultiple: lineHeightMultiple,
             progressPlan: progressPlan,
-            latestTurnReportToolCount: latestTurnReportToolCount
+            latestTurnReportToolCount: latestTurnReportToolCount,
+            // 首次挂载传了、后续更新没传,远端会话切回本地时「运行 / 送进
+            // 终端」按钮不会跟着回来;这次补参数顺手对齐。
+            allowsLocalCommandButtons: allowsLocalCommandButtons,
+            activeScheduledTaskIDs: activeScheduledTaskIDs
         )
         nsView.applySearch(
             query: searchQuery,
@@ -200,6 +212,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentProgressPlan: AgentPlan?
     private var currentLatestTurnReportToolCount: Int? = nil
     private var currentAllowsLocalCommandButtons = true
+    private var currentActiveScheduledTaskIDs: Set<UUID>? = nil
     private var currentLayoutWidth = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
     private var currentBaseAttributedString = NSAttributedString()
     private var currentSearchQuery = ""
@@ -249,6 +262,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     var onShowPlan: (() -> Void)?
     var onResumeHandoff: (() -> Void)?
     var onStartHandoffInNewSession: ((String) -> Void)?
+    var onOpenScheduledTask: ((UUID) -> Void)?
     var onSearchResultCountChange: ((Int) -> Void)?
     var onRunShellCommand: ((String) -> Void)?
     var onSendShellCommandToTerminal: ((String) -> Void)?
@@ -555,7 +569,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         lineHeightMultiple: CGFloat = AgentSettingsStore.chatLineHeightMultipleDefault,
         progressPlan: AgentPlan? = nil,
         latestTurnReportToolCount: Int? = nil,
-        allowsLocalCommandButtons: Bool = true
+        allowsLocalCommandButtons: Bool = true,
+        activeScheduledTaskIDs: Set<UUID>? = nil
     ) {
         let turnContextMessages = assistantTurnContextMessages ?? messages
         let fp = Self.inputFingerprint(
@@ -568,7 +583,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             lineHeightMultiple: lineHeightMultiple,
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount,
-            allowsLocalCommandButtons: allowsLocalCommandButtons
+            allowsLocalCommandButtons: allowsLocalCommandButtons,
+            activeScheduledTaskIDs: activeScheduledTaskIDs
         )
         if fp == lastInputFingerprint {
             return
@@ -585,6 +601,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         currentProgressPlan = progressPlan
         currentLatestTurnReportToolCount = latestTurnReportToolCount
         currentAllowsLocalCommandButtons = allowsLocalCommandButtons
+        currentActiveScheduledTaskIDs = activeScheduledTaskIDs
         renderCurrentMessages()
     }
 
@@ -605,7 +622,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         lineHeightMultiple: CGFloat,
         progressPlan: AgentPlan?,
         latestTurnReportToolCount: Int?,
-        allowsLocalCommandButtons: Bool
+        allowsLocalCommandButtons: Bool,
+        activeScheduledTaskIDs: Set<UUID>?
     ) -> Int {
         var hasher = Hasher()
         hasher.combine(isDark)
@@ -671,6 +689,28 @@ final class AgentChatHistoryNSTextView: NSTextView {
                     hasher.combine(status.rawValue)
                 }
             }
+            // 定时任务 / 设计门卡片的 content 恒为空,展示字段全在各自的
+            // 字段上;设计门的 choice 会从 nil 变成 accepted / dismissed,
+            // 例程自完成后「打开」要变「已完成」——这些都得让早退失效,
+            // 与 renderer 的 messageHash 同口径。
+            if let card = m.scheduledTask {
+                hasher.combine(card.id)
+                hasher.combine(card.title)
+                hasher.combine(card.scheduleSummary)
+                hasher.combine(card.goal)
+                hasher.combine(card.prompt)
+                hasher.combine(activeScheduledTaskIDs?.contains(card.id))
+            }
+            if let proposal = m.specProposal {
+                hasher.combine(proposal.id)
+                hasher.combine(proposal.documentPath)
+                hasher.combine(proposal.choice?.rawValue)
+                hasher.combine(proposal.signals.count)
+                for signal in proposal.signals {
+                    hasher.combine(signal.kind.rawValue)
+                    hasher.combine(signal.evidence)
+                }
+            }
         }
         for message in assistantTurnContextMessages
             where message.role == .user || message.role == .assistant {
@@ -707,7 +747,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             layoutWidth: currentLayoutWidth,
             progressPlan: currentProgressPlan,
             latestTurnReportToolCount: currentLatestTurnReportToolCount,
-            allowsLocalCommandButtons: currentAllowsLocalCommandButtons
+            allowsLocalCommandButtons: currentAllowsLocalCommandButtons,
+            activeScheduledTaskIDs: currentActiveScheduledTaskIDs
         )
         var hasher = Hasher()
         hasher.combine(attr.string)
@@ -1131,6 +1172,16 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if let rawTaskID = textStorage.attribute(
+            .agentChatHistoryScheduledTaskID,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? String,
+           let taskID = UUID(uuidString: rawTaskID) {
+            onOpenScheduledTask?(taskID)
+            return true
+        }
+
         if let path = textStorage.attribute(.agentChatHistoryFilePath, at: charIndex, effectiveRange: nil) as? String {
             onOpenFilePath?(path)
             return true
@@ -1167,6 +1218,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryImageLink.value,
             AgentChatHistoryFilePathLink.value,
             AgentChatHistoryAttachmentCitationLink.value,
+            AgentChatHistoryScheduledTaskLink.value,
             "agent-chat-history-tool-group",
         ].contains(value)
     }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.405.0-rc10 - 2026-09-27
+
+### Fixed
+
+- **设计门卡片与定时任务卡片在主 transcript 里终于看得见。** 主 transcript 自 1.155.0-rc16 起把已落定的历史折进一个 TextKit `NSTextView`,`AgentModeMessageView` 只剩流式 assistant 气泡和运行中的 workflow 卡片两个挂载点,它的 `.specProposal` / `.scheduledTask` 分支在主 transcript 上是死代码。`rebuildVisibleMessages` 刻意放行这两种角色,`historyMessages` 把它们送进 TextKit,而 formatter 没有它们的正文分支——两种消息的 `content` 恒为空,历史里只剩一个「DSN Design proposal」/「TSK Scheduled task」头像行。后果:设计门(`AppStateAgentSpecGate`)在回合结束时插进来的采纳 / 打开文档 / 跳过卡片用户根本看不见,门禁就卡在一个没人能做的决定上;`schedule_task` 的卡片同样只剩头像。与 1.155.0-rc4 修 workflow 卡片是同一种病,这次照同一套修:
+  - 待裁决(含「先改文档」的 deferred)的设计提案挂在 `AgentChatTranscript` 的 SwiftUI 工作态表面(与 `activeWorkflowMessages` 并列的 `pendingSpecProposalMessages`),三个按钮能点;裁决一落,消息折回 TextKit 历史。判定收口在 `AgentTranscriptCardHistoryRenderer.needsLiveSurface`,`historyMessages` 与挂载点用同一个谓词,同一条消息不会两处都出现。
+  - 定时任务卡片与已裁决的提案由 formatter 烘焙(新文件 `AgentTranscriptCardHistoryRenderer`):正文是「**标题** · 调度摘要」加目标行 / 「**Design written first** · `docs/…_DESIGN.md`」加依据列表(超过 3 条折成「还有 N 条」,与 SwiftUI 卡片同口径),下面一行状态 chrome:例程还在给可点的「打开」(链接属性 `agentChatHistoryScheduledTaskID` 带例程 id,`textView(_:clickedOnLink:at:)` 接住后走 `AgentScheduledTaskCardNavigation.open` 跳定时任务详情),例程自完成后画「已完成」;提案按采纳 / 跳过各给一句结论。文档路径写成行内代码,走既有的路径 chip 变成可点链接(`revealAgentReferencedPath`)。
+  - 例程还在不在不在消息上,`AgentChatHistoryTextView` 新增 `activeScheduledTaskIDs`(transcript 传 `agentRoutines` 的 id 集合;阅读窗口传 nil,只留正文当记录)。`messageHash`、`render()` 的缓存键与 `inputFingerprint` 都补了定时任务的展示字段与例程存活位、设计提案的 `choice`;`visibleMessagesFingerprint` 也补了 `choice`,裁决落下时可见列表会重建。此前 `scheduledTask` 没进 hash 的理由是「不可变快照」,但缓存键的不变量是每个展示字段都进 hash,只靠消息 id 认卡片在会话重放 / 迁移时会命中旧渲染。
+  - 顺手对齐:`updateNSView` 此前没把 `allowsLocalCommandButtons` 传给 `applyMessages`,首次挂载后远端 / 本地切换不会更新「运行 / 送进终端」按钮。
+- 测试:新增 `AgentChatHistoryTranscriptCardRenderingTests`(13 项)。修复前头两条用例在未修改的渲染器上 8 个断言全红(标题、调度摘要、目标、文档路径、依据、采纳 / 跳过结论全部不在渲染结果里),这就是「不可见」的坐实;修复后本地 `run_tests_fast.rb` 跑该 suite 与 `AgentChatHistoryRendererTests`、`AgentContextRunwayHandoffDisplayTests`、`AgentSpecGateEnforcementTests`:4 个 suite 共 110 项全部通过,退出码 0,report 计数与日志一致,新 suite 13 条逐条可见。`version_consistency` 通过。全量 XeditTests 没有在本地跑。
+
 ## 1.405.0-rc9 - 2026-09-27
 
 ### Fixed

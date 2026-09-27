@@ -57,4 +57,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryHandoffCard = NSAttributedString.Key("AgentChatHistoryHandoffCard")
     static let agentChatHistoryResumeHandoff = NSAttributedString.Key("AgentChatHistoryResumeHandoff")
     static let agentChatHistoryHandoffRelayPrompt = NSAttributedString.Key("AgentChatHistoryHandoffRelayPrompt")
+    /// 定时任务卡片「打开」链接上挂的例程 id(uuidString),点了跳到定时
+    /// 任务页的详情(AgentScheduledTaskCardNavigation)。
+    static let agentChatHistoryScheduledTaskID = NSAttributedString.Key("AgentChatHistoryScheduledTaskID")
 }

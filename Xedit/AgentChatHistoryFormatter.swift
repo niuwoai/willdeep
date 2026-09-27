@@ -205,9 +205,22 @@ enum AgentChatHistoryRenderer {
                 hasher.combine(sub.label)
             }
         }
+        // 定时任务卡片的 content 同样恒为空,标题 / 调度摘要 / 目标全在
+        // scheduledTask 上。快照本身不可变,但缓存键的不变量是「每个展示
+        // 字段都进 hash」(1.155.0-rc4 workflow 卡片的教训):只靠消息 id
+        // 认卡片,会话重放 / 迁移时同 id 换内容就会命中旧渲染。例程还在
+        // 不在(打开 / 已完成)不在消息上,由 render() 外层按例程表另算。
+        if let card = m.scheduledTask {
+            hasher.combine(card.id)
+            hasher.combine(card.title)
+            hasher.combine(card.scheduleSummary)
+            hasher.combine(card.goal)
+            hasher.combine(card.prompt)
+            hasher.combine(card.createdAt)
+        }
         // 同理,设计门卡片的 content 也恒为空,而且它的状态**会变**
-        // (待决定 → 已采纳 / 已跳过)。widget 和 scheduledTask 没进 hash
-        // 是因为那两个是不可变快照,这个不是。
+        // (待决定 → 已采纳 / 已跳过)。widget 没进 hash 是因为它只在
+        // 历史里留一个头像行,正文在侧栏。
         if let proposal = m.specProposal {
             hasher.combine(proposal.id)
             hasher.combine(proposal.documentPath)
@@ -261,7 +274,8 @@ enum AgentChatHistoryRenderer {
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         progressPlan: AgentPlan? = nil,
         latestTurnReportToolCount: Int? = nil,
-        allowsLocalCommandButtons: Bool = true
+        allowsLocalCommandButtons: Bool = true,
+        activeScheduledTaskIDs: Set<UUID>? = nil
     ) -> NSAttributedString {
         let clampedSize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
         let resolvedLayoutWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(layoutWidth)
@@ -278,6 +292,11 @@ enum AgentChatHistoryRenderer {
         hasher.combine(allowsLocalCommandButtons)
         for m in messages {
             hasher.combine(messageHash(m))
+            // 定时任务的「打开 / 已完成」不在消息上,在例程表里:同一条消息
+            // 在例程还在与已自完成两种状态下是两份渲染,不能共用缓存。
+            if let card = m.scheduledTask {
+                hasher.combine(activeScheduledTaskIDs?.contains(card.id))
+            }
         }
         hashAssistantTurnContext(
             turnContextMessages,
@@ -326,7 +345,8 @@ enum AgentChatHistoryRenderer {
             layoutWidth: resolvedLayoutWidth,
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount,
-            allowsLocalCommandButtons: allowsLocalCommandButtons
+            allowsLocalCommandButtons: allowsLocalCommandButtons,
+            activeScheduledTaskIDs: activeScheduledTaskIDs
         )
 
         // Critical section #2: insertion + LRU eviction. If a parallel
@@ -360,7 +380,8 @@ enum AgentChatHistoryRenderer {
         layoutWidth: CGFloat,
         progressPlan: AgentPlan?,
         latestTurnReportToolCount: Int?,
-        allowsLocalCommandButtons: Bool
+        allowsLocalCommandButtons: Bool,
+        activeScheduledTaskIDs: Set<UUID>?
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         // Only the newest assistant/system message keeps its turn-progress
@@ -600,6 +621,9 @@ enum AgentChatHistoryRenderer {
             let body: String
             var progressPresentation: AgentTurnProgressPresentation? = nil
             var handoffCard: HandoffCard? = nil
+            // 定时任务 / 设计门卡片正文下面那一行「打开」或「已完成 / 已采纳 /
+            // 已跳过」:链接与状态 chrome,不走 markdown。
+            var cardStatusLine: NSAttributedString? = nil
             if message.role == .workflowReport, let report = message.workflowReport {
                 // Workflow 消息的 content 恒为空,状态/摘要都在 report 字段
                 // 上。运行中的卡片由 AgentChatTranscript 的 SwiftUI 工作态
@@ -608,6 +632,24 @@ enum AgentChatHistoryRenderer {
                 // 空 body 分支,workflow 在 TextKit 历史里只剩一个光秃秃
                 // 的 WFL 头像行 —— 研究报告/失败原因整体不可见。
                 body = Self.workflowHistoryBody(for: report)
+            } else if message.role == .scheduledTask, let card = message.scheduledTask {
+                // 定时任务卡片与设计门卡片同病:content 恒为空,展示数据全在
+                // 各自字段上,1.405.0-rc10 前走通用空 body 分支,历史里只剩
+                // 「TSK / DSN」头像行。待裁决的设计提案不进这里(它要能点,
+                // 由 AgentChatTranscript 挂成 SwiftUI 卡片);其余烘焙成
+                // 正文 + 一行动作 / 状态,见 AgentTranscriptCardHistoryRenderer。
+                body = AgentTranscriptCardHistoryRenderer.scheduledTaskBody(for: card)
+                cardStatusLine = AgentTranscriptCardHistoryRenderer.scheduledTaskStatusLine(
+                    for: card,
+                    isActive: activeScheduledTaskIDs?.contains(card.id),
+                    baseFontSize: baseFontSize
+                )
+            } else if message.role == .specProposal, let proposal = message.specProposal {
+                body = AgentTranscriptCardHistoryRenderer.specProposalBody(for: proposal)
+                cardStatusLine = AgentTranscriptCardHistoryRenderer.specProposalStatusLine(
+                    for: proposal,
+                    baseFontSize: baseFontSize
+                )
             } else if useMono, message.content.count > toolBodyLimit {
                 let head = String(message.content.prefix(toolBodyLimit))
                 let omitted = message.content.count - toolBodyLimit
@@ -779,6 +821,12 @@ enum AgentChatHistoryRenderer {
                         showsActions: handoffCard.showsActions,
                         baseFontSize: baseFontSize
                     ))
+                }
+                if let cardStatusLine {
+                    if result.length > bodyStart {
+                        result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
+                    }
+                    result.append(cardStatusLine)
                 }
                 if let progressPresentation {
                     if result.length > bodyStart {
