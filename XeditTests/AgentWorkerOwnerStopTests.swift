@@ -80,6 +80,7 @@ struct AgentWorkerOwnerStopTests {
     @Test("真实 Worker 的父裁判预算拒绝直接抛出，不再买报告或请求用户审批")
     func workerPropagatesRealApprovalFailure() async throws {
         let f = try fixture(); defer { f.cleanup() }
+        f.runtime.approvalMode = .smart
         f.app.safetyJudgeInferenceEnvironment = ([f.configuration], f.session)
         let payload = try response(tool: true)
         var requests = 0, reviews = 0

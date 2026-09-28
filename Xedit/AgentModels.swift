@@ -278,6 +278,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// conversation ended in a failure the user has neither retried nor
     /// dismissed.
     var lastTurnFailure: AgentTurnFailure?
+    /// User Stop pauses automatic background-event wakeups until they send a
+    /// new message. Persisting this prevents pending events from restarting a
+    /// stopped conversation after the app is relaunched.
+    var automaticWakeSuppressedAfterUserStop: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -333,7 +337,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         archivedAt: Date? = nil,
         titleIsUserSet: Bool = false,
         originRoutineID: UUID? = nil,
-        lastTurnFailure: AgentTurnFailure? = nil
+        lastTurnFailure: AgentTurnFailure? = nil,
+        automaticWakeSuppressedAfterUserStop: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -390,6 +395,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.titleIsUserSet = titleIsUserSet
         self.originRoutineID = originRoutineID
         self.lastTurnFailure = lastTurnFailure
+        self.automaticWakeSuppressedAfterUserStop = automaticWakeSuppressedAfterUserStop
     }
 
     /// The session shape for one scheduled-routine run.
@@ -511,7 +517,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID, contextSummaryInstalledAt, contextCheckpoint
         case didEditFiles, agentEditedPaths, fileObservations, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
-        case originRoutineID, lastTurnFailure
+        case originRoutineID, lastTurnFailure, automaticWakeSuppressedAfterUserStop
     }
 
     init(from decoder: Decoder) throws {
@@ -611,6 +617,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         // conversation: the transcript is the valuable part, this is only the
         // banner it should re-show.
         self.lastTurnFailure = try? c.decodeIfPresent(AgentTurnFailure.self, forKey: .lastTurnFailure)
+        self.automaticWakeSuppressedAfterUserStop = try c.decodeIfPresent(
+            Bool.self,
+            forKey: .automaticWakeSuppressedAfterUserStop
+        ) ?? false
         self.presentationScope = try c.decodeIfPresent(
             AgentSessionPresentationScope.self,
             forKey: .presentationScope
