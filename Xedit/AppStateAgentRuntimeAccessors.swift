@@ -191,7 +191,7 @@ extension AppState {
 
     /// Per-session approval behavior shown in the composer.
     var agentApprovalMode: AgentApprovalMode {
-        get { activeRuntime?.approvalMode ?? .smart }
+        get { activeRuntime?.approvalMode ?? .workspaceAccess }
         set { activeRuntime?.approvalMode = newValue }
     }
 

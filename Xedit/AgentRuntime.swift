@@ -225,7 +225,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Per-session mode & overrides
 
     @Published var interactionMode: AgentInteractionMode = .normal
-    @Published var approvalMode: AgentApprovalMode = .smart
+    @Published var approvalMode: AgentApprovalMode = .workspaceAccess
     /// Design gate state. Session-scoped, not per-turn: the operator may quit
     /// the app between "write the document" and "yes, go ahead".
     @Published var specGateState: AgentSpecGateState = .inactive

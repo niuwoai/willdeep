@@ -800,6 +800,11 @@ extension L10n {
                 return String(format: template, a1)
             }
             static let refreshTools = String(localized: "settings.mcp.refresh-tools", defaultValue: "Refresh Tools")
+            static let refreshAllTools = String(localized: "settings.mcp.refresh-all-tools", defaultValue: "Refresh All Tool Lists")
+            static func allToolsRefreshed(_ refreshed: String, _ total: String) -> String {
+                let template = String(localized: "settings.mcp.all-tools-refreshed", defaultValue: "Refreshed tools for %@ of %@ servers. New tools are available on the next request; no restart needed.")
+                return String(format: template, refreshed, total)
+            }
             static let delete = String(localized: "settings.mcp.delete", defaultValue: "Delete")
             static func headersPrefix(_ a1: String) -> String {
                 let template = String(localized: "settings.mcp.headers-prefix", defaultValue: "headers: %@")

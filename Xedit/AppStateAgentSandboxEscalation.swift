@@ -67,16 +67,15 @@ extension AppState {
         // The exact command has already cleared the normal tool gate before
         // it can reach this failure path. Smart Approval therefore owns the
         // same-command retry as well; asking again would turn the mode into
-        // Request Every Time by accident. Workspace Access stays manual here
-        // because leaving seatbelt broadens access beyond the workspace that
-        // mode explicitly grants.
+        // Request Every Time by accident. Workspace Access does the same only
+        // when this exact command already passed the AI safety judge.
+        let priorSource = runtime.toolCalls
+            .first(where: { $0.id == recordID })?
+            .approvalSource
+            ?? .staticAllowlist
         if Self.smartApprovalAutomaticallyRetriesSandboxDenial(
             approvalMode: runtime.approvalMode
-        ) {
-            let priorSource = runtime.toolCalls
-                .first(where: { $0.id == recordID })?
-                .approvalSource
-                ?? .staticAllowlist
+        ) || (runtime.approvalMode == .workspaceAccess && priorSource == .llmJudge) {
             return .retryEscalated(
                 approvalSource: priorSource,
                 requiresUserApproval: false
@@ -140,8 +139,8 @@ extension AppState {
     /// Background commands finish after their originating tool call has
     /// returned, so they cannot reuse the foreground approval waiter. Carry a
     /// host-derived one-shot retry grant only when the session policy already
-    /// permits it. Request Every Time and Workspace Access deliberately return
-    /// nil unless the exact command has an Always Allow grant.
+    /// permits it. Workspace Access also carries an exact one-shot grant when
+    /// the command already passed the AI judge.
     nonisolated static func automaticBackgroundSandboxRetryApprovalSource(
         approvalMode: AgentApprovalMode,
         existingApprovalSource: AgentToolApprovalSource?,
@@ -153,6 +152,9 @@ extension AppState {
         }
         if existingApprovalSource == .alwaysAllowList {
             return .alwaysAllowList
+        }
+        if approvalMode == .workspaceAccess, existingApprovalSource == .llmJudge {
+            return .llmJudge
         }
         guard smartApprovalAutomaticallyRetriesSandboxDenial(
             approvalMode: approvalMode

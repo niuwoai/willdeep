@@ -2116,6 +2116,13 @@ struct AgentToolsCoreTests {
                 approvalMode: .workspaceAccess
             )
         )
+        #expect(
+            AppState.automaticBackgroundSandboxRetryApprovalSource(
+                approvalMode: .workspaceAccess,
+                existingApprovalSource: .llmJudge,
+                isUnattendedDispatchTask: false
+            ) == .llmJudge
+        )
 
         #expect(
             AppState.automaticBackgroundSandboxRetryApprovalSource(

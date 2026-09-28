@@ -237,6 +237,11 @@ struct AgentApprovalModePolicyTests {
         ])
     }
 
+    @Test("new sessions default to Workspace Access")
+    func newSessionsDefaultToWorkspaceAccess() {
+        #expect(AgentSession().approvalMode == .workspaceAccess)
+    }
+
     /// 加档位最贵的一个坑：合成的 Codable 遇到不认识的 rawValue 会 throw，
     /// 而这个 throw 会顺着 AgentSession 的 decode 冒上去——旧版本读到新档位
     /// 的会话时，用户看到的不是"降级成默认档"，是**整个会话从列表里消失**。

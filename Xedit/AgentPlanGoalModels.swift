@@ -111,7 +111,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
         case .smart:
             return "Use WillDeep's smart review policy: read-only tools and workspace-scoped writes run automatically; safe external actions may be AI-approved; uncertain or risky external actions ask the user."
         case .workspaceAccess:
-            return "Allow write-tier actions and delegated agent work inside the current workspace to auto-run. External/network actions, danger-tier tools, the Plan gate, and untrusted MCP calls still require user approval."
+            return "Allow workspace-scoped writes to auto-run. Send external actions through the same AI safety review as Smart mode; ask the user when review declines or is unavailable. Danger-tier actions and untrusted MCP calls still require user approval."
         }
     }
 
@@ -124,7 +124,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
         case .smart:
             return "Reads and workspace-scoped writes auto-run; safe external actions may pass intelligent review; uncertain external actions ask; danger-tier commands require typed confirmation."
         case .workspaceAccess:
-            return "Reads and workspace-scoped writes auto-run; untrusted external actions ask; danger-tier commands require typed confirmation."
+            return "Reads and workspace-scoped writes auto-run; safe external actions may pass AI review; risky or untrusted actions ask; danger-tier commands require typed confirmation."
         }
     }
 

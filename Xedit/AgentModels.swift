@@ -311,7 +311,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         fileObservations: [String: AgentFileObservation] = [:],
         agentArtifactPaths: [String] = [],
         interactionMode: AgentInteractionMode = .normal,
-        approvalMode: AgentApprovalMode = .smart,
+        approvalMode: AgentApprovalMode = .workspaceAccess,
         specGateState: AgentSpecGateState = .inactive,
         specProposal: AgentSpecProposal? = nil,
         executionAgent: AgentExecutionAgent = .willDeep,
@@ -407,7 +407,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         providerEntryID: UUID?,
         providerID: String?,
         providerDisplayName: String?,
-        approvalMode: AgentApprovalMode = .smart
+        approvalMode: AgentApprovalMode = .workspaceAccess
     ) -> AgentSession {
         AgentSession(
             workspaceRootPath: workspaceRootPath,

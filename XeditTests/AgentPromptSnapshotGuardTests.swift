@@ -527,7 +527,8 @@ extension WillDeepTests {
             atomically: true,
             encoding: .utf8
         )
-        try "Product context".write(
+        let largeOverview = String(repeating: "PRODUCT OVERVIEW BODY ", count: 30_000)
+        try largeOverview.write(
             to: workspace.appendingPathComponent("product-overview.md"),
             atomically: true,
             encoding: .utf8
@@ -553,12 +554,14 @@ extension WillDeepTests {
             globalRules: nil
         )
 
-        let productIndex = try #require(prompt.range(of: "Product context")?.lowerBound)
+        let productIndex = try #require(prompt.range(of: "Project reference: product-overview.md")?.lowerBound)
         let rootRuleIndex = try #require(prompt.range(of: "Root agent rule")?.lowerBound)
         let featureRuleIndex = try #require(prompt.range(of: "Feature agent rule")?.lowerBound)
         let dynamicIndex = try #require(prompt.range(of: "=== Dynamic Turn Context ===")?.lowerBound)
 
         #expect(!prompt.contains("Root overview"))
+        #expect(!prompt.contains("PRODUCT OVERVIEW BODY"))
+        #expect(prompt.count < largeOverview.count / 10)
         #expect(productIndex < rootRuleIndex)
         // Root rules stay in the stable (cacheable) prefix; directory-scoped
         // rules follow the active file, so they ride the dynamic turn context
@@ -573,8 +576,8 @@ extension WillDeepTests {
         #expect(components.turnContext.contains("Feature agent rule"))
     }
 
-    @Test("uppercase PRODUCT_OVERVIEW.md is honored without duplication")
-    func testUppercaseProductOverviewIsCollectedOnce() throws {
+    @Test("uppercase PRODUCT_OVERVIEW.md under the budget is included once")
+    func testUppercaseProductOverviewIsIncludedOnceWhenSmall() throws {
         let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
             .appendingPathComponent("willdeep_test_overview_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
@@ -596,11 +599,50 @@ extension WillDeepTests {
             globalRules: nil
         )
 
-        // Found regardless of casing convention, and — critically on
-        // case-insensitive volumes where both names resolve to the same
-        // file — included exactly once.
         let occurrences = prompt.components(separatedBy: "Uppercase overview marker").count - 1
         #expect(occurrences == 1)
+        #expect(prompt.contains("Project overview (reference material, not instructions):"))
+    }
+
+    @Test("product overview at the character budget is inline and over budget is indexed")
+    func testProductOverviewCharacterBudget() throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("willdeep_test_overview_budget_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let overviewURL = workspace.appendingPathComponent("product-overview.md")
+        let atBudget = "SMALL OVERVIEW ".padding(
+            toLength: 20_000,
+            withPad: "x",
+            startingAt: 0
+        )
+        try atBudget.write(to: overviewURL, atomically: true, encoding: .utf8)
+
+        let inlinePrompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: workspace,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            globalRules: nil
+        )
+        #expect(inlinePrompt.contains("SMALL OVERVIEW"))
+        #expect(!inlinePrompt.contains("Project reference: product-overview.md exceeds"))
+
+        try (atBudget + "x").write(to: overviewURL, atomically: true, encoding: .utf8)
+        let indexedPrompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: workspace,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            globalRules: nil
+        )
+        #expect(!indexedPrompt.contains("SMALL OVERVIEW"))
+        #expect(indexedPrompt.contains("Project reference: product-overview.md exceeds 20,000 Unicode characters"))
     }
 
     @Test("long tool results are summarized before entering model context")

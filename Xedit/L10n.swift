@@ -215,7 +215,7 @@ nonisolated enum L10n {
         static let smart = String(localized: "approval-mode.smart", defaultValue: "Smart review")
         static let smartSummary = String(localized: "approval-mode.smart.summary", defaultValue: "Auto-write in the workspace; intelligently review external actions.")
         static let workspaceAccess = String(localized: "approval-mode.workspace-access", defaultValue: "Workspace write")
-        static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow workspace writes; ask before external actions.")
+        static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow workspace writes; intelligently review external actions.")
     }
 
     enum Expert {

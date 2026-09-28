@@ -53,6 +53,7 @@ struct AgentMCPSettingsView: View {
     @State private var serverMessages: [String: String] = [:]
     @State private var serverMessageIsError: Set<String> = []
     @State private var isRefreshing: Set<String> = []
+    @State private var isRefreshingAllTools = false
     @State private var isCreatingServer = false
     // Sheet 打开瞬间从 coordinator 取出来缓存这里；之后 sheet content
     // 闭包在 body 反复重算时只读 @State，不再回头调 coordinator，避免
@@ -84,6 +85,13 @@ struct AgentMCPSettingsView: View {
                         Label(L10n.Settings.MCP.refresh, systemImage: "arrow.clockwise")
                     }
                     .disabled(isLoadingServers)
+
+                    Button {
+                        refreshAllTools()
+                    } label: {
+                        Label(L10n.Settings.MCP.refreshAllTools, systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(isLoadingServers || isRefreshingAllTools || servers.allSatisfy { !$0.isEnabled })
 
                     Button {
                         openCursorConfig()
@@ -138,7 +146,7 @@ struct AgentMCPSettingsView: View {
                 creationCoordinator.markReviewItemReviewedIfNeeded()
                 statusMessage = L10n.Settings.MCP.createdServer(server.name)
                 if server.isEnabled {
-                    refreshTools(for: server)
+                    Task { await refreshTools(for: server) }
                 }
             } onCancel: {
                 isCreatingServer = false
@@ -311,7 +319,7 @@ struct AgentMCPSettingsView: View {
 
                 HStack {
                     Button {
-                        refreshTools(for: server)
+                        Task { await refreshTools(for: server) }
                     } label: {
                         Label(L10n.Settings.MCP.refreshTools, systemImage: "arrow.clockwise")
                     }
@@ -435,7 +443,7 @@ struct AgentMCPSettingsView: View {
         Task {
             await reloadServers()
             if let server = servers.first(where: { $0.id == "user:\(preset.server.name)" }) {
-                refreshTools(for: server)
+                await refreshTools(for: server)
             }
         }
     }
@@ -459,38 +467,47 @@ struct AgentMCPSettingsView: View {
         }
     }
 
-    private func refreshTools(for server: AgentMCPServerConfig) {
+    private func refreshTools(for server: AgentMCPServerConfig) async {
         isRefreshing.insert(server.id)
         serverMessages[server.id] = nil
         serverMessageIsError.remove(server.id)
-        Task {
-            do {
-                let result = try await AgentMCPBridge.listTools(arguments: ["server": .string(server.name)])
-                let count = AgentMCPBridge.parseToolCount(from: result.payload) ?? 0
-                // 顺手把插件 MCP 的工具目录刷一遍：模型看到的一等工具就是从
-                // 这份缓存来的，不在这里更新就只能等模型自己调一次
-                // list_mcp_tools。
-                if server.source == .plugin, let pluginID = AgentPluginMCPToolCatalog.pluginID(fromServerID: server.id) {
-                    AgentPluginMCPToolCatalog.record(
-                        serverID: server.id,
-                        pluginID: pluginID,
-                        serverName: server.name,
-                        listToolsPayload: result.payload
-                    )
-                }
-                await MainActor.run {
-                    toolCounts[server.id] = count
-                    serverMessages[server.id] = L10n.Settings.MCP.lastChecked(Date.now.formatted(date: .omitted, time: .shortened))
-                    serverMessageIsError.remove(server.id)
-                    isRefreshing.remove(server.id)
-                }
-            } catch {
-                await MainActor.run {
-                    serverMessages[server.id] = L10n.Settings.MCP.failedPrefix(error.localizedDescription)
-                    serverMessageIsError.insert(server.id)
-                    isRefreshing.remove(server.id)
-                }
+        do {
+            let result = try await AgentMCPBridge.listTools(arguments: ["server": .string(server.name)])
+            let count = AgentMCPBridge.parseToolCount(from: result.payload) ?? 0
+            // 模型请求会从此缓存动态构建插件 MCP 工具 schema；刷新后下一次
+            // 请求立即使用新目录，不需要重启会话或 App。
+            if server.source == .plugin, let pluginID = AgentPluginMCPToolCatalog.pluginID(fromServerID: server.id) {
+                AgentPluginMCPToolCatalog.record(
+                    serverID: server.id,
+                    pluginID: pluginID,
+                    serverName: server.name,
+                    listToolsPayload: result.payload
+                )
             }
+            toolCounts[server.id] = count
+            serverMessages[server.id] = L10n.Settings.MCP.lastChecked(Date.now.formatted(date: .omitted, time: .shortened))
+            serverMessageIsError.remove(server.id)
+        } catch {
+            serverMessages[server.id] = L10n.Settings.MCP.failedPrefix(error.localizedDescription)
+            serverMessageIsError.insert(server.id)
+        }
+        isRefreshing.remove(server.id)
+    }
+
+    private func refreshAllTools() {
+        Task { @MainActor in
+            isRefreshingAllTools = true
+            await reloadServers()
+            let enabledServers = servers.filter(\.isEnabled)
+            for server in enabledServers {
+                await refreshTools(for: server)
+            }
+            let failedCount = enabledServers.filter { serverMessageIsError.contains($0.id) }.count
+            let refreshedCount = enabledServers.count - failedCount
+            statusMessage = L10n.Settings.MCP.allToolsRefreshed(
+                "\(refreshedCount)", "\(enabledServers.count)"
+            )
+            isRefreshingAllTools = false
         }
     }
 
