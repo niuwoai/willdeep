@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.408.0-rc6 - 2026-09-28
+
+### Fixed
+
+- **`someim-*` 模型的缺省上下文窗口从 128K 改为 256K。** `someim-32b`、`someim-code-*`、`someim-auto-*`、`someim-coding-plan-*` 这类虚拟模型，名字里只有档位、没有上游模型，provider 目录又没上报窗口时，以前会一路落到最后的 128K 兜底。它们背后的上游现在都是 256K 级，按 128K 算会让上下文占用环和自动压缩提前触发。现在 provider 目录上报了窗口就用上报值，没上报的 `someim-*` 统一按 262,144 算。rc5 列的已知未修项到此收口。CLI 端同步改为同一缺省（willdeep-rs 0.84.0-rc4）。
+- 测试：`AgentModelSelectionTests` 新增 1 项，覆盖四个 `someim-*` 模型名（含大小写混写）都得到 262,144。
+
 ## 1.408.0-rc5 - 2026-09-28
 
 ### Fixed

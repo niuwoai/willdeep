@@ -127,6 +127,13 @@ struct AgentModelSelectionTests {
         #expect(decision.shouldRetry == false)
     }
 
+    @Test("some.im virtual models default to a 256K window unless the catalog reports one")
+    func someIMVirtualModelsDefaultTo256K() {
+        for model in ["someim-32b", "someim-code-high", "someim-auto-flash", "SomeIM-Coding-Plan-Low"] {
+            #expect(AppState.agentContextWindow(model: model, providerID: AgentProviderPreset.someIMID) == 262_144)
+        }
+    }
+
     @Test("a model-route entry encodes without message content and bounds the detail")
     func routeLogEntryEncoding() throws {
         let entry = AgentModelRouteLog.Entry(

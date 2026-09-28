@@ -629,6 +629,10 @@ extension AppState {
         )
     }
 
+    nonisolated static let someIMVirtualModelPrefix = "someim-"
+    /// 256K. Used only when the provider catalog has not reported a window.
+    nonisolated static let someIMVirtualModelContextWindow = 262_144
+
     nonisolated static func agentContextWindow(model rawModel: String, providerID rawProviderID: String = "") -> Int {
         let model = rawModel.lowercased()
         let providerID = rawProviderID.lowercased()
@@ -637,6 +641,11 @@ extension AppState {
         if let reported = AgentModelContextWindowCatalog.window(forModel: model) {
             return reported
         }
+        // some.im virtual models (someim-32b, someim-code-*, someim-auto-*, …)
+        // name a tier, not an upstream model, so nothing in the id says how big
+        // the window is. Their upstreams are all 256K-class now; the old
+        // 128K catch-all compressed too early.
+        if model.hasPrefix(Self.someIMVirtualModelPrefix) { return Self.someIMVirtualModelContextWindow }
         // Substring match — vendors include variants like `-32k`, `-128k` in the id.
         if model.contains("1m") || model.contains("-1m") || model.contains("1000k") { return 1_000_000 }
         if model.contains("512k") { return 512_000 }
