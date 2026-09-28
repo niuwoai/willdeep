@@ -1039,9 +1039,8 @@ private nonisolated final class AgentACPTerminalStore: @unchecked Sendable {
             ),
             redactionValues: secretRedactionValues
         )
-        outputPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty { terminal.append(data) }
+        AgentACPTerminalOutput.attachReader(to: outputPipe.fileHandleForReading) { data in
+            terminal.append(data)
         }
         process.terminationHandler = { process in
             outputPipe.fileHandleForReading.readabilityHandler = nil
@@ -1200,6 +1199,16 @@ nonisolated enum AgentWorkspacePathGuard {
     ) -> Bool {
         candidatePath == rootPath
             || candidatePath.hasPrefix(rootPath + "/")
+    }
+}
+
+/// Reads an ACP terminal's merged stdout/stderr. The command is arbitrary
+/// (dev servers, watchers), so it can close or redirect its output and keep
+/// running for hours; the handler must detach at EOF rather than wait for
+/// the termination handler, or it spins a core for the command's lifetime.
+nonisolated enum AgentACPTerminalOutput {
+    static func attachReader(to handle: FileHandle, sink: @escaping (Data) -> Void) {
+        AgentPipeEOFReader.attach(to: handle, sink: sink)
     }
 }
 

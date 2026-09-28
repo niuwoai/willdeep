@@ -18,6 +18,23 @@
 import Darwin
 import Foundation
 
+/// Installs a readability handler that hands every chunk to `sink` and
+/// detaches itself at EOF. A pipe whose write end is closed stays readable
+/// forever, so a handler that merely skips empty reads spins a core — for
+/// as long as its owner leaves it attached.
+nonisolated enum AgentPipeEOFReader {
+    static func attach(to handle: FileHandle, sink: @escaping (Data) -> Void) {
+        handle.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            sink(data)
+        }
+    }
+}
+
 nonisolated final class AgentPipeReader: @unchecked Sendable {
     /// Upper bound on how long the final drain waits for EOF once nothing
     /// more is readable. Long enough for a loaded host to deliver what the
@@ -43,12 +60,24 @@ nonisolated final class AgentPipeReader: @unchecked Sendable {
     /// lock as `drainToEnd`, so no read can land after the drain returns.
     func startReading() {
         handle.readabilityHandler = { [weak self] handle in
-            guard let self else { return }
+            guard let self else {
+                handle.readabilityHandler = nil
+                return
+            }
             self.lock.lock()
             defer { self.lock.unlock() }
             guard !self.drained else { return }
             let data = handle.availableData
-            if !data.isEmpty { self.sink(data) }
+            guard !data.isEmpty else {
+                // EOF while the child may still be running (`exec >log 2>&1`
+                // in a long job). The handle stays readable at EOF, so a
+                // handler that stays attached fires in a tight loop until
+                // termination. Nothing more can arrive; drainToEnd then
+                // sees EOF immediately.
+                handle.readabilityHandler = nil
+                return
+            }
+            self.sink(data)
         }
     }
 

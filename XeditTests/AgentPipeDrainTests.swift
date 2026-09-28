@@ -100,4 +100,31 @@ struct AgentPipeDrainTests {
         #expect(received.value.count == atDrain)
         #expect(atDrain == payload.count)
     }
+
+    /// A long job that redirects its own output (`exec >log 2>&1; serve`)
+    /// puts the pipe at EOF while the process keeps running. The handler must
+    /// detach there instead of spinning until the termination drain.
+    @Test
+    func handlerDetachesAtEOFWhileChildKeepsRunning() async throws {
+        let pipe = Pipe()
+        let received = Received()
+        let reader = AgentPipeReader(handle: pipe.fileHandleForReading) { received.append($0) }
+        reader.startReading()
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "printf ready; exec >&-; sleep 20"]
+        process.standardOutput = pipe
+        try process.run()
+        defer { if process.isRunning { process.terminate() } }
+        try? pipe.fileHandleForWriting.close()
+
+        let deadline = Date().addingTimeInterval(10)
+        while pipe.fileHandleForReading.readabilityHandler != nil, Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(pipe.fileHandleForReading.readabilityHandler == nil)
+        #expect(process.isRunning)
+        #expect(received.value == Data("ready".utf8))
+    }
 }

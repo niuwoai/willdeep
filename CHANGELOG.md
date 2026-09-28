@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.408.0-rc4 - 2026-09-28
+
+### Fixed
+
+- **后台任务和 ACP 终端里的命令把自己的输出关掉后还在跑，WillDeep 不再为此空转吃满 CPU。** 接着 rc3 把全仓库 17 处 `readabilityHandler` 挨个查了一遍。子进程还活着的时候管道也可能到 EOF：比如后台任务跑 `exec >log 2>&1; npm run dev`，或者脚本自己关掉 stdout/stderr 再继续干活。这时读端停在 EOF、永远「可读」。有两处 handler 读到空数据只是跳过、不摘自己，要等进程退出、terminationHandler 来清，于是命令跑多久，一根管道就占一个核多久：
+  - `AgentPipeReader`（后台任务的 stdout/stderr，两条启动路径都用它）：读到 EOF 就把 handler 置 nil。之后 `drainToEnd` 会立刻读到 EOF 返回，退出时收尾读完的保证不变。reader 已释放时 handler 也会顺手摘掉自己。
+  - ACP 终端（`terminal/create` 跑的任意命令，stdout/stderr 合并成一根管道）：改用共享读法，EOF 即摘。
+  - rc3 的 `AgentMCPBridge.attachEOFAwareReader` 挪到 `AgentPipeDrain.swift`，成了共享的 `AgentPipeEOFReader.attach(to:sink:)`。stdio MCP 和 ACP 终端都走它，行为不变。
+  - 查过、没改的：LSP 客户端、Computer Use 助手、ACP 适配器进程本身，本来就在 EOF 时摘 handler。Codex app-server、git worktree 创建、SSH 远程命令、ZModem 本地 lrz/lsz 在 EOF 时不摘，但 terminationHandler 或 `waitUntilExit()` 之后会马上清掉，空转窗口只有「关输出 → 进程退出」这一小段；这几个跑的都是固定程序，不会提前关自己的输出。
+- 测试：`AgentPipeDrainTests` 新增 `handlerDetachesAtEOFWhileChildKeepsRunning`，新增 `AgentACPTerminalOutputTests`（1 项）。两项都用真实子进程 `printf ready; exec >&-; sleep 20`，断言进程还活着时 handler 已被摘掉、数据完整。`AgentMCPStdioEOFReaderTests` 改为调用共享 helper。反验：撤掉两处修复后，两项新测试都在 10 秒等待后变红，其他 4 项仍然通过。本地 `run_tests_fast.rb` 跑 `AgentPipeDrainTests`、`AgentACPTerminalOutputTests`、`AgentMCPStdioEOFReaderTests`、`AgentMCPBridgeCoreTests`、`AgentMCPHostRequestsTests`、`AgentExecutorProtocolTests`：6 个 suite 共 50 项通过，退出码 0。全量 XeditTests 没有在本地跑。
+
 ## 1.408.0-rc3 - 2026-09-28
 
 ### Fixed

@@ -574,10 +574,12 @@ enum AgentMCPBridge {
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
-            AgentMCPBridge.attachEOFAwareReader(to: stdoutPipe.fileHandleForReading) { data in
+            // 读到 EOF 就摘掉 handler：插件死了又没人再调它时，不摘会每根管道
+            // 钉死一个核空转（实测 3 个死插件把 App 顶到 230% CPU）。
+            AgentPipeEOFReader.attach(to: stdoutPipe.fileHandleForReading) { data in
                 inbox.append(data)
             }
-            AgentMCPBridge.attachEOFAwareReader(to: stderrPipe.fileHandleForReading) { data in
+            AgentPipeEOFReader.attach(to: stderrPipe.fileHandleForReading) { data in
                 stderrCollector.append(data)
             }
 
@@ -851,26 +853,6 @@ enum AgentMCPBridge {
 
     /// `server` 为 nil 或非插件服务时，形状与此前完全一致；插件的 stdio 服务
     /// 额外宣告可以反向请求哪些宿主能力（见 `AgentMCPHostRequests`）。
-    /// 给子进程输出管道挂 readabilityHandler，读到 EOF 就把自己摘掉。
-    ///
-    /// 管道写端关闭（子进程退出）后，读端在 EOF 上永远「可读」，handler 会被
-    /// 无限次回调、每次读到空 Data。以前 handler 只丢掉空数据不摘自己，要等
-    /// 下一次调用这个服务器走 `resetProcess()` 才清；插件死了又没人再调它，
-    /// 每根管道就钉死一个核空转（实测 3 个死插件把 App 顶到 230% CPU）。
-    nonisolated static func attachEOFAwareReader(
-        to handle: FileHandle,
-        sink: @escaping (Data) -> Void
-    ) {
-        handle.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else {
-                handle.readabilityHandler = nil
-                return
-            }
-            sink(data)
-        }
-    }
-
     nonisolated static func initializeParams(for server: AgentMCPServerConfig? = nil) -> [String: Any] {
         var extensions: [String: Any] = [
             "io.modelcontextprotocol/ui": [

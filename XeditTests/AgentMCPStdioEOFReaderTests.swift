@@ -4,7 +4,7 @@
 //
 //  stdio MCP 子进程退出后，输出管道读端停在 EOF 上永远「可读」。
 //  readabilityHandler 不摘掉自己就会无限空转，每根管道钉死一个核。
-//  这里钉住 attachEOFAwareReader：数据照常交出去，EOF 后 handler 清空。
+//  这里钉住共享的 AgentPipeEOFReader.attach：数据照常交出去，EOF 后 handler 清空。
 //
 
 import Testing
@@ -47,7 +47,7 @@ struct AgentMCPStdioEOFReaderTests {
     func readerDeliversDataThenDetachesOnEOF() async throws {
         let pipe = Pipe()
         let collected = Collected()
-        AgentMCPBridge.attachEOFAwareReader(to: pipe.fileHandleForReading) { data in
+        AgentPipeEOFReader.attach(to: pipe.fileHandleForReading) { data in
             collected.append(data)
         }
         #expect(pipe.fileHandleForReading.readabilityHandler != nil)
@@ -65,7 +65,7 @@ struct AgentMCPStdioEOFReaderTests {
     func readerDetachesAfterChildProcessExits() async throws {
         let pipe = Pipe()
         let collected = Collected()
-        AgentMCPBridge.attachEOFAwareReader(to: pipe.fileHandleForReading) { data in
+        AgentPipeEOFReader.attach(to: pipe.fileHandleForReading) { data in
             collected.append(data)
         }
 
