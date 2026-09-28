@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-28 | Current version: v1.409.0-rc1
+> Last updated: 2026-09-28 | Current version: v1.409.0-rc4
+
+设置 → MCP 支持刷新全部已启用服务器的工具列表。刷新后，下一次模型请求会使用最新工具定义，不用重启 App 或会话。
 
 插件 MCP 网关（1.405.0-rc1）：WillDeep 启动时开一个只绑本机的 Streamable HTTP 入口（地址与 token 在 `~/Library/Application Support/WillDeep/mcp-gateway.json`），Claude Code、Codex 等外部 MCP 客户端连它就能调插件的 MCP 工具；第一条请求时宿主按需拉起插件，不必先打开插件页。设置 → MCP 的插件服务行可复制 Claude Code 连接命令。契约见 `docs/decisions/0001-plugin-mcp-gateway.md`。
 

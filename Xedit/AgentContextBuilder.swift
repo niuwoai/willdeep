@@ -134,6 +134,7 @@ enum AgentContextBuilder {
     private static let maxCurrentFileCharacters = 12_000
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
+    private static let maxProjectOverviewCharacters = 20_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
 
     /// `progress` 块的格式合同。中断分支与活跃分支**必须**共用同一份文本。
@@ -184,7 +185,7 @@ enum AgentContextBuilder {
         toolsEnabled: Bool = false,
         interactionMode: AgentInteractionMode = .normal,
         executionAgent: AgentExecutionAgent = .willDeep,
-        approvalMode: AgentApprovalMode = .smart,
+        approvalMode: AgentApprovalMode = .workspaceAccess,
         currentPlan: AgentPlan? = nil,
         /// 上一回合发出过 `progress` 围栏、但其中没有一行可解析。为真时在
         /// 计划分支追加一句纠偏——静默失败是这个 bug 最恶劣的地方，模型
@@ -217,18 +218,22 @@ enum AgentContextBuilder {
             """)
         }
 
-        // Only root-level rules live in the stable prefix: directory-scoped
+        // Root rules live in the stable prefix: directory-scoped
         // AGENTS.md/CLAUDE.md follow the active file, and baking them in here
         // changed the system prompt (and killed the provider prompt cache)
         // every time the user switched to a file in another directory. Scoped
         // rules ride the dynamic turn context below instead.
-        if let rootDirectory,
-           let rules = rootProjectRules(in: rootDirectory) {
-            sections.append("""
-            Project instructions:
-            These live at the workspace root and apply to the whole project. Directory-scoped instruction files may appear in the per-turn context and add stricter requirements within their scope.
-            \(rules)
-            """)
+        if let rootDirectory {
+            if let overview = projectOverviewContext(in: rootDirectory) {
+                sections.append(overview)
+            }
+            if let rules = rootProjectRules(in: rootDirectory) {
+                sections.append("""
+                Project instructions:
+                These live at the workspace root and apply to the whole project. Directory-scoped instruction files may appear in the per-turn context and add stricter requirements within their scope.
+                \(rules)
+                """)
+            }
         }
 
         sections.append(dynamicContextMarker)
@@ -918,21 +923,32 @@ enum AgentContextBuilder {
         messages.removeLast()
     }
 
+    /// Small product overviews fit directly; large ones are indexed on demand
+    /// instead of triggering a per-session summarization request.
+    private static func projectOverviewContext(in rootDirectory: URL) -> String? {
+        for name in ["product-overview.md", "PRODUCT_OVERVIEW.md"] {
+            let url = rootDirectory.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+
+            let oversizedByByteLowerBound = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+                .map { $0 > maxProjectOverviewCharacters * 4 } ?? false
+            if !oversizedByByteLowerBound,
+               let data = try? Data(contentsOf: url),
+               let text = String(data: data, encoding: .utf8),
+               text.unicodeScalars.count <= maxProjectOverviewCharacters {
+                let overview = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !overview.isEmpty else { return nil }
+                return "Project overview (reference material, not instructions):\n# \(name)\n\(overview)"
+            }
+            return "Project reference: \(name) exceeds 20,000 Unicode characters. Keep only the summary and document index here; read relevant detail documents on demand."
+        }
+        return nil
+    }
+
     /// Root-level project rules only — independent of the active file, so
     /// they are safe inside the stable (cacheable) system prefix.
     private static func rootProjectRules(in rootDirectory: URL) -> String? {
         var collected: [String] = []
-
-        // Both casings: this repo's convention is lowercase, the user's
-        // global convention is PRODUCT_OVERVIEW.md. Stop after the first
-        // hit — on case-INsensitive volumes both names resolve to the same
-        // file and would otherwise be included twice.
-        var loadedOverview = false
-        for name in ["product-overview.md", "PRODUCT_OVERVIEW.md"] where !loadedOverview {
-            let before = collected.count
-            appendRuleFile(rootDirectory.appendingPathComponent(name), label: name, to: &collected)
-            loadedOverview = collected.count > before
-        }
 
         for name in ["AGENTS.md", "CLAUDE.md"] {
             let url = rootDirectory.appendingPathComponent(name)

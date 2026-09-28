@@ -194,7 +194,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         prompt: String = "",
         workspaceRootPath: String? = nil,
         modelID: String? = nil,
-        approvalMode: AgentApprovalMode = .smart,
+        approvalMode: AgentApprovalMode = .workspaceAccess,
         schedule: AgentRoutineSchedule = .dailyAt(hour: 9, minute: 0),
         isEnabled: Bool = true,
         lastRunAt: Date? = nil,
