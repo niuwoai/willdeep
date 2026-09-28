@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.408.0-rc5 - 2026-09-28
+
+### Fixed
+
+- **配好的模型在几条路径上没被真正用上，这次逐条修正。** 起因是按"模型优化：选对组合"的清单对全仓库做了一次选型审计：
+  - **会话指定的模型被悄悄换回预设默认。** `configurationForCurrentTurn` 写入 `sessionModelOverride` 之后又跑了一遍 `.normalized`，预设不认识的模型名会被重置。聊天框的选择器入口先做了兼容检查，Routine、调度台节点、Goal 规划成员三条路径是直接赋值的，所以 Routine 钉 `o4-mini`（OpenAI 预设原先不认 `o4`）实际跑的是 `gpt-4.1-mini`。现在显式指定的模型在 normalize 之后写回；设置层"切了 provider 带着旧模型名"的保护不变。OpenAI 预设补上 `o4` 前缀。
+  - **压缩、标题、输入联想、审批解释用的是全局 provider，不是会话自己的 provider。** 会话钉在 B 家时，这几类请求仍然拿 A 家的 key 和 flash 模型发出去。新增 `auxiliaryBaseConfiguration(for:)`：会话 provider 与设置里的相同，就沿用设置（保留显式指定的压缩模型、标题模型）；不同则改用会话 provider，由它的 flash 模型负责压缩和标题。
+  - **judge、security_guard 两个裁决工种只绑了 provider，没有绑模型。** 实际跑的是 some.im 条目的默认聊天模型。改为绑定 `someim-judge`（非思考、无人设的判定链）。父会话不是 some.im 时仍然留在父会话上，私有会话不外溢这条规则不变。
+  - **Goal 验收由作者自己的模型给自己打分。** 现在改走 reviewer 工种的 expert 档；证据里带截图、而 reviewer 档看不了图时，才退回作者的模型。
+  - **审批解释和插件 AI 的写法有误导性。** 两处都先按压缩配置解析，再改回 flash 模型，读起来像是压缩模型会生效，其实不会。现在直接取 flash 模型，行为不变。
+- **路由和回退第一次留下"用了哪个模型、为什么"。** 新增 `AgentAudit/model-routing.jsonl`（`AgentModelRouteLog`），以下几种情况会写入：
+  - Worker 档位或绑定没解析成功、退回父模型。原因分为未配置、私有会话留在自己的 provider、provider 不可用、缺 key 四种。
+  - 省心托管每一回合的选模结果，附带裁判给的理由。
+  - 质检裁判不可用，或判定不合格触发升档。
+
+  格式和查询方法见 `docs/WORKER_TIMING_LOG.md`。
+- **裁判调用和托管升档重跑终于计入用量。** 安全裁判、路由裁判、质检裁判的每一次物理请求都记为辅助请求（`safetyJudge` / `routeJudge` / `qualityJudge`），token 数通过 `AgentNonStreamingModelRequest.usageObserver` 取自 provider 返回的 usage。托管升档时被删掉的那一版回答，以 `discardedEscalationAttempt` 保留它的 token。
+- 实弹靶场（`scripts/skill_worker_range.rb` 和 `AgentSubagentLiveFireRangeTests`）的默认模型从早已不用的 `glm-5` 改成标准档的 `someim-32b`，与真实派工一致。
+- 测试：新增 `AgentModelSelectionTests`，共 10 项：
+  - 会话覆盖模型不被 normalize 重置；空覆盖不生效；OpenAI 预设认得 `o4`。
+  - 辅助请求跟随会话 provider；同一 provider 时保留设置里的显式模型。
+  - 裁决工种绑定 `someim-judge`；私有父会话下留在父会话。
+  - Worker 档位回退带原因。
+  - 质检裁判不可用时有标记。
+  - 路由台账不含正文，且 detail 有长度上限。
+
+  本地 `run_tests_fast.rb` 跑了 `AgentModelSelectionTests`、`AgentWorkerArchitectureTests`、`SomeIMManagedRoutingTests`、`AgentSubagentProfileTests`，全部通过，退出码 0。
+- 已知未修：`someim-*` 虚拟模型在 provider 目录没有上报窗口时，上下文窗口仍按 128K 猜。客户端拿不到可信的真值，写死一个数字等于换个猜法，要等 some.im 的模型目录上报窗口。
+
 ## 1.408.0-rc4 - 2026-09-28
 
 ### Fixed

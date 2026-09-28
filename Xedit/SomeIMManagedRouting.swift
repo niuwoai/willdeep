@@ -380,6 +380,9 @@ nonisolated enum SomeIMManagedRouting {
     struct SomeIMOutputQualityDecision: Equatable {
         var shouldRetry: Bool
         var failureType: String
+        /// false when the judge was unreachable / unparseable and the local
+        /// heuristics decided instead.
+        var judgeAvailable = true
     }
 
     /// Cheap local deterministic failure detection: whitespace-only output, or
@@ -501,8 +504,8 @@ nonisolated enum SomeIMManagedRouting {
             "output-quality judge unavailable (raw \(raw == nil ? "nil" : "undecodable", privacy: .public)); using local heuristics"
         )
         if let localFailure, localFailure == "repetition_loop" || localFailure == "empty_output" {
-            return SomeIMOutputQualityDecision(shouldRetry: true, failureType: localFailure)
+            return SomeIMOutputQualityDecision(shouldRetry: true, failureType: localFailure, judgeAvailable: false)
         }
-        return SomeIMOutputQualityDecision(shouldRetry: false, failureType: "none")
+        return SomeIMOutputQualityDecision(shouldRetry: false, failureType: "none", judgeAvailable: false)
     }
 }

@@ -434,7 +434,8 @@ extension AppState {
 
         let childConfiguration = resolvedSubagentConfiguration(
             for: profile,
-            parentConfiguration: configuration
+            parentConfiguration: configuration,
+            sessionID: runtime.id
         )
         if let tier = AgentWorkerTierModels.tier(for: profile.modelBinding),
            workerTierConfiguration(tier, parent: configuration) == nil {

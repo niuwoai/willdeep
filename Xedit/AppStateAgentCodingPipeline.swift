@@ -84,7 +84,8 @@ extension AppState {
         )
         let smallConfiguration = resolvedSubagentConfiguration(
             for: smallProfile,
-            parentConfiguration: parentConfiguration
+            parentConfiguration: parentConfiguration,
+            sessionID: runtime.id
         )
         // Do not silently turn "small-model-first" into "whatever provider
         // happened to be active". If the base some.im worker is unavailable,

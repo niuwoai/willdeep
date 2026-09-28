@@ -19,7 +19,7 @@ require 'fileutils'
 require 'optparse'
 
 options = {
-  model: ENV['XEDIT_RANGE_MODEL'] || 'glm-5',
+  model: ENV['XEDIT_RANGE_MODEL'] || 'someim-32b',
   cases: ENV['XEDIT_RANGE_CASES'],
   config: File.join(ENV['WILLDEEP_HOME'] || File.join(Dir.home, '.willdeep'), 'config.toml'),
   out: File.join(Dir.pwd, 'build', 'skill-worker-range')
@@ -27,7 +27,7 @@ options = {
 
 OptionParser.new do |parser|
   parser.banner = 'Usage: ruby scripts/skill_worker_range.rb [options]'
-  parser.on('--model MODEL', '派工用的模型，默认 glm-5') { |value| options[:model] = value }
+  parser.on('--model MODEL', '派工用的模型，默认 someim-32b（与标准档 Worker 一致）') { |value| options[:model] = value }
   parser.on('--cases LIST', '只跑这些样本，逗号分隔') { |value| options[:cases] = value }
   parser.on('--config PATH', '取凭据的 willdeep 配置文件') { |value| options[:config] = value }
   parser.on('--out DIR', '报告输出目录') { |value| options[:out] = value }

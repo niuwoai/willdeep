@@ -35,7 +35,7 @@ extension AppState {
 
         runtime.isCompressingContext = true
         AgentTelemetry.recordFeatureUsed(.contextCompression, surface: .automatic)
-        let configurations = contextCompressionConfigurationCandidates()
+        let configurations = contextCompressionConfigurationCandidates(for: runtime)
 
         Task { [weak self, weak runtime] in
             guard let self, let runtime else { return }
@@ -380,7 +380,7 @@ extension AppState {
             for: runtime,
             head: plan.head,
             priorSummary: plan.priorSummary,
-            configurations: contextCompressionConfigurationCandidates()
+            configurations: contextCompressionConfigurationCandidates(for: runtime)
         )
         if outcome.reclaimed {
             Self.contextCompressionLog.notice(

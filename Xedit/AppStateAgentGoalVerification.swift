@@ -199,7 +199,19 @@ extension AppState {
               let message = runtime.messages.first(where: { $0.id == candidate.messageID }) else {
             throw AgentGoalEvidenceFiles.Failure("Completion candidate message is unavailable.")
         }
-        let configuration = AgentSubagentModelCompatibility.configuration(configurationForCurrentTurn(for: runtime))
+        // Acceptance runs on the reviewer trade's own (expert) tier so the
+        // author's model is not grading its own work. UI evidence needs a
+        // vision model; when the reviewer tier cannot see images, the
+        // author's model is the only one that can, so it stays as fallback.
+        let authorConfiguration = AgentSubagentModelCompatibility.configuration(configurationForCurrentTurn(for: runtime))
+        let reviewerConfiguration = resolvedSubagentConfiguration(
+            for: AgentSubagentProfileCatalog.reviewer,
+            parentConfiguration: authorConfiguration,
+            sessionID: runtime.id
+        )
+        let configuration = packet.images.isEmpty || reviewerConfiguration.supportsImageInput
+            ? reviewerConfiguration
+            : authorConfiguration
         guard packet.images.isEmpty || configuration.supportsImageInput else {
             throw AgentGoalEvidenceFiles.Failure("This verification model cannot inspect images. Use an authorized vision-capable model for UI acceptance.")
         }

@@ -113,7 +113,9 @@ extension AppState {
             )
         }
 
-        var configuration = agentConfiguration.resolved(for: .compression)
+        // The flash model of the provider the active session runs on — not
+        // the compression model (that one is for summarising history).
+        var configuration = auxiliaryBaseConfiguration(for: activeRuntime)
         configuration.model = configuration.flashModel
         return AgentApprovalExplanationRoute(
             configurations: [configuration.normalized],

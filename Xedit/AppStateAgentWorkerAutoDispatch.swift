@@ -89,7 +89,8 @@ extension AppState {
 
         let childConfiguration = resolvedSubagentConfiguration(
             for: profile,
-            parentConfiguration: configuration
+            parentConfiguration: configuration,
+            sessionID: runtime.id
         )
         let hostRunID = beginHostWorkerRun(
             profileID: profile.id,

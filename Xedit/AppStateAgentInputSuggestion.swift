@@ -33,9 +33,10 @@ extension AppState {
         }
         guard let payload = AgentInputSuggestion.payload(from: turns) else { return }
 
-        let modelID = agentConfiguration.normalized.titleSummaryModel()
+        let baseConfiguration = auxiliaryBaseConfiguration(for: runtime)
+        let modelID = baseConfiguration.titleSummaryModel()
         guard !modelID.isEmpty else { return }
-        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID)
+        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID, base: baseConfiguration)
         guard !configurations.isEmpty else { return }
 
         let runtimeID = runtime.id

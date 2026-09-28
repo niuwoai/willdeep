@@ -55,28 +55,43 @@ extension AppState {
         parent: AgentConfiguration,
         models: AgentWorkerTierModels? = nil
     ) -> AgentConfiguration? {
+        if case .success(let configuration) = workerTierResolution(tier, parent: parent, models: models) {
+            return configuration
+        }
+        return nil
+    }
+
+    /// `workerTierConfiguration` with the reason it could not resolve, so a
+    /// spawn that falls back to the parent model can say why.
+    func workerTierResolution(
+        _ tier: AgentWorkerTier,
+        parent: AgentConfiguration,
+        models: AgentWorkerTierModels? = nil
+    ) -> Result<AgentConfiguration, AgentWorkerTierUnavailable> {
         let binding = (models ?? effectiveWorkerTierModels())[tier]
         let model = binding.model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !model.isEmpty else { return nil }
+        guard !model.isEmpty else { return .failure(.init(reason: .bindingUnconfigured)) }
         var configuration: AgentConfiguration
         if let entryID = binding.preferredProviderEntryID {
             guard let entry = agentProviderLibrary.entries.first(where: { $0.id == entryID }),
                   entry.isUsableForChatSelection(
                     isSomeIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-                  ) else { return nil }
+                  ) else { return .failure(.init(reason: .providerUnavailable)) }
             materializeProviderLibraryEntryAPIKey(id: entry.id)
             let materialized = agentProviderLibrary.entries.first { $0.id == entry.id } ?? entry
             configuration = materialized.makeConfiguration(imageDescription: parent.imageDescription)
         } else {
             guard binding.preferredProviderID == nil || binding.preferredProviderID == parent.providerID else {
-                return nil
+                return .failure(.init(reason: .privateParentKeepsProvider))
             }
             configuration = parent
         }
         configuration.model = model
         configuration = AgentSubagentModelCompatibility.configuration(configuration)
-        guard !configuration.normalized.requiresAPIKey || !configuration.apiKey.isEmpty else { return nil }
-        return configuration
+        guard !configuration.normalized.requiresAPIKey || !configuration.apiKey.isEmpty else {
+            return .failure(.init(reason: .missingAPIKey))
+        }
+        return .success(configuration)
     }
 
     func nextWorkerTierConfiguration(
@@ -97,4 +112,8 @@ extension AppState {
     nonisolated static func sameWorkerModel(_ lhs: AgentConfiguration, _ rhs: AgentConfiguration) -> Bool {
         lhs.providerID == rhs.providerID && lhs.baseURL == rhs.baseURL && lhs.model == rhs.model
     }
+}
+
+nonisolated struct AgentWorkerTierUnavailable: Error, Equatable, Sendable {
+    let reason: AgentModelRouteLog.Reason
 }

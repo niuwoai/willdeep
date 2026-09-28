@@ -7,6 +7,14 @@ nonisolated enum AgentAuxiliaryRequestPurpose: String, Codable, Equatable, Senda
     case workerRouting
     /// 回合结束后预测用户下一句，显示为输入框灰字。
     case inputSuggestion
+    /// 命令安全裁判（someim-security-guard 或兜底 provider）。
+    case safetyJudge
+    /// 省心托管的路由裁判（someim-judge 选主模型）。
+    case routeJudge
+    /// 省心托管的输出质检裁判；判不合格会触发升档重跑。
+    case qualityJudge
+    /// 省心托管升档重跑时被丢弃的那一版回答。消息删了，钱照样花了。
+    case discardedEscalationAttempt
 }
 
 /// Compact, prompt-free telemetry for helper model calls associated with a

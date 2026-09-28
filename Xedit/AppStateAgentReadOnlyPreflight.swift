@@ -80,7 +80,8 @@ extension AppState {
 
         let childConfiguration = resolvedSubagentConfiguration(
             for: profile,
-            parentConfiguration: configuration
+            parentConfiguration: configuration,
+            sessionID: runtime.id
         )
         // Terminal inspection is the only preflight that can be useful with
         // no workspace binding at all. Every other trade needs either a local

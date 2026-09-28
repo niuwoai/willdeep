@@ -84,7 +84,7 @@ struct AgentGoalCompressionRetryTests {
         f.runtime.isCompressingContext = true
         await f.app.runContextCompression(
             for: f.runtime, head: plan.head, tail: plan.tail, priorSummary: plan.priorSummary,
-            configurations: f.app.contextCompressionConfigurationCandidates()
+            configurations: f.app.contextCompressionConfigurationCandidates(for: nil)
         )
     }
 

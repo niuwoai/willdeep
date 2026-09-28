@@ -151,32 +151,78 @@ extension AppState {
     /// the currently-selected one.
     func configurationForCurrentTurn(for runtime: AgentRuntime) -> AgentConfiguration {
         if let environment = agentLoopInferenceEnvironment { return environment.configuration.normalized }
-        var configuration: AgentConfiguration
+        let configuration = (sessionProviderConfiguration(for: runtime) ?? agentConfiguration.normalized)
+            .resolved(for: .interactive)
+        return Self.applyingSessionModelOverride(runtime.sessionModelOverride, to: configuration)
+    }
+
+    /// The provider a runtime is pinned to, before any per-purpose model
+    /// resolution. `nil` means "no session pin — use the Settings default".
+    func sessionProviderConfiguration(for runtime: AgentRuntime) -> AgentConfiguration? {
         if let entry = providerEntry(for: runtime) {
-            configuration = entry.makeConfiguration(
+            return entry.makeConfiguration(
                 imageDescription: agentConfiguration.imageDescription
-            ).normalized.resolved(for: .interactive)
-        } else if runtime.sessionProviderIDOverride == AgentProviderPreset.someIMID {
-                let settings = SomeIMIntegrationStore.loadSettings().normalized
-                let entry = AgentProviderEntry(
-                    providerID: AgentProviderPreset.someIMID,
-                    baseURL: settings.baseURL,
-                    apiKey: SomeIMIntegrationStore.loadAPIKey(),
-                    flashPrimary: SomeIMIntegrationSettings.defaultTextModel,
-                    proPrimary: SomeIMIntegrationSettings.defaultTextModel,
-                    routingMode: .flash
-                )
-                configuration = entry.makeConfiguration(
-                    imageDescription: agentConfiguration.imageDescription
-                ).normalized.resolved(for: .interactive)
-        } else {
-            configuration = agentConfiguration.normalized.resolved(for: .interactive)
+            ).normalized
         }
-        if let override = runtime.sessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !override.isEmpty {
-            configuration.model = override
+        guard runtime.sessionProviderIDOverride == AgentProviderPreset.someIMID else { return nil }
+        let settings = SomeIMIntegrationStore.loadSettings().normalized
+        let entry = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: settings.baseURL,
+            apiKey: SomeIMIntegrationStore.loadAPIKey(),
+            flashPrimary: SomeIMIntegrationSettings.defaultTextModel,
+            proPrimary: SomeIMIntegrationSettings.defaultTextModel,
+            routingMode: .flash
+        )
+        return entry.makeConfiguration(
+            imageDescription: agentConfiguration.imageDescription
+        ).normalized
+    }
+
+    /// Base configuration for a runtime's auxiliary requests (compression,
+    /// titling, input suggestions). These used to read the global Settings
+    /// provider unconditionally, so a session pinned to provider B still
+    /// sent its history to provider A with A's key. Same provider as
+    /// Settings → keep Settings (it carries the explicit compression / title
+    /// models); a different pinned provider → that provider, whose flash
+    /// model then serves as the compression and title model.
+    func auxiliaryBaseConfiguration(for runtime: AgentRuntime?) -> AgentConfiguration {
+        let global = agentConfiguration.normalized
+        guard agentLoopInferenceEnvironment == nil,
+              let runtime,
+              let session = sessionProviderConfiguration(for: runtime) else {
+            return global
         }
-        return configuration.normalized
+        return Self.auxiliaryBaseConfiguration(global: global, session: session)
+    }
+
+    static func auxiliaryBaseConfiguration(
+        global: AgentConfiguration,
+        session: AgentConfiguration
+    ) -> AgentConfiguration {
+        let sameProvider = session.providerID == global.providerID
+            && session.baseURL == global.baseURL
+            && session.apiKey == global.apiKey
+        return sameProvider ? global : session
+    }
+
+    /// `.normalized` resets any model its preset doesn't recognise to the
+    /// preset default — meant for stale Settings values carried across a
+    /// provider switch. A per-session override is an explicit choice (the
+    /// picker, a Routine, a dispatch node, a Goal plan member), so it is
+    /// written back *after* normalising; otherwise e.g. a Routine pinned to
+    /// `o4-mini` on the OpenAI preset silently ran `gpt-4.1-mini`.
+    static func applyingSessionModelOverride(
+        _ rawOverride: String?,
+        to configuration: AgentConfiguration
+    ) -> AgentConfiguration {
+        var result = configuration.normalized
+        guard let override = rawOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !override.isEmpty else {
+            return result
+        }
+        result.model = override
+        return result
     }
 
     func configurationForContextCompression() -> AgentConfiguration {

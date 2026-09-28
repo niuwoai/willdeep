@@ -208,13 +208,29 @@ extension AppState {
             if someIMCodingPlanStatus.isStale {
                 refreshSomeIMCodingPlanStatus(force: false)
             }
-            let resolution = await SomeIMManagedRouting.route(
-                input: judgeInput,
-                floor: floor,
-                hasCodingPlan: hasCodingPlan
-            ) { system, user, maxTokens in
-                await routeJudge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: maxTokens)
+            let routeMeasurement = AgentAuxiliaryRequestMeasurement()
+            let resolution = await AgentNonStreamingModelRequest.$usageObserver.withValue(routeMeasurement) {
+                await SomeIMManagedRouting.route(
+                    input: judgeInput,
+                    floor: floor,
+                    hasCodingPlan: hasCodingPlan
+                ) { system, user, maxTokens in
+                    await routeJudge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: maxTokens)
+                }
             }
+            await recordJudgeRequest(routeMeasurement, purpose: .routeJudge, configuration: configuration,
+                model: SomeIMManagedModel.judge, succeeded: !resolution.usedFallback, runtimeID: runtime.id)
+            AgentModelRouteLog.record(AgentModelRouteLog.Entry(
+                surface: .managedRouting,
+                sessionID: runtime.id,
+                subject: resolution.verdict.domain.rawValue,
+                requested: resolution.verdict.targetModel,
+                providerID: configuration.providerID,
+                model: resolution.model,
+                fallback: resolution.usedFallback,
+                reason: resolution.usedFallback ? .judgeUnavailable : .routed,
+                detail: resolution.verdict.reason
+            ))
             if stopAfterRouteJudge(routeJudge, runtime: runtime) { return }
             // Captured BEFORE noteManagedSelectedModel overwrites it — the
             // escalation check below compares against the tier the session
@@ -1172,19 +1188,41 @@ extension AppState {
                     let qualityJudge = AgentGoalRouteJudge(client: AgentClient(configuration: qualityConfig,
                         session: agentLoopInferenceEnvironment?.session, someIMContext: qualityContext,
                         requestLedger: modelRequestLedger(for: runtime)), executionBudget: auxiliaryModelExecutionBudget(for: runtime))
-                    let decision = await SomeIMManagedRouting.outputQuality(
-                        assistantText: assistantText,
-                        reasoningText: reasoningText,
-                        latestUserMessage: latestUserMessage,
-                        model: turnConfiguration.model,
-                        finishReason: finishReason
-                    ) { system, user, maxTokens in
-                        await qualityJudge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: maxTokens)
+                    let qualityMeasurement = AgentAuxiliaryRequestMeasurement()
+                    let decision = await AgentNonStreamingModelRequest.$usageObserver.withValue(qualityMeasurement) {
+                        await SomeIMManagedRouting.outputQuality(
+                            assistantText: assistantText,
+                            reasoningText: reasoningText,
+                            latestUserMessage: latestUserMessage,
+                            model: turnConfiguration.model,
+                            finishReason: finishReason
+                        ) { system, user, maxTokens in
+                            await qualityJudge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: maxTokens)
+                        }
+                    }
+                    await recordJudgeRequest(qualityMeasurement, purpose: .qualityJudge, configuration: qualityConfig,
+                        model: SomeIMManagedModel.judge, succeeded: decision.judgeAvailable, runtimeID: runtime.id)
+                    if !decision.judgeAvailable || decision.shouldRetry {
+                        AgentModelRouteLog.record(AgentModelRouteLog.Entry(
+                            surface: .qualityJudge,
+                            sessionID: runtime.id,
+                            subject: decision.failureType,
+                            requested: turnConfiguration.model,
+                            providerID: qualityConfig.providerID,
+                            model: decision.shouldRetry ? escalatedModel : turnConfiguration.model,
+                            fallback: !decision.judgeAvailable,
+                            reason: decision.judgeAvailable ? .routed : .judgeUnavailable,
+                            detail: decision.shouldRetry ? "escalate after \(decision.failureType)" : nil
+                        ))
                     }
                     if stopAfterRouteJudge(qualityJudge, runtime: runtime) { return }
                     if decision.shouldRetry {
                         didQualityRetry = true
                         if let dropIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                            // The discarded answer was billed; keep its tokens
+                            // in usage even though the message itself goes.
+                            recordDiscardedEscalationAttempt(runtime.messages[dropIndex], configuration: qualityConfig,
+                                runtimeID: runtime.id)
                             runtime.messages.remove(at: dropIndex)
                         }
                         turnConfiguration.model = escalatedModel

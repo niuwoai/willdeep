@@ -13,11 +13,17 @@ enum AgentNonStreamingModelRequest {
         var value: (Data, URLResponse)?
     }
 
+    /// Judge calls (safety / route / quality) go through here without a
+    /// session request record of their own. A caller that wants their token
+    /// usage counted binds a measurement for the duration of the call.
+    @TaskLocal static var usageObserver: AgentAuxiliaryRequestMeasurement?
+
     static func run(request: URLRequest, session: URLSession, configuration: AgentConfiguration,
                     format: AgentModelRequestFormat, ledger: AgentModelRequestLedger?,
                     safelyQuantifiableInput: Bool = true,
                     executionBudget: AgentToolExecutionBudget? = nil) async throws -> (Data, URLResponse) {
         let output = Output()
+        let observer = usageObserver
         let operation: @MainActor @Sendable () async throws -> Void = {
             do {
                 output.value = try await AgentModelRequestAccounting.run(ledger: ledger,
@@ -27,9 +33,12 @@ enum AgentNonStreamingModelRequest {
                     let (data, response) = try await session.data(for: prepared)
                     // Parse off the UI actor. Missing/invalid counts are unknown,
                     // not a zero-cost reply or a reason to refund a reservation.
-                    if ledger != nil {
+                    if ledger != nil || observer != nil {
                         let usage = await Task.detached { usageEvent(data: data, format: format) }.value
-                        if let usage { await consume(usage) }
+                        if let usage {
+                            if ledger != nil { await consume(usage) }
+                            await observer?.consume(usage)
+                        }
                     }
                     guard let http = response as? HTTPURLResponse else { throw AgentClientError.invalidResponse }
                     if !(200..<300).contains(http.statusCode) {

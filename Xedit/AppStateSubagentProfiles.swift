@@ -22,23 +22,47 @@ extension AppState {
     /// is a cost regression, not a failed task.
     func resolvedSubagentConfiguration(
         for profile: AgentSubagentProfile,
-        parentConfiguration: AgentConfiguration
+        parentConfiguration: AgentConfiguration,
+        sessionID: UUID? = nil
     ) -> AgentConfiguration {
+        let requested: String?
+        let resolution: (configuration: AgentConfiguration, fallbackReason: AgentModelRouteLog.Reason?)
         if let tier = AgentWorkerTierModels.tier(for: profile.modelBinding) {
-            return workerTierConfiguration(tier, parent: parentConfiguration) ?? parentConfiguration
+            requested = "tier:\(tier.rawValue)"
+            switch workerTierResolution(tier, parent: parentConfiguration) {
+            case .success(let configuration):
+                resolution = (configuration, nil)
+            case .failure(let unavailable):
+                resolution = (parentConfiguration, unavailable.reason)
+            }
+        } else {
+            requested = profile.modelBinding.model
+            let bound = resolveSubagentBinding(for: profile, parentConfiguration: parentConfiguration)
+            resolution = (AgentSubagentModelCompatibility.configuration(bound.configuration), bound.fallbackReason)
         }
-        return AgentSubagentModelCompatibility.configuration(resolveSubagentBinding(
-            for: profile,
-            parentConfiguration: parentConfiguration
-        ))
+        // A cheap trade silently running on the parent's model is a cost
+        // regression nobody can see; say which trade fell back and why.
+        if let reason = resolution.fallbackReason {
+            AgentModelRouteLog.record(AgentModelRouteLog.Entry(
+                surface: .workerBinding,
+                sessionID: sessionID,
+                subject: profile.id,
+                requested: requested,
+                providerID: resolution.configuration.providerID,
+                model: resolution.configuration.model,
+                fallback: true,
+                reason: reason
+            ))
+        }
+        return resolution.configuration
     }
 
     private func resolveSubagentBinding(
         for profile: AgentSubagentProfile,
         parentConfiguration: AgentConfiguration
-    ) -> AgentConfiguration {
+    ) -> (configuration: AgentConfiguration, fallbackReason: AgentModelRouteLog.Reason?) {
         let binding = profile.modelBinding
-        guard !binding.inheritsEverything else { return parentConfiguration }
+        guard !binding.inheritsEverything else { return (parentConfiguration, nil) }
 
         // Built-in profiles historically carried `some-im` as an automatic
         // cheap-model default. Do not let that implicit default exfiltrate a
@@ -49,7 +73,7 @@ extension AppState {
             binding: binding,
             parentProviderID: parentConfiguration.providerID
         ) {
-            return parentConfiguration
+            return (parentConfiguration, .privateParentKeepsProvider)
         }
 
         // Model-only override (no provider selection): keep the parent's
@@ -58,10 +82,10 @@ extension AppState {
         // preset id.
         guard binding.preferredProviderEntryID != nil || binding.preferredProviderID != nil else {
             guard let model = binding.model?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !model.isEmpty else { return parentConfiguration }
+                  !model.isEmpty else { return (parentConfiguration, nil) }
             var configuration = parentConfiguration
             configuration.model = model
-            return configuration
+            return (configuration, nil)
         }
 
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
@@ -69,7 +93,7 @@ extension AppState {
             for: binding,
             in: agentProviderLibrary
         ), entry.isUsableForChatSelection(isSomeIMAuthenticated: authenticated) else {
-            return parentConfiguration
+            return (parentConfiguration, .providerUnavailable)
         }
 
         // Materialize the key the same way interactive selection does —
@@ -94,9 +118,9 @@ extension AppState {
         // the parent's configuration is the safer answer.
         if configuration.normalized.requiresAPIKey,
            configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return parentConfiguration
+            return (parentConfiguration, .missingAPIKey)
         }
-        return configuration
+        return (configuration, nil)
     }
 
     /// Whether a trade will actually get its own binding right now. Drives

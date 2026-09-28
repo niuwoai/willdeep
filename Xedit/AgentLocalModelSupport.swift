@@ -736,7 +736,7 @@ extension AppState {
         )
     }
 
-    func contextCompressionConfigurationCandidates() -> [AgentConfiguration] {
+    func contextCompressionConfigurationCandidates(for runtime: AgentRuntime?) -> [AgentConfiguration] {
         if let environment = agentLoopInferenceEnvironment { return [environment.configuration.normalized] }
         // 顺序：some.im 网关托管压缩模型（someim-32b-compressor，固定指令
         // 由服务端 replace 注入）→ 会话压缩模型兜底。用户在设置里显式指定
@@ -744,7 +744,7 @@ extension AppState {
         //
         // 2026-09-23 起压缩不再走本地小模型：把十几万 token 的历史交给一个
         // 2B 模型，实测每次只喂得进几千 token，压出来的摘要撑不起后续工作。
-        let normalized = agentConfiguration.normalized
+        let normalized = auxiliaryBaseConfiguration(for: runtime)
         let hasExplicitCompressionModel = !normalized.compressionModel
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hosted = hasExplicitCompressionModel ? nil : someIMContextCompressorConfiguration()
@@ -789,8 +789,11 @@ extension AppState {
         ).normalized
     }
 
-    func titleSummaryConfigurationCandidates(remoteModelID: String) -> [AgentConfiguration] {
-        var fallback = agentConfiguration.normalized
+    func titleSummaryConfigurationCandidates(
+        remoteModelID: String,
+        base: AgentConfiguration
+    ) -> [AgentConfiguration] {
+        var fallback = base.normalized
         fallback.model = remoteModelID
         fallback.flashModel = remoteModelID
         fallback.proModel = remoteModelID

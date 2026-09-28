@@ -111,6 +111,11 @@ enum AgentSafetyJudgeResult: Equatable {
     case allow
     case deny
     case unavailable(String)
+
+    var isUnavailable: Bool {
+        if case .unavailable = self { return true }
+        return false
+    }
 }
 
 /// 裁判问的是哪个问题。两者的**失败方向相反**，所以调用方必须显式选，

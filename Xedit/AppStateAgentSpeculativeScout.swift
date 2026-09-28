@@ -240,7 +240,8 @@ extension AppState {
 
         let childConfiguration = resolvedSubagentConfiguration(
             for: profile,
-            parentConfiguration: configuration
+            parentConfiguration: configuration,
+            sessionID: runtime.id
         )
         let someIMContext: SomeIMRequestContext? = {
             guard childConfiguration.providerID == AgentProviderPreset.someIMID else { return nil }

@@ -1343,7 +1343,7 @@ struct WillDeepTests {
             apiKey: "sk-test-someim"
         )
 
-        let candidates = appState.contextCompressionConfigurationCandidates()
+        let candidates = appState.contextCompressionConfigurationCandidates(for: nil)
         #expect(candidates.first?.model == SomeIMManagedModel.contextCompressor)
         #expect(candidates.first?.usesServerManagedCompressionPrompt == true)
         // 会话压缩模型仍在队尾兜底，托管候选失败时压缩不落空。
@@ -1374,7 +1374,7 @@ struct WillDeepTests {
         configuration.compressionModel = "glm-5"
         appState.agentConfiguration = configuration
 
-        let candidates = appState.contextCompressionConfigurationCandidates()
+        let candidates = appState.contextCompressionConfigurationCandidates(for: nil)
         #expect(candidates.allSatisfy { $0.model != SomeIMManagedModel.contextCompressor })
         #expect(candidates.first?.model == "glm-5")
     }

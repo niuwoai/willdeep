@@ -117,7 +117,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
             defaultModel: "gpt-4.1-mini",
             defaultProModel: "gpt-4.1",
             supportsModelFetch: true,
-            modelHints: ["gpt-", "o1", "o3", "text-embedding", "davinci"]
+            modelHints: ["gpt-", "o1", "o3", "o4", "text-embedding", "davinci"]
         ),
         AgentProviderPreset(
             id: "openai-responses",

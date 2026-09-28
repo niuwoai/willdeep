@@ -67,10 +67,10 @@ extension AppState {
         if !force && assistantCount != 1 { return }
 
         // Rule (4): need a usable provider config.
-        let configuration = agentConfiguration.normalized
+        let configuration = auxiliaryBaseConfiguration(for: runtime)
         let modelID = configuration.titleSummaryModel()
         guard !modelID.isEmpty else { return }
-        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID)
+        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID, base: configuration)
         guard !configurations.isEmpty else { return }
 
         titleSummarizationsInFlight.insert(runtime.id)
@@ -144,12 +144,12 @@ extension AppState {
     @MainActor
     func sessionTitleSuggestionSnapshot(for runtime: AgentRuntime) async -> AgentSessionTitleSuggestionSnapshot {
         let currentTitle = runtime.session.title
-        let configuration = agentConfiguration.normalized
+        let configuration = auxiliaryBaseConfiguration(for: runtime)
         let modelID = configuration.titleSummaryModel()
         guard !modelID.isEmpty else {
             return AgentSessionTitleSuggestionSnapshot(currentTitle: currentTitle, suggestedTitle: nil, modelID: nil)
         }
-        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID)
+        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID, base: configuration)
         guard !configurations.isEmpty else {
             return AgentSessionTitleSuggestionSnapshot(currentTitle: currentTitle, suggestedTitle: nil, modelID: modelID)
         }

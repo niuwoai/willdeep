@@ -174,7 +174,7 @@ struct AgentSubagentLiveFireRangeTests {
             let configuration = AgentConfiguration(
                 providerID: AgentProviderPreset.someIMID,
                 baseURL: baseURL,
-                model: environment["XEDIT_RANGE_MODEL"] ?? "glm-5",
+                model: environment["XEDIT_RANGE_MODEL"] ?? AgentSubagentModelCompatibility.baseModel,
                 routingMode: .flash,
                 apiKey: apiKey
             )
@@ -245,7 +245,7 @@ struct AgentSubagentLiveFireRangeTests {
         let reportPath = ProcessInfo.processInfo.environment["XEDIT_RANGE_OUT"]
             ?? rangeRoot.appendingPathComponent("range.json").path
         let payload: [String: Any] = [
-            "model": ProcessInfo.processInfo.environment["XEDIT_RANGE_MODEL"] ?? "glm-5",
+            "model": ProcessInfo.processInfo.environment["XEDIT_RANGE_MODEL"] ?? AgentSubagentModelCompatibility.baseModel,
             "cases": rows,
         ]
         let data = try JSONSerialization.data(

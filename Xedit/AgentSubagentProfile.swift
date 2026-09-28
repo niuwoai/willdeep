@@ -311,6 +311,15 @@ nonisolated enum AgentSubagentProfileCatalog {
     private static let implementerBinding = AgentSubagentProfile.ModelBinding(workerTier: .advanced)
     private static let automaticProviderBinding = AgentSubagentProfile.ModelBinding(workerTier: .advanced)
     private static let deepBinding = AgentSubagentProfile.ModelBinding(workerTier: .expert)
+    /// No-tool verdict trades run on some.im's clean non-thinking judge chain.
+    /// Binding only the provider used to land them on the entry's default
+    /// flash model — a persona-carrying chat model answering a yes/no. A
+    /// non-some.im parent still keeps them on the parent (privacy rule in
+    /// `implicitSomeIMBindingFollowsParent`).
+    private static let judgementBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: SomeIMManagedModel.judge
+    )
 
     static let scout = AgentSubagentProfile(
         id: scoutID,
@@ -499,7 +508,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let securityGuard = AgentSubagentProfile(
         id: securityGuardID,
         purpose: "Decide whether one command is safe to run unattended. Answers with a verdict and one sentence of reason; has no tools and cannot run anything itself.",
-        modelBinding: .init(preferredProviderID: AgentProviderPreset.someIMID),
+        modelBinding: judgementBinding,
         toolNames: [],
         capabilityPromptSection: AgentSubagentJobPrompts.securityGuard,
         maxRounds: 1,
@@ -510,7 +519,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let judge = AgentSubagentProfile(
         id: judgeID,
         purpose: "Return one bounded verdict about material you supply — a routing choice, a quality check, a classification. No tools; answers only from what it is given.",
-        modelBinding: .init(preferredProviderID: AgentProviderPreset.someIMID),
+        modelBinding: judgementBinding,
         toolNames: [],
         capabilityPromptSection: AgentSubagentJobPrompts.judge,
         maxRounds: 1,

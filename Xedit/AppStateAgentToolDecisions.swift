@@ -1280,18 +1280,26 @@ extension AppState {
             effectiveConfiguration = candidate
             for attempt in 1...2 {
                 let attemptStartedAt = Date()
+                let measurement = AgentAuxiliaryRequestMeasurement()
                 do {
-                    result = try await AgentClient(configuration: candidate, session: safetyJudgeInferenceEnvironment?.session,
-                        someIMContext: taskRuntime.flatMap { Self.goalPlanningSomeIMContext(configuration: candidate, runtime: $0) },
-                        requestLedger: budget?.requestLedger).budgetedSafetyJudge(
-                        command: judgeCommand,
-                        historyContext: kind == .maliciousIntent ? "" : safetyJudgeHistoryContext(),
-                        toolName: toolName,
-                        taskContext: judgeTaskContext,
-                        environmentTrust: trustPayload,
-                        kind: kind, executionBudget: budget
-                    )
+                    let historyContext = kind == .maliciousIntent ? "" : safetyJudgeHistoryContext()
+                    result = try await AgentNonStreamingModelRequest.$usageObserver.withValue(measurement) {
+                        try await AgentClient(configuration: candidate, session: safetyJudgeInferenceEnvironment?.session,
+                            someIMContext: taskRuntime.flatMap { Self.goalPlanningSomeIMContext(configuration: candidate, runtime: $0) },
+                            requestLedger: budget?.requestLedger).budgetedSafetyJudge(
+                            command: judgeCommand,
+                            historyContext: historyContext,
+                            toolName: toolName,
+                            taskContext: judgeTaskContext,
+                            environmentTrust: trustPayload,
+                            kind: kind, executionBudget: budget
+                        )
+                    }
+                    await recordJudgeRequest(measurement, purpose: .safetyJudge, configuration: candidate,
+                        succeeded: !result.isUnavailable, runtimeID: taskRuntime?.id)
                 } catch {
+                    await recordJudgeRequest(measurement, purpose: .safetyJudge, configuration: candidate,
+                        succeeded: false, runtimeID: taskRuntime?.id)
                     try Task.checkCancellation()
                     guard taskRuntime?.goalAuthorizationRevision == scope else { throw CancellationError() }
                     throw error

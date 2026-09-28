@@ -727,7 +727,8 @@ extension AppState {
         // 没指定就走「默认 provider 的 flash 档」——和上下文压缩、审核解释
         // 同一条辅助路线：便宜、快、用户已经配好了。
         guard let providerID = request.providerID else {
-            var configuration = agentConfiguration.resolved(for: .compression)
+            // 默认 provider 的 flash 模型；不是压缩模型（那是专给压历史用的）。
+            var configuration = agentConfiguration.normalized
             configuration.model = configuration.flashModel
             if let model = request.model {
                 let allowed = Set([configuration.flashModel, configuration.proModel])

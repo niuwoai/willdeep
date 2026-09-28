@@ -79,3 +79,23 @@ grep '"kind":"turn"' ~/Library/Application\ Support/WillDeep/AgentAudit/worker-t
 - 回合：`AppStateAgentLoop.swift` 的 `runAgentLoop` defer → `finalizeTurnTiming`。
 
 写入走 `AgentWorkerTimingLogWriter` actor（`Task.detached(.utility)`），主线程不等磁盘。
+
+## 姊妹台账：`model-routing.jsonl`（1.408.0-rc5 起）
+
+计时日志只记"最后用了哪个模型"，不记"为什么是它"。同目录下的 `model-routing.jsonl`（`AgentModelRouteLog.swift`）每遇到一次**非直达**的模型决策写一行，`kind` 为 `model_route`：
+
+| surface | 什么时候写 | 关键字段 |
+|---|---|---|
+| `worker_binding` | Worker 工种的档位/绑定没解析成功、退回父模型 | `subject`=工种 id，`requested`=`tier:<档>` 或绑定模型，`reason` |
+| `managed_routing` | 省心托管每回合选主模型 | `requested`=裁判建议的 target_model，`model`=实际用的，`detail`=裁判给的理由 |
+| `quality_judge` | 质检裁判不可用、或判不合格触发升档 | `subject`=failure_type，`model`=升档后的模型 |
+
+`reason` 取值：`binding_unconfigured`、`private_parent_keeps_provider`（私有会话不外溢到 some.im，这是有意的，但要看得见）、`provider_unavailable`、`missing_api_key`、`judge_unavailable`、`judge_model_rejected`、`routed`。
+
+```bash
+# 哪些工种最常退回父模型、为什么
+grep '"surface":"worker_binding"' ~/Library/Application\ Support/WillDeep/AgentAudit/model-routing.jsonl \
+  | jq -s 'group_by([.subject, .reason]) | map({subject: .[0].subject, reason: .[0].reason, n: length})'
+```
+
+同一版本起，安全裁判、路由裁判、质检裁判的每次请求，以及托管升档时被丢弃的那一版回答，都作为辅助请求（`safetyJudge` / `routeJudge` / `qualityJudge` / `discardedEscalationAttempt`）记入会话用量。
