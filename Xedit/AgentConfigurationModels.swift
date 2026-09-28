@@ -298,7 +298,21 @@ struct AgentConfiguration: Codable, Equatable {
         guard AgentProviderPreset.preset(id: providerID)?.supportsImageInput ?? true else {
             return false
         }
+        // A probe-verified gateway verdict outranks the id denylist in both
+        // directions: it catches text-only models the list does not know, and
+        // clears ones it guesses wrong.
+        if let verdict = someIMGatewayCapabilities?.acceptsImages(over: inferenceProviderKind) {
+            return verdict
+        }
         return Self.modelAcceptsImageInput(model)
+    }
+
+    /// some.im's published capabilities for this model. Scoped to the some.im
+    /// provider because the catalogue is keyed by model id alone: a custom
+    /// provider exposing the same id is a different upstream.
+    var someIMGatewayCapabilities: AgentGatewayModelCapabilities? {
+        guard providerID == AgentProviderPreset.someIMID else { return nil }
+        return AgentGatewayCapabilityCatalog.capabilities(forModel: model)
     }
 
     var requiresAPIKey: Bool {
@@ -364,6 +378,12 @@ struct AgentConfiguration: Codable, Equatable {
         }
         if usesDeepSeekV4ResponsesBehavior {
             return .openAIResponses
+        }
+        // No gateway route serves this model over the configured dialect but
+        // the other OpenAI dialect has one: use it instead of sending a request
+        // the gateway can only reject with capability_not_supported.
+        if let fallback = someIMGatewayCapabilities?.fallbackKind(for: configuredKind) {
+            return fallback
         }
         return configuredKind
     }

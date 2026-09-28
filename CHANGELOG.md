@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.409.0-rc1 - 2026-09-28
+
+### Added
+
+- **读取 some.im 模型能力表里的按协议能力（`protocols`），看图判定和协议选择优先听网关的。** 网关（muchtoken 移植中，tokenhub 0.253.0 起已有）按 `chat_completions` / `responses` / `anthropic_messages` 为每个对话模型给出原生或桥接、看图、工具、具名 `tool_choice`、strict schema，并标出哪些经过上游能力探测验证。以前客户端只能靠模型名黑名单猜，猜漏了会出现两种坑：纯文本模型收到 `image_url` 后整个请求 400；只有 Responses 线路的模型被按 Chat Completions 发请求，网关只能回 `capability_not_supported`。
+  - `AgentSomeIMModelCapabilities` 解析 `protocols` 与 `capability_verification`，结果放进 `AgentModelDiscovery.gatewayCapabilities`，随模型列表一起落盘。进程级查表用 `AgentGatewayCapabilityCatalog`，写法与上下文窗口表相同。旧版网关不带这两个字段，某条记录解析失败也只影响这一条，整个目录照常可用。已经落盘的旧元数据也能照常读出。
+  - `supportsImageInput`：some.im 下，经验证的看图结论优先于 `modelAcceptsImageInput` 名单，真假都以网关为准。没有验证过的声明不采用：那多半是网关默认的纯文本模态，照它关掉看图会误伤能看图的模型。
+  - `inferenceProviderKind`：GPT 家族和 DeepSeek V4 的既有规则不变。在此之外，如果网关对配置的协议没有任何线路、另一种 OpenAI 协议却有，就改走另一种。只在 Chat Completions 和 Responses 之间切换，不会切到 Messages。
+  - 只作用于 some.im provider：能力表按模型 id 索引，自定义 provider 暴露同名 id 时背后是另一家上游，不能共用。
+- 仍然不信 `max_output_tokens` 和模型级 `supports_tools`（原因见 `AgentSomeIMModelCapabilities` 的注释）。按协议的 `function_tools` 暂时只解析、不参与判定。
+
+### Impact
+
+- 网关没发布 `protocols`，或者发布了但都没经过验证时，行为和 1.408.0-rc5 完全一样。线上 some.im 要等 muchtoken 发布新版，并且运营重跑一轮能力探测之后，这些判定才会实际生效。
+- 没有新增网络请求，复用原本就在拉的 `/v1/model-capabilities`。
+
+### Tests
+
+- 新增 `AgentGatewayModelCapabilitiesTests`，共 6 项：
+  - `protocols` 解码；旧行和旧的落盘元数据兼容。
+  - 只有经过验证的声明才给出看图结论。
+  - some.im 看图闸门：验证过的纯文本模型关掉看图，验证过的视觉模型放行；没验证的声明不改变原有判断；自定义 provider 不受影响。
+  - 协议回落只在配置的协议无线路时触发。
+  - 某条记录没带能力信息时，不会冲掉已经学到的能力。
+- 本地 `run_tests_fast.rb` 全量：共 4896 项，通过 4894、跳过 1、失败 1。失败的是 `AgentToolsCoreTests`「后台 run_command 会把宿主恢复许可交给任务注册表」，它只给后台进程 5 秒收尾，而全量并行时整个套件晚了 20 秒才开跑。这个用例与本次改动无关，单独重跑该套件 85 项全过。升版本号后重新构建，本次新增套件、`AgentProviderLibraryTests`、`AgentModelCatalogTests`、`AgentToolsCoreTests` 共 150 项全过。
+
 ## 1.408.0-rc6 - 2026-09-28
 
 ### Fixed

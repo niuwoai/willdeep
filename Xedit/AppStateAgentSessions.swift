@@ -2553,6 +2553,7 @@ extension AppState {
         recordFetchedAgentModels(models.map(\.id))
         agentDiscoveredModelMetadata = models
         AgentModelContextWindowCatalog.merge(models)
+        AgentGatewayCapabilityCatalog.merge(models)
         AgentSettingsStore.saveDiscoveredModelMetadata(models)
     }
 

@@ -894,6 +894,7 @@ final class AppState: ObservableObject {
         // relaunch keeps the real window instead of falling back to the
         // id-matching guess until the next model-list fetch.
         AgentModelContextWindowCatalog.merge(self.agentDiscoveredModelMetadata)
+        AgentGatewayCapabilityCatalog.merge(self.agentDiscoveredModelMetadata)
         self.agentRecentlyUsedModelIDs = AgentSettingsStore.loadRecentlyUsedModelIDs()
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
         syncLocalModelComposerProvider(settings: AgentSettingsStore.loadLocalModelSettings())

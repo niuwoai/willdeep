@@ -28,6 +28,10 @@ struct AgentModelDiscovery: Codable, Equatable {
     /// distinguishable from "not free" — a free group built out of unknowns
     /// would quietly advertise paid models as free.
     var isFree: Bool?
+    /// Per-protocol capabilities from some.im's `/v1/model-capabilities`
+    /// (`protocols`). nil for providers that publish none — and for rows
+    /// persisted before this field existed, which decode unchanged.
+    var gatewayCapabilities: AgentGatewayModelCapabilities?
 }
 
 enum AgentDefaultModelModePreference: String, Equatable {

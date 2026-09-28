@@ -1038,7 +1038,9 @@ private struct ChatCompletionChunk: Decodable {
 /// some.im's `/v1/model-capabilities`. Unlike `/v1/models` it needs no
 /// credential, and it publishes the context window per model.
 ///
-/// Only `id` and `context_window` are taken. `max_output_tokens` comes back as
+/// Taken: `id`, `context_window`, prices, and the per-protocol `protocols`
+/// block (see `AgentGatewayModelCapabilities`, which only trusts entries the
+/// gateway marks `verified`). `max_output_tokens` comes back as
 /// a flat 8192 for most entries and `supports_tools` reads false for models
 /// that demonstrably take tool calls (`gpt-5.6-sol` returns false and answers
 /// a `write_episode` call anyway), so treating either as authority would cap
@@ -1068,6 +1070,7 @@ struct SomeIMModelCapabilitiesResponse: Decodable {
         /// stay distinguishable from "not free": a free group built out of
         /// unknowns advertises paid models as free.
         let isFree: Bool?
+        let gatewayCapabilities: AgentGatewayModelCapabilities?
 
         /// Every entry is `["llm"]` today. The field is read anyway so that an
         /// image or speech product appearing later does not land in a chat
@@ -1084,7 +1087,8 @@ struct SomeIMModelCapabilitiesResponse: Decodable {
                 isHot: false,
                 isNew: false,
                 contextWindowTokens: (contextWindow ?? 0) > 0 ? contextWindow : nil,
-                isFree: isFree
+                isFree: isFree,
+                gatewayCapabilities: gatewayCapabilities
             )
         }
 
@@ -1105,6 +1109,18 @@ struct SomeIMModelCapabilitiesResponse: Decodable {
             id = try container.decode(String.self, forKey: .id)
             contextWindow = try? container.decodeIfPresent(Int.self, forKey: .contextWindow)
             capabilityKinds = try? container.decodeIfPresent([String].self, forKey: .capabilityKinds)
+            // Older gateways publish no `protocols`; an unreadable block is
+            // treated the same way rather than failing the whole row.
+            if let protocols = try? container.decodeIfPresent(
+                [String: AgentGatewayModelCapabilities.ProtocolCapability].self, forKey: .protocols
+            ), !protocols.isEmpty {
+                let verification = try? container.decodeIfPresent(Verification.self, forKey: .verification)
+                gatewayCapabilities = AgentGatewayModelCapabilities(
+                    protocols: protocols, coverage: verification?.coverage ?? ""
+                )
+            } else {
+                gatewayCapabilities = nil
+            }
 
             // Free means every price this row publishes is zero. One non-zero
             // price anywhere makes it paid — a model whose tokens are free but
@@ -1127,6 +1143,8 @@ struct SomeIMModelCapabilitiesResponse: Decodable {
             case id
             case contextWindow = "context_window"
             case capabilityKinds = "capability_kinds"
+            case protocols
+            case verification = "capability_verification"
             case inputPrice = "input_price_per_1m"
             case outputPrice = "output_price_per_1m"
             case cacheWritePrice = "cache_write_price_per_1m"
@@ -1135,6 +1153,10 @@ struct SomeIMModelCapabilitiesResponse: Decodable {
             case pricePerRequest = "price_per_request"
             case pricePerOutputSecond = "price_per_output_second"
             case minChargePerRequest = "min_charge_per_request"
+        }
+
+        private struct Verification: Decodable {
+            let coverage: String?
         }
 
         private enum PriceValue: Decodable {
