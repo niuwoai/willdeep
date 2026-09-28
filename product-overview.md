@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-28 | Current version: v1.409.0-rc4
+> Last updated: 2026-09-29 | Current version: v1.409.0-rc6
 
 设置 → MCP 支持刷新全部已启用服务器的工具列表。刷新后，下一次模型请求会使用最新工具定义，不用重启 App 或会话。
 

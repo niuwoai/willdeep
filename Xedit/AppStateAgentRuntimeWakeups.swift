@@ -36,6 +36,7 @@ extension AppState {
     /// a phantom user message and never races a live provider request.
     @MainActor
     func resumeAgentLoopForPendingBackgroundCompletions(for runtime: AgentRuntime) {
+        guard !runtime.session.automaticWakeSuppressedAfterUserStop else { return }
         guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return }
         guard ownsAgentRuntimeKernelDelivery(for: runtime.id) else { return }
         guard !runtime.isResponding,

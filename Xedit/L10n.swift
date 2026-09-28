@@ -527,7 +527,7 @@ nonisolated enum L10n {
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
         static let stopped = String(
             localized: "composer.stop.stopped",
-            defaultValue: "The user stopped generation."
+            defaultValue: "Generation stopped. Automatic background wakeups are paused; send a new message to resume."
         )
         static func stoppedCheckingProcesses(_ count: Int) -> String {
             let template = String(

@@ -224,6 +224,7 @@ struct AgentSafetyJudgeBudgetTests {
     @Test("原生子工具裁判预算不足直接宿主暂停，不落到人工")
     func workerJudgeRefusal() async throws {
         let f = try fixture(limit: 1); defer { f.cleanup() }
+        f.runtime.approvalMode = .smart
         f.app.safetyJudgeInferenceEnvironment = ([configuration("openai")], f.session)
         var count = 0
         GoalLoopURLProtocol.install(f.token) { _ in count += 1; return Data() }
@@ -241,6 +242,7 @@ struct AgentSafetyJudgeBudgetTests {
     @Test("待审重评在预算停止后释放真实等待，不写入用户授权")
     func pendingReevaluation() async throws {
         let f = try fixture(limit: 1); defer { f.cleanup() }
+        f.runtime.approvalMode = .smart
         f.app.safetyJudgeInferenceEnvironment = ([configuration("openai")], f.session)
         let call = AgentToolCall(messageID: UUID(), externalID: "subagent:fixture",
             toolName: "run_command", arguments: ["command": .string("safety-fixture-\(UUID())")], risk: .write, status: .pendingApproval)
@@ -266,6 +268,7 @@ struct AgentSafetyJudgeBudgetTests {
     @Test("verifier 裁判拒绝准入时不删除验证器后继续启动子任务")
     func verifierCannotDowngradeOnBudgetStop() async throws {
         let f = try fixture(limit: 1); defer { f.cleanup() }
+        f.runtime.approvalMode = .smart
         f.app.safetyJudgeInferenceEnvironment = ([configuration("openai")], f.session)
         let call = AgentMessageToolCall(externalID: "fixture-verifier", toolName: "spawn_agent", argumentsJSON: "{}")
         let record = AgentToolCall(messageID: UUID(), externalID: call.externalID, toolName: call.toolName,
