@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.408.0-rc3 - 2026-09-28
+
+### Fixed
+
+- **本地 MCP 插件退出后，WillDeep 不再在后台持续吃满 CPU。** 真机现场：1.405.0-rc8 开了 16 小时后 CPU 一直在 230% 左右，累计烧掉约 48 小时 CPU。`sample` 显示主线程是空闲的，6 条 `NSFileHandle.fd_monitoring` 线程几乎满载，栈全在 `MCPStdioConnection.ensureStarted()` 装的 `readabilityHandler` 里反复 `fstat` / `read`。原因：stdio 类 MCP 服务端进程退出后，stdout 和 stderr 管道的读端停在 EOF，EOF 永远算「可读」，handler 被无限回调，每次读到空 Data。以前 handler 只把空数据丢掉，不把自己摘掉；要等下一次调用这个服务器、走到 `resetProcess()` 才会清理，插件死了又没人再调它，每根管道就一直占着一个核（3 个死掉的插件 × 2 根管道 = 6 条线程）。
+  - 新增 `AgentMCPBridge.attachEOFAwareReader(to:sink:)`：读到空数据（EOF）就把 `readabilityHandler` 置成 nil，有数据照常交给 inbox 或 stderr 收集器。stdout 和 stderr 两根管道都改用它。
+  - 连接状态不受影响：进程退出后 `isLive` 和下一次 `ensureStarted()` 仍然看 `process.isRunning`，下次调用照常重新拉起进程。
+- 测试：新增 `AgentMCPStdioEOFReaderTests`（2 项：写入数据再关写端，数据完整交出且 handler 被摘掉；真实子进程 `/usr/bin/true` 退出后 handler 被摘掉）。反验：把 `readabilityHandler = nil` 注释掉，2 项都在 10 秒等待后变红。本地 `run_tests_fast.rb` 跑 `AgentMCPStdioEOFReaderTests`、`AgentMCPBridgeCoreTests`、`AgentMCPHostRequestsTests`（含真实 stdio 子进程端到端）：3 个 suite 共 33 项通过，退出码 0。全量 XeditTests 没有在本地跑。
+
 ## 1.408.0-rc2 - 2026-09-28
 
 ### Fixed
