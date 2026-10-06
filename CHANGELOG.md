@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.411.0-rc2 - 2026-10-06
+
+### Changed
+
+- **`AppStateAgentLoop.swift` 降回 3000 行硬上限以内（3005 → 2869 行）。** `runAgentLoop` 里两段不读写循环局部变量的整块原样搬到新文件 `AppStateAgentLoopTurnSetup.swift`：
+  - `resolveManagedTurnRoute`：「省心托管」每回合一次的路由判定，结论用 `AgentManagedTurnRoute`（`unmanaged` / `stopped` / `routed`）交回；
+  - `finishAgentLoopTurnCleanup`：回合退出时 `defer` 里的收尾。
+
+### Impact
+
+- 纯搬移，调用顺序与判断条件逐行不变，无用户可见变化。CI 的 quality 守卫组（complexity_guard）恢复通过。
+
 ## 1.411.0-rc1 - 2026-10-06
 
 ### Added
