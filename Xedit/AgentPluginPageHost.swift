@@ -381,6 +381,16 @@ private struct AgentPluginWebPage: View {
               });
             }
           };
+          // 让用户挑一个项目文件夹（需要 workspace.read）。只回路径，不扩大
+          // fs.* 的读范围。recent() 是主 App 最近打开过的文件夹与会话用过
+          // 的工作区；pickFolder() 弹系统面板，取消时 path 为 null。
+          window.willdeep.workspace = {
+            recent: function() { return willdeepBridgeRequest('workspaceRecent', {}); },
+            pickFolder: function(options) {
+              var opts = options || {};
+              return willdeepBridgeRequest('workspacePickFolder', {title: opts.title || ''});
+            }
+          };
           // 插件自己的小仓库。页面跑在 nonPersistent 的 WebView 里,
           // localStorage 刷新一次就空了,要跨刷新记住东西就用这个。
           window.willdeep.storage = {
@@ -900,6 +910,8 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 handleFileRequest(type: type, body: body)
             case "storageGet", "storageSet", "storageRemove", "storageKeys":
                 handleStorageRequest(type: type, body: body)
+            case "workspaceRecent", "workspacePickFolder":
+                handleWorkspaceRequest(type: type, body: body)
             case "eventsSubscribe":
                 handleEventSubscription(body)
             case "chatInsert", "chatSend":
@@ -1330,6 +1342,28 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 case .success(let result):
                     self.sendBridgeResult(requestID: requestID, result: result, error: nil)
                 case .failure(let error):
+                    self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
+        }
+
+        // MARK: 挑项目文件夹
+
+        private func handleWorkspaceRequest(type: String, body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let title = String((body["title"] as? String ?? "").prefix(400))
+            let pluginID = destination.pluginID
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    if type == "workspaceRecent" {
+                        let workspaces = try appState.pluginRecentWorkspaces(pluginID: pluginID)
+                        self.sendBridgeResult(requestID: requestID, result: ["workspaces": workspaces], error: nil)
+                    } else {
+                        let path = try await appState.pluginPickFolder(title: title, pluginID: pluginID)
+                        self.sendBridgeResult(requestID: requestID, result: ["path": path ?? NSNull()], error: nil)
+                    }
+                } catch {
                     self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
                 }
             }

@@ -64,6 +64,7 @@ extension AppState {
         runtime.currentTurnRouteDecision = routeDecision
         runtime.currentTurnRouteSteering = routeDecision?.steering(for: delegationPolicy)
         if source == .operatorInput {
+            runtime.session.automaticWakeSuppressedAfterUserStop = false
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
             // A human steering the session starts a fresh budget of automatic
             // runway resumes. The ceiling exists to stop an unattended loop,

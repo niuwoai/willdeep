@@ -659,13 +659,12 @@ extension AppState {
             return .user
         }
 
-        // Selecting Smart review is the user's approval policy choice; it
-        // must not be silently weakened by a second global toggle. Smart and
-        // Goal therefore both run command-shaped calls through the static
-        // classifier and, when needed, the one-shot AI safety judge. Strict
-        // mode returned above, while Workspace Access keeps its narrower
-        // workspace-only boundary below.
-        let judgeAutoApprove = approvalMode == .smart || interactionMode == .goal
+        // Smart and Workspace Access share the same AI review for actions that
+        // leave the workspace. Workspace-scoped writes still use the narrower
+        // sandbox fast path below. Strict mode returned above.
+        let judgeAutoApprove = approvalMode == .smart
+            || approvalMode == .workspaceAccess
+            || interactionMode == .goal
 
         // Goal mode runs with high autonomy but no longer blanket-approves
         // every write-tier call. Sandbox-contained, non-command work (file
@@ -756,11 +755,9 @@ extension AppState {
             return nil
         }
 
-        // Workspace Access is resolved HERE — before the escalated /
-        // safety-judge gates below. This mode authorizes workspace-scoped
-        // writes, not arbitrary external effects: escalated network/remote
-        // actions remain manual. Smart review is the mode that can ask the
-        // safety judge to approve safe curl/web/remote operations.
+        // Workspace-scoped writes stay on the local fast path. Anything
+        // outside that boundary continues into the same static-classifier /
+        // AI-judge chain used by Smart review.
         if approvalMode == .workspaceAccess {
             if workspaceAccessCanAutoApprove(
                 toolName: toolName,
@@ -769,19 +766,16 @@ extension AppState {
             ) {
                 return .workspaceAccess
             }
-            // User-pinned always-allow signatures still count in Workspace
-            // Access — the mode narrows AUTOMATIC approval to the workspace
-            // whitelist, it does not revoke explicit user pins. Anything
-            // else (including a pinned MCP tool whose server was later
-            // demoted to untrusted) stays manual; the static-classifier /
-            // LLM-judge chain below is intentionally unreachable here.
+            // User-pinned always-allow signatures still count, except for MCP
+            // servers later demoted to untrusted. Other external actions go
+            // through the judge below; a deny or unavailable judge falls back
+            // to the existing user approval card.
             let pinnedMCPDemoted = toolName == "call_mcp_tool"
                 && (arguments["server"]?.stringValue()).map { !AgentMCPSettingsStore.isServerTrusted(name: $0) } == true
             if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk),
                !pinnedMCPDemoted {
                 return .alwaysAllowList
             }
-            return nil
         }
 
         if sandboxDecision.mode == .escalated,

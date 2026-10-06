@@ -1405,6 +1405,9 @@ extension AppState {
            runtime.userStoppedTurnID == activeTurnID {
             return
         }
+        runtime.session.automaticWakeSuppressedAfterUserStop = true
+        runtime.queuedMessages.removeAll { $0.source == .hostInstruction }
+        agentExternalWakeRetryTasks.removeValue(forKey: runtime.id)?.cancel()
         let stopPersisted = runtime.activeTurnID.map {
             agentJobRegistry.revokeTurn(runtimeID: runtime.id, turnID: $0)
         } ?? true

@@ -484,6 +484,7 @@ extension AppState {
     private func scheduleAgentKernelEvent(_ event: AgentKernelEvent) {
         guard ownsAgentRuntimeKernelDelivery(for: event.runtimeID) else { return }
         guard let runtime = runtime(for: event.runtimeID), runtime.session.archivedAt == nil else { return }
+        guard !runtime.session.automaticWakeSuppressedAfterUserStop else { return }
         let snapshot = AgentKernelRuntimeSnapshot(
             isResponding: runtime.isResponding,
             isAwaitingProviderSlot: runtime.isAwaitingProviderSlot,

@@ -23838,31 +23838,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Allow workspace writes; ask before external actions."
+            "value" : "Allow workspace writes; intelligently review external actions."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Permite escrituras en el espacio de trabajo; pregunta antes de acciones externas."
+            "value" : "Permite escrituras en el espacio de trabajo y revisa inteligentemente las acciones externas."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autorise les écritures dans l'espace de travail ; demande avant les actions externes."
+            "value" : "Autorise les écritures dans l'espace de travail et examine intelligemment les actions externes."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ワークスペースへの書き込みを許可し、外部操作の前には確認します。"
+            "value" : "ワークスペース内への書き込みを許可し、外部操作はインテリジェントにレビューします。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动执行工作区写入；外部操作仍需确认。"
+            "value" : "自动执行工作区写入，并对外部操作进行智能审核。"
           }
         }
       }
@@ -31466,7 +31466,7 @@
         }
       }
     },
-    "composer.stop.stopped" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The user stopped generation." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El usuario detuvo la generación." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L'utilisateur a arrêté la génération." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ユーザーが生成を停止しました。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用户已停止生成" } } } },
+    "composer.stop.stopped" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Generation stopped. Automatic background wakeups are paused; send a new message to resume." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Generación detenida. Las reactivaciones automáticas en segundo plano están pausadas; envía un mensaje nuevo para reanudar." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Génération arrêtée. Les réveils automatiques en arrière-plan sont suspendus ; envoyez un nouveau message pour reprendre." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "生成を停止しました。バックグラウンドの自動再開を一時停止しました。再開するには新しいメッセージを送信してください。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止生成，后台自动唤醒已暂停；发送新消息后继续。" } } } },
     "composer.stop.checking-processes" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Checking %lld process(es) started by this turn…" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Generación detenida. Comprobando %lld proceso(s) iniciado(s) en este turno…" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Génération arrêtée. Vérification de %lld processus lancé(s) par ce tour…" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "生成を停止しました。このターンで開始した%lld個のプロセスを確認中…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成，正在检查本轮启动的 %lld 个进程…" } } } },
     "composer.stop.cleaned-up" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating and stopped %lld related task(s) or process(es) from this turn." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Generación detenida y se detuvieron %lld tarea(s) o proceso(s) relacionados de este turno." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Génération arrêtée et %lld tâche(s) ou processus lié(s) à ce tour ont été arrêtés." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "生成を停止し、このターンに関連する%lld個のタスクまたはプロセスも停止しました。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成，本轮的 %lld 个相关任务或进程也已停止。" } } } },
     "composer.stop.processes-kept" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Current-turn processes were left running because they still need to continue." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Generación detenida. Los procesos del turno actual se dejaron en ejecución porque aún necesitan continuar." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Génération arrêtée. Les processus de ce tour ont été laissés en cours d'exécution, car ils doivent encore continuer." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "生成を停止しました。このターンのプロセスは継続が必要なため、実行したままにしています。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成；本轮进程仍需继续，未执行终止。" } } } },
@@ -55145,6 +55145,26 @@
             "value" : "刷新工具"
           }
         }
+      }
+    },
+    "settings.mcp.refresh-all-tools" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh All Tool Lists" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Actualizar todas las listas de herramientas" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Actualiser toutes les listes d’outils" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "すべてのツール一覧を更新" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刷新全部工具列表" } }
+      }
+    },
+    "settings.mcp.all-tools-refreshed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refreshed tools for %@ of %@ servers. New tools are available on the next request; no restart needed." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Herramientas actualizadas para %@ de %@ servidores. Las nuevas estarán disponibles en la próxima solicitud; no hace falta reiniciar." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Outils actualisés pour %@ serveurs sur %@. Les nouveaux outils seront disponibles à la prochaine requête, sans redémarrage." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@/%@ 台のサーバーのツールを更新しました。新しいツールは次のリクエストから利用でき、再起動は不要です。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已刷新 %@/%@ 个服务器的工具；新工具从下一次请求起可用，无需重启。" } }
       }
     },
     "settings.mcp.server-name-placeholder" : {

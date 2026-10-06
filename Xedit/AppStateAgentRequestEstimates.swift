@@ -522,6 +522,11 @@ extension AppState {
                 workload.fixedTokens += 24
                 workload.texts.append(tool.name)
                 workload.texts.append(tool.description)
+                // 插件工具发的是自带参数表（AgentToolInputSchema），按它的文本估。
+                if let schema = tool.inputSchemaJSON {
+                    workload.texts.append(schema)
+                    continue
+                }
                 for parameter in tool.parameters {
                     workload.fixedTokens += 8
                     workload.texts.append(parameter.name)

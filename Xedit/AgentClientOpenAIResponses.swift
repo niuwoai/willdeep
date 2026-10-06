@@ -1265,6 +1265,10 @@ struct OpenAIResponsesAdapter {
     }
 
     nonisolated private static func encodeTool(_ descriptor: AgentToolDescriptor) -> [String: Any] {
+        // 插件 MCP 工具自带参数表时原样发（AgentToolInputSchema）。
+        if let schema = AgentToolInputSchema.object(fromJSON: descriptor.inputSchemaJSON) {
+            return ["type": "function", "name": descriptor.name, "description": descriptor.description, "parameters": schema]
+        }
         var properties: [String: Any] = [:]
         var required: [String] = []
         for parameter in descriptor.parameters {

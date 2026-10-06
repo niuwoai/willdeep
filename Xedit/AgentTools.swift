@@ -749,10 +749,16 @@ enum AgentToolRunner {
                     "Unknown plugin MCP tool \(mcpTool). Its plugin may have been disabled; use list_mcp_servers to see what is available now."
                 )
             }
-            let rawArguments = activeArguments["arguments_json"]?.stringValue() ?? "{}"
-            let parsed = (try? JSONSerialization.jsonObject(
-                with: Data(rawArguments.utf8), options: []
-            )) as? [String: Any] ?? [:]
+            // 有参数表的工具，模型直接按参数表传（1.410.0-rc1）；兜底那一个 `arguments_json`
+            // 字符串参数（Gemini 收不下参数表时、以及旧会话历史里的调用）照旧认。
+            let parsed: [String: Any]
+            if let rawArguments = activeArguments["arguments_json"]?.stringValue() {
+                parsed = (try? JSONSerialization.jsonObject(
+                    with: Data(rawArguments.utf8), options: []
+                )) as? [String: Any] ?? [:]
+            } else {
+                parsed = activeArguments.mapValues(\.foundationValue)
+            }
             return try await AgentMCPBridge.callPluginToolForModel(
                 pluginID: route.pluginID,
                 serverName: route.serverName,

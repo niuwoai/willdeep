@@ -1,5 +1,74 @@
 # Changelog
 
+## 1.411.0-rc1 - 2026-10-06
+
+### Added
+
+- **插件页面能让用户挑项目文件夹。** 插件桥升到 2.7.0，新增两项能力（需要 `workspace.read`）：
+  - `window.willdeep.workspace.recent()`：主 App 最近打开的文件夹在前，会话用过的本地工作区根在后（按最后活动时间），去重、去掉本机不存在的目录，最多 40 条（`AgentPluginRecentWorkspaces`）。
+  - `window.willdeep.workspace.pickFolder({title})`：弹系统选文件夹面板（当前窗口的 sheet），取消时回 `path: null`；同一时刻只允许一个面板。
+  - 待办插件用它在选项目时列出「最近打开」并提供「选择本地文件夹…」。
+
+### Impact
+
+- 两条都只回路径，不扩大 `fs.*` 的读范围——读文件仍只限当前会话已授权的工作区根。
+- 旧插件不受影响；插件应按 `window.willdeep.capabilities` 判断是否可用。说明见 `docs/PLUGIN_HOST_CAPABILITIES_DESIGN.md` 第六节。
+
+## 1.410.0-rc1 - 2026-10-06
+
+### Added
+
+- **插件工具把自己的参数表交给模型。** 主会话里的插件 MCP 工具（如 `mcp__video_studio__episode_generate_frames`）以前只有一个 `arguments_json` 字符串参数，模型只能照描述猜参数名和结构；现在用插件 `tools/list` 里的 `inputSchema`，模型直接按参数表填（target、countPerModel、requestID……），少一次白跑或重复计费。
+  - Anthropic、OpenAI Chat、OpenAI Responses 原样使用收敛后的参数表：去掉 `$schema` / `$id` / `examples`，展开本地 `$ref`，`oneOf` 换成 `anyOf`；单张超过 16 KB 先去掉深层说明，仍超就退回 `arguments_json`（`AgentToolInputSchema`）。
+  - Gemini 转成它认的 OpenAPI 子集；遇到没写字段的自由对象整份退回 `arguments_json`。
+  - 调用时两种传法都认（旧会话历史里的 `arguments_json` 调用照旧能执行）；整数参数按整数转给插件，不再变成 `3.0`。
+- **插件工具列表自动预热。** App 启动后、插件启用 / 安装 / 升级后，对缺目录或插件包已变化的插件 MCP 服务在后台问一次 `tools/list`；插件发 `notifications/tools/list_changed` 时立即重拉。新装或刚升级的插件，主会话里不用先去设置页点「刷新工具」就能看到它的工具（`AgentPluginMCPToolWarmup`）。
+  - 插件进程已在运行时不打扰（它可能正忙着一条长调用），等下一次由网关或模型调用刷新；预热失败只记日志。
+
+### Impact
+
+- 插件工具目录缓存增加 `inputSchema` 与插件包摘要；旧缓存照常读取，首次启动会在后台重拉一次。
+- 计入请求体积估算的是参数表本身。
+
+## 1.409.0-rc7 - 2026-10-06
+
+### Changed
+
+- **卸下宿主自带的短剧工具，短剧生产改走短剧工坊插件。** 主会话里不再出现 `short_drama_*` 工具：不进工具列表、不进 `load_tool_pack` 的工具包目录，开启「短剧」专家也不再自动加载。模型按名字直接调用时不执行，并提示改用插件的 `mcp__video_studio__*` 工具。短剧专家的提示改为指向插件工具与插件技能。
+  - 以前两套工具同时挂着，助手常挑宿主这套旧工具，写进另一份数据，插件页面看不到。
+  - 应用里短剧面板的按钮、对话里小部件上的按钮不经模型，照常可用。
+  - 实现：`AgentToolPackCatalog.unmountedPacks`（目前只有 `short_drama`），恢复时从集合里去掉即可。
+- 新增方案文档 `docs/PLUGIN_MCP_MAIN_CHAT_DESIGN.md`：插件 MCP 工具在主会话里的参数表、工具表预热、超时与并发、工具结果里的图片 / 视频 / 音频展示、技能与审批，分步与验收标准。
+
+### Impact
+
+- 只影响模型能看到和调用的工具；无数据迁移，已有短剧数据不动。
+
+## 1.409.0-rc6 - 2026-09-29
+
+### Fixed
+
+- **定时任务默认智能审核。** 修复默认审批模式意外回退到工作区可写模式的问题。
+- **停止后后台事件不再自动重启会话。** Stop 状态会持久化，待处理的自动唤醒与宿主续跑指令暂停，用户发送新消息后恢复；停止提示会说明这一状态。
+
+## 1.409.0-rc4 - 2026-09-28
+
+### Added
+
+- **支持免重启刷新全部 MCP 工具列表。** 设置 → MCP 可一次刷新所有已启用服务器；下一次模型请求立即使用新工具列表，无需重启会话或 App。
+
+## 1.409.0-rc3 - 2026-09-28
+
+### Changed
+
+- **工作区可写模式对工作区外操作启用智能审核。** 新会话默认使用该模式；工作区内写入继续受沙箱保护，外部命令通过 AI 安全审核，风险或审核不可用时再请求用户确认。
+
+## 1.409.0-rc2 - 2026-09-28
+
+### Fixed
+
+- **统一 Product Overview 字符预算。** 根目录 `product-overview.md` / `PRODUCT_OVERVIEW.md` 在 20,000 个 Unicode 字符以内时直接作为参考资料注入；超出时只提供摘要/索引提示，详情按需读取，不额外调用模型临时摘要。根目录 `AGENTS.md` 和 `CLAUDE.md` 仍按原样完整加载。
+
 ## 1.409.0-rc1 - 2026-09-28
 
 ### Added

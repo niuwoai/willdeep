@@ -282,6 +282,61 @@ extension AppState {
         return try await AgentPluginNetworkProxy.send(request, domains: domains)
     }
 
+    // MARK: 最近项目与选文件夹
+
+    /// 插件页面要让用户「挑一个项目」时的两条路：主 App 最近打开过的文件夹，
+    /// 或者弹系统的选文件夹面板。都只回路径，**不扩大读权限**——`fs.*`
+    /// 依旧只认当前会话已授权的根。需要 `workspace.read`。
+    func pluginRecentWorkspaces(pluginID: AgentPluginID) throws -> [[String: Any]] {
+        try requirePluginWorkspaceRead(pluginID: pluginID)
+        let sessionRoots = agentSessions.compactMap { session -> AgentPluginRecentWorkspaces.SessionRoot? in
+            guard let path = session.workspaceRootPath, !path.isEmpty else { return nil }
+            return AgentPluginRecentWorkspaces.SessionRoot(path: path, lastActivityAt: session.lastActivityAt)
+        }
+        return AgentPluginRecentWorkspaces.entries(recentFolders: recentFolders, sessionRoots: sessionRoots)
+    }
+
+    /// 弹系统选文件夹面板。用户取消时回 `nil`，不算错误。
+    /// 一个页面同一时刻只开一个面板，连点按钮不会叠出一摞。
+    func pluginPickFolder(title: String, pluginID: AgentPluginID) async throws -> String? {
+        try requirePluginWorkspaceRead(pluginID: pluginID)
+        guard !Self.pluginFolderPanelIsOpen else {
+            throw AgentPluginCapabilityError.invalidArgument("a folder panel is already open")
+        }
+        Self.pluginFolderPanelIsOpen = true
+        defer { Self.pluginFolderPanelIsOpen = false }
+
+        let panel = NSOpenPanel()
+        let trimmedTitle = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
+        panel.title = trimmedTitle.isEmpty ? L10n.ComposerWorkspace.chooseFolder : trimmedTitle
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        if let first = recentFolders.first { panel.directoryURL = first.deletingLastPathComponent() }
+
+        let response: NSApplication.ModalResponse = await withCheckedContinuation { continuation in
+            // 同 composer 选附件：挂成当前窗口的 sheet。不带父窗口的
+            // `panel.begin` 在 macOS 26 + MainActor 下出现过卡死。
+            if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+                panel.beginSheetModal(for: window) { continuation.resume(returning: $0) }
+            } else {
+                panel.begin { continuation.resume(returning: $0) }
+            }
+        }
+        guard response == .OK, let url = panel.url else { return nil }
+        return url.standardizedFileURL.path
+    }
+
+    private static var pluginFolderPanelIsOpen = false
+
+    private func requirePluginWorkspaceRead(pluginID: AgentPluginID) throws {
+        guard AgentPluginRegistry.shared.hasPermission(.workspaceRead, pluginID: pluginID)
+                || AgentPluginRegistry.shared.hasPermission(.workspaceWrite, pluginID: pluginID) else {
+            throw AgentPluginCapabilityError.permissionDenied(AgentPluginPermission.workspaceRead.rawValue)
+        }
+    }
+
     // MARK: 剪贴板与通知
 
     func pluginWriteClipboard(_ text: String, pluginID: AgentPluginID) throws {

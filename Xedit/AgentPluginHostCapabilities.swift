@@ -341,3 +341,44 @@ nonisolated enum AgentPluginHostEvent: String, CaseIterable, Sendable {
         AgentPluginHostEvent(rawValue: raw)
     }
 }
+
+/// `window.willdeep.workspace.recent()` 背后的清单：主 App 最近打开的文件夹
+/// 在前（按打开先后），会话用过的本地工作区根在后（按最后活动时间）。
+///
+/// 只回路径和显示名，不回目录内容——拿到路径不等于拿到读权限，读文件
+/// 仍然只能走 `fs.*`，且只限当前会话已授权的根。
+nonisolated enum AgentPluginRecentWorkspaces {
+    /// 一次最多回这么多条。菜单里再多就没法挑了。
+    static let limit = 40
+
+    struct SessionRoot: Equatable, Sendable {
+        let path: String
+        let lastActivityAt: Date
+    }
+
+    static func entries(
+        recentFolders: [URL],
+        sessionRoots: [SessionRoot],
+        isLocalDirectory: (String) -> Bool = AgentPluginRecentWorkspaces.isLocalDirectory
+    ) -> [[String: Any]] {
+        let sessionPaths = sessionRoots
+            .sorted { $0.lastActivityAt > $1.lastActivityAt }
+            .map(\.path)
+        var seen = Set<String>()
+        var result: [[String: Any]] = []
+        for raw in recentFolders.map(\.path) + sessionPaths {
+            guard result.count < limit, !raw.isEmpty else { continue }
+            let path = URL(fileURLWithPath: raw).standardizedFileURL.path
+            // 远端会话的根在本机上不存在，回给页面只会是一条点了也白点的路径。
+            guard seen.insert(path).inserted, isLocalDirectory(path) else { continue }
+            let name = URL(fileURLWithPath: path).lastPathComponent
+            result.append(["path": path, "name": name.isEmpty ? path : name])
+        }
+        return result
+    }
+
+    static func isLocalDirectory(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+}

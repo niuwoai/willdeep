@@ -90,6 +90,8 @@ nonisolated enum AgentPluginRuntimeSnapshotStore {
         // 启用、停用、安装、卸载最后都落到这里：让插件 MCP 网关重写发现文件
         // 里的 `servers`。网关没在运行（包括单测进程）时这是空操作。
         AgentPluginMCPGateway.shared.pluginServersDidChange()
+        // 聊天用的插件工具目录跟着预热（新启用、升级后的插件不用等手动刷新）。没启动预热时是空操作。
+        AgentPluginMCPToolWarmup.pluginServersDidChange()
     }
 
     static func activePackages() -> [AgentPluginPackage] {
