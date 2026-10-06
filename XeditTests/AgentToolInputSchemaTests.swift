@@ -140,6 +140,33 @@ struct AgentToolInputSchemaTests {
         #expect(properties["arguments_json"] == nil)
     }
 
+    @Test("a plugin tool name with _ for - still routes, keeps its readOnlyHint, and counts as dispatchable; ambiguity does not")
+    func routesLooseToolNames() throws {
+        let sandbox = try #require(UserDefaults(suiteName: "AgentToolInputSchemaTests-loose-\(UUID().uuidString)"))
+        AgentPluginMCPToolCatalog._setTestDefaultsOverride(sandbox)
+        defer { AgentPluginMCPToolCatalog._setTestDefaultsOverride(nil) }
+        let payload = #"{"tools":[{"name":"drama.get_progress","annotations":{"readOnlyHint":true}}]}"#
+        AgentPluginMCPToolCatalog.record(
+            serverID: "plugin:willdeep-video-studio:video-studio", pluginID: "willdeep-video-studio",
+            serverName: "video-studio", listToolsPayload: payload, packageDigest: "d"
+        )
+        let route = try #require(AgentPluginMCPToolCatalog.policyRoute(exposedName: "mcp__video_studio__drama_get_progress"))
+        #expect(route.toolName == "drama.get_progress")
+        #expect(route.readOnlyHint)
+        #expect(AgentPluginMCPToolCatalog.route(exposedName: "mcp__video-studio__drama_get_progress")?.toolName == "drama.get_progress")
+        #expect(AgentToolNameAliases.isDispatchable("mcp__video_studio__drama_get_progress", advertisedToolNames: []))
+
+        // 另一个插件也有个 video_studio 服务、同名工具：宽松匹配有歧义时不认。
+        AgentPluginMCPToolCatalog.record(
+            serverID: "plugin:other:video_studio", pluginID: "other",
+            serverName: "video_studio", listToolsPayload: payload, packageDigest: "e"
+        )
+        #expect(AgentPluginMCPToolCatalog.route(exposedName: "mcp__video_studio__drama_get_progress")?.toolName == "drama.get_progress")
+        #expect(AgentPluginMCPToolCatalog.route(exposedName: "mcp__video-studio__drama_get_progress") != nil)
+        // 两个都只能宽松对上：有歧义，不认。
+        #expect(AgentPluginMCPToolCatalog.route(exposedName: "mcp__video_studio__drama-get_progress") == nil)
+    }
+
     @Test("an old catalog entry without schema or digest still decodes")
     func decodesOldCatalogEntries() throws {
         let old = #"{"pluginID":"p","serverName":"s","tools":[{"rawName":"a.b","exposedName":"mcp__s__a_b","description":""}]}"#
