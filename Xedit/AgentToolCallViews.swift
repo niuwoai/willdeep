@@ -1730,7 +1730,8 @@ struct AgentToolCallCard: View {
             return ("技能清单", lines.joined(separator: "\n"))
         }
         let localizedArguments = AgentToolDisplay.approvalArgumentsLines(
-            for: call.arguments
+            for: call.arguments,
+            toolName: call.toolName
         )
         guard !localizedArguments.isEmpty else { return nil }
         return ("操作内容", localizedArguments)

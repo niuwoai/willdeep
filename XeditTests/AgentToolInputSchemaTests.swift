@@ -167,6 +167,42 @@ struct AgentToolInputSchemaTests {
         #expect(AgentPluginMCPToolCatalog.route(exposedName: "mcp__video_studio__drama-get_progress") == nil)
     }
 
+    @Test("plugin tools show the plugin's Chinese title and argument labels on the approval card; arrays read in Chinese")
+    func approvalCardUsesPluginChineseNames() throws {
+        let sandbox = try #require(UserDefaults(suiteName: "AgentToolInputSchemaTests-i18n-\(UUID().uuidString)"))
+        AgentPluginMCPToolCatalog._setTestDefaultsOverride(sandbox)
+        defer { AgentPluginMCPToolCatalog._setTestDefaultsOverride(nil) }
+        let payload = """
+        {"tools":[
+          {"name":"episode.generate_frames","inputSchema":{"type":"object","properties":{"dramaID":{"type":"string"},"models":{"type":"array"},"retryOnBlock":{"type":"integer"}}},
+           "_meta":{"willdeep/i18n":{"zh-Hans":{"title":"整集出首尾帧","arguments":{"dramaID":"短剧","models":"模型","retryOnBlock":"全被拦截时重出轮数"}}}}},
+          {"name":"plain.tool","title":"Standard title"},
+          {"name":"bare.tool"}
+        ]}
+        """
+        AgentPluginMCPToolCatalog.record(
+            serverID: "plugin:willdeep-video-studio:video-studio", pluginID: "willdeep-video-studio",
+            serverName: "video-studio", listToolsPayload: payload, packageDigest: "d"
+        )
+        #expect(AgentToolDisplay.name(for: "mcp__video-studio__episode_generate_frames") == "整集出首尾帧（video-studio）")
+        #expect(AgentToolDisplay.name(for: "mcp__video-studio__plain_tool") == "Standard title（video-studio）")
+        #expect(AgentToolDisplay.name(for: "mcp__video-studio__bare_tool") == "mcp__video-studio__bare_tool")
+
+        let lines = AgentToolDisplay.approvalArgumentsLines(for: [
+            "dramaID": .string("a88a5e92"),
+            "models": .array([.string("gpt-image-2")]),
+            "retryOnBlock": .number(0),
+            "unknownKey": .array([.object([:]), .object([:])])
+        ], toolName: "mcp__video-studio__episode_generate_frames")
+        #expect(lines.contains("短剧：a88a5e92"))
+        #expect(lines.contains("模型：gpt-image-2"))
+        #expect(lines.contains("全被拦截时重出轮数：0"))
+        #expect(lines.contains("unknownKey：2 项"))
+        #expect(!lines.contains("items]"))
+        #expect(AgentToolDisplay.approvalValueSummary(.array([.number(1), .number(2), .number(3), .number(4)])) == "4 项")
+        #expect(AgentToolDisplay.approvalValueSummary(.object(["a": .null])) == "1 个字段")
+    }
+
     @Test("an old catalog entry without schema or digest still decodes")
     func decodesOldCatalogEntries() throws {
         let old = #"{"pluginID":"p","serverName":"s","tools":[{"rawName":"a.b","exposedName":"mcp__s__a_b","description":""}]}"#
