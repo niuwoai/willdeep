@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.410.0-rc1 - 2026-10-06
+
+### Added
+
+- **插件工具把自己的参数表交给模型。** 主会话里的插件 MCP 工具（如 `mcp__video_studio__episode_generate_frames`）以前只有一个 `arguments_json` 字符串参数，模型只能照描述猜参数名和结构；现在用插件 `tools/list` 里的 `inputSchema`，模型直接按参数表填（target、countPerModel、requestID……），少一次白跑或重复计费。
+  - Anthropic、OpenAI Chat、OpenAI Responses 原样使用收敛后的参数表：去掉 `$schema` / `$id` / `examples`，展开本地 `$ref`，`oneOf` 换成 `anyOf`；单张超过 16 KB 先去掉深层说明，仍超就退回 `arguments_json`（`AgentToolInputSchema`）。
+  - Gemini 转成它认的 OpenAPI 子集；遇到没写字段的自由对象整份退回 `arguments_json`。
+  - 调用时两种传法都认（旧会话历史里的 `arguments_json` 调用照旧能执行）；整数参数按整数转给插件，不再变成 `3.0`。
+- **插件工具列表自动预热。** App 启动后、插件启用 / 安装 / 升级后，对缺目录或插件包已变化的插件 MCP 服务在后台问一次 `tools/list`；插件发 `notifications/tools/list_changed` 时立即重拉。新装或刚升级的插件，主会话里不用先去设置页点「刷新工具」就能看到它的工具（`AgentPluginMCPToolWarmup`）。
+  - 插件进程已在运行时不打扰（它可能正忙着一条长调用），等下一次由网关或模型调用刷新；预热失败只记日志。
+
+### Impact
+
+- 插件工具目录缓存增加 `inputSchema` 与插件包摘要；旧缓存照常读取，首次启动会在后台重拉一次。
+- 计入请求体积估算的是参数表本身。
+
 ## 1.409.0-rc7 - 2026-10-06
 
 ### Changed

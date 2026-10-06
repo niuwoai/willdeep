@@ -11,6 +11,8 @@ import Foundation
 
 extension Notification.Name {
     static let agentMCPResourcesDidChange = Notification.Name("AgentMCPResourcesDidChange")
+    /// MCP 服务器发了 `notifications/tools/list_changed`；userInfo 同 `AgentMCPResourceNotificationKey`。
+    static let agentMCPToolsDidChange = Notification.Name("AgentMCPToolsDidChange")
 }
 
 nonisolated enum AgentMCPResourceNotificationKey {
@@ -276,6 +278,33 @@ enum AgentMCPBridge {
             return nil
         }
         return try await runRequest(server: server, method: "tools/list", params: [:], rendering: .pageFacing)
+    }
+
+    /// 插件工具目录预热（`AgentPluginMCPToolWarmup`，1.410.0-rc1）：问一次 `tools/list` 写进目录。
+    ///
+    /// `skipIfLive`：stdio 连接已经活着时不问——插件可能正忙着一条长调用（等宿主出图），
+    /// 探测会排在后面干等，还受应答超时约束（见 `ensureStartedForGateway` 的注释）。
+    /// 插件自己发了 `tools/list_changed` 时传 false：那一刻它显然没在忙。
+    /// 返回是否真的问了。
+    @discardableResult
+    static func refreshPluginToolCatalog(
+        server: AgentMCPServerConfig,
+        pluginID: AgentPluginID,
+        packageDigest: String?,
+        skipIfLive: Bool
+    ) async throws -> Bool {
+        if skipIfLive, server.transport == .stdio, stdioConnectionPool.hasLiveConnection(for: server) {
+            return false
+        }
+        let result = try await runRequest(server: server, method: "tools/list", params: [:], rendering: .pageFacing)
+        AgentPluginMCPToolCatalog.record(
+            serverID: server.id,
+            pluginID: pluginID,
+            serverName: server.name,
+            listToolsPayload: result,
+            packageDigest: packageDigest
+        )
+        return true
     }
 
     /// 插件 MCP 网关：插件没有公布自己的 HTTP 入口时，经宿主的 MCP 客户端中转
@@ -1068,8 +1097,19 @@ enum AgentMCPBridge {
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data),
                   let dictionary = object as? [String: Any],
-                  let method = dictionary["method"] as? String,
-                  method == "notifications/resources/updated"
+                  let method = dictionary["method"] as? String else { return }
+            // 工具清单变了（1.410.0-rc1）：交给预热重新拉一次，聊天用的插件工具目录跟着更新。
+            if method == "notifications/tools/list_changed" {
+                let userInfo = [
+                    AgentMCPResourceNotificationKey.server: serverName,
+                    AgentMCPResourceNotificationKey.serverID: serverID,
+                ]
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .agentMCPToolsDidChange, object: nil, userInfo: userInfo)
+                }
+                return
+            }
+            guard method == "notifications/resources/updated"
                     || method == "notifications/resources/list_changed" else { return }
             let parameters = dictionary["params"] as? [String: Any]
             var userInfo: [String: String] = [

@@ -50,6 +50,8 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             // 插件 MCP 网关要知道哪些插件已启用；注册表平时由侧栏第一次用到时
             // 才建，没开窗口启动时就没人扫描插件，网关会对所有插件回 404。
             _ = AgentPluginRegistry.shared
+            // 聊天用的插件工具目录：缺的、插件升级过的，在后台问一次 tools/list（1.410.0-rc1）。
+            AgentPluginMCPToolWarmup.shared.start()
         }
         // 插件 MCP 网关：外部 MCP 客户端经它按需拉起插件，不必先打开插件页。
         AgentPluginMCPGateway.shared.start()
