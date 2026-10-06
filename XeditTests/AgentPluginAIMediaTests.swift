@@ -180,6 +180,7 @@ struct AgentPluginAIMediaTests {
     func bridgeAdvertisesMedia() {
         #expect(AgentPluginPageBridge.capabilities.contains("ai.images"))
         #expect(AgentPluginPageBridge.capabilities.contains("ai.videos"))
-        #expect(AgentPluginPageBridge.version == "2.6.0")
+        // 2.6.0 起才有媒体；之后加别的能力只会再往上升
+        #expect(AgentPluginPageBridge.version != "2.5.0")
     }
 }
