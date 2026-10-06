@@ -37,6 +37,11 @@ nonisolated struct AgentPluginMCPToolEntry: Codable, Equatable {
     /// 工具的参数表（`inputSchema`，已经 `AgentToolInputSchema.normalizedJSON` 收敛，1.410.0-rc1）。
     /// 旧缓存没有这个键；收敛不了的也是 nil，这两种都退回单个 `arguments_json` 参数。
     var inputSchema: String? = nil
+    /// 给人看的中文名（1.411.0-rc5）：插件在 `_meta["willdeep/i18n"]["zh-Hans"].title` 里给，没有就取 MCP 标准的
+    /// `title`。确认卡、工具卡用它代替 `mcp__video-studio__episode_generate_frames` 这种原名。
+    var displayTitle: String? = nil
+    /// 参数的中文名（`_meta["willdeep/i18n"]["zh-Hans"].arguments`），确认卡逐行显示参数时用。
+    var argumentLabels: [String: String]? = nil
 }
 
 /// 审批期需要的一个插件工具的全部事实。
@@ -195,6 +200,36 @@ nonisolated enum AgentPluginMCPToolCatalog {
         return matches.count == 1 ? matches[0] : nil
     }
 
+    /// 确认卡、工具卡要的展示信息：中文名与参数中文名。查不到工具返回 nil。
+    nonisolated static func presentation(
+        exposedName: String
+    ) -> (title: String?, serverName: String, argumentLabels: [String: String])? {
+        guard exposedName.hasPrefix(exposedNamePrefix),
+              let found = lookup(exposedName: exposedName, in: load()) else { return nil }
+        return (found.tool.displayTitle, found.server.serverName, found.tool.argumentLabels ?? [:])
+    }
+
+    /// 插件给的中文名放在 `_meta` 的这个键下（与 willdeep-video-studio 0.41.0-rc6 的 `ToolI18n` 约定一致）。
+    static let i18nMetaKey = "willdeep/i18n"
+    /// Agent 对话与确认卡统一是中文（见 `AgentToolDisplay` 的说明），这里只取简体中文。
+    static let i18nLocale = "zh-Hans"
+
+    nonisolated private static func localizedEntry(of tool: [String: Any]) -> [String: Any]? {
+        ((tool["_meta"] as? [String: Any])?[i18nMetaKey] as? [String: Any])?[i18nLocale] as? [String: Any]
+    }
+
+    nonisolated private static func localizedTitle(of tool: [String: Any]) -> String? {
+        let candidates = [localizedEntry(of: tool)?["title"] as? String, tool["title"] as? String]
+        return candidates.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty }
+    }
+
+    nonisolated private static func localizedArgumentLabels(of tool: [String: Any]) -> [String: String]? {
+        guard let labels = localizedEntry(of: tool)?["arguments"] as? [String: Any] else { return nil }
+        let cleaned = labels.compactMapValues { ($0 as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.value.isEmpty }
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
     nonisolated static func looseName(_ name: String) -> String {
         name.replacingOccurrences(of: "-", with: "_")
     }
@@ -268,7 +303,9 @@ nonisolated enum AgentPluginMCPToolCatalog {
                 description: (tool["description"] as? String) ?? "",
                 // 只认布尔 true：`"true"` 字符串、缺省都不算声明。
                 readOnlyHint: ((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool) == true ? true : nil,
-                inputSchema: AgentToolInputSchema.normalizedJSON(tool["inputSchema"])
+                inputSchema: AgentToolInputSchema.normalizedJSON(tool["inputSchema"]),
+                displayTitle: localizedTitle(of: tool),
+                argumentLabels: localizedArgumentLabels(of: tool)
             ))
         }
         return entries

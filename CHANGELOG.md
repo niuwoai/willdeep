@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.411.0-rc5 - 2026-10-07
+
+### Fixed
+
+- **插件工具的确认卡是一屏英文。** 以前写的是「Agent 准备 mcp__video-studio__episode_generate_frames」，参数一行行是 dramaID、requestID、retryOnBlock、`models: [1 items]`。现在：
+  - 标题用插件给的中文名，例如「Agent 准备整集出首尾帧（video-studio）」。插件在 `tools/list` 每个工具的 `_meta["willdeep/i18n"]["zh-Hans"]` 里给 `title` 与 `arguments`（参数中文名）；没给时取 MCP 标准的 `title`，再没有才显示原名。
+  - 参数按插件给的中文名显示（短剧、分集、请求编号、全被拦截时重出轮数……），宿主自己的参数名表优先；审批说明里同一套名字。
+  - 数组、对象不再显示英文的「[1 items]」「{3 keys}」：三项以内的简单数组直接列出（「模型：gpt-image-2」），其余写「N 项」「N 个字段」。
+
+### Impact
+
+- 插件工具目录缓存多记中文名；插件升级（包摘要变化）后由后台预热自动重拉，旧缓存照常读取。
+- 原为未提交的 1.410.0-rc3，移植到 1.411.0-rc4 之后重新编号为 1.411.0-rc5，内容不变。
+
 ## 1.411.0-rc4 - 2026-10-06
 
 ### Changed

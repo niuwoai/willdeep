@@ -163,7 +163,7 @@ enum AgentApprovalExplanationPrompt {
     static let truncationMarkerPrefix = "[程序截断"
 
     static func userPayload(for call: AgentToolCall, judgeMiss: AgentSafetyJudgeMiss? = nil) -> String {
-        let arguments = fullArgumentsText(for: call.arguments)
+        let arguments = fullArgumentsText(for: call.arguments, toolName: call.toolName)
         var payload = """
         工具: \(AgentToolDisplay.nameWithRawID(for: call.toolName))
         风险等级: \(riskLabel(call.risk))
@@ -183,8 +183,8 @@ enum AgentApprovalExplanationPrompt {
 
     /// 与审批卡同序同名，但字符串给原文：保留换行、只脱敏凭据，超长时由
     /// 程序显式标注截断，而不是让模型从一个省略号里猜。
-    static func fullArgumentsText(for arguments: [String: AgentJSONValue]) -> String {
-        AgentToolDisplay.approvalArguments(for: arguments)
+    static func fullArgumentsText(for arguments: [String: AgentJSONValue], toolName: String? = nil) -> String {
+        AgentToolDisplay.approvalArguments(for: arguments, toolName: toolName)
             .map { argument in
                 guard case .string(let raw) = argument.value else {
                     return "\(argument.label)：\(AgentToolDisplay.approvalValueSummary(argument.value))"
