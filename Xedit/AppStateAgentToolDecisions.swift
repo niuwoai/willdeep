@@ -858,7 +858,7 @@ extension AppState {
                 let pseudoCommand = AgentToolAuthorization.mcpJudgePseudoCommand(
                     server: route.serverName,
                     tool: route.toolName,
-                    argumentsJSON: arguments["arguments_json"]?.stringValue() ?? "{}"
+                    argumentsJSON: AgentToolAuthorization.pluginToolArgumentsJSON(arguments)
                 )
                 return try await checkedSafetyJudgeApproval(
                     toolName: toolName,

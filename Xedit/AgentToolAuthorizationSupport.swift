@@ -983,6 +983,16 @@ enum AgentToolAuthorization {
         "mcp-tool-call server=\(server) tool=\(tool) arguments=\(argumentsJSON)"
     }
 
+    /// 插件 MCP 一等工具交给安全审核看的参数文本（1.410.0-rc2）。1.410.0-rc1 起模型按工具自带的
+    /// 参数表直接传参，不再有 `arguments_json`；只取那一个字段的话，审核看到的永远是 `{}`。
+    /// 有 `arguments_json`（Gemini 兜底、旧会话）就用它，否则把整个参数对象按键排序序列化。
+    static func pluginToolArgumentsJSON(_ arguments: [String: AgentJSONValue]) -> String {
+        if let raw = arguments["arguments_json"]?.stringValue() { return raw }
+        let object = arguments.mapValues(\.foundationValue)
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return "{}" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     /// Render a `terminal_send_control` call as a pseudo command line for
     /// the LLM safety judge. The control key is one of the whitelisted set
     /// (`ctrl_c` / `ctrl_d` / `ctrl_right_bracket` / `enter` / `escape`);

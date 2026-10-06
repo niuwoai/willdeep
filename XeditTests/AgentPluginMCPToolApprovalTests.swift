@@ -120,4 +120,36 @@ struct AgentPluginMCPToolApprovalTests {
             #expect(await approval("drama_vanished") == nil)
         }
     }
+
+    /// 1.410.0-rc2 之前插件工具的风险等级落到注册表的 `.danger` 兜底：上面这些用例都直接传 `.write`，
+    /// 所以没发现主会话里只读工具照样张张弹卡。这里守住真实的风险分级。
+    @Test("目录里的插件工具按写级分级（只读放行由审批层判断），查不到的仍是危险级")
+    func pluginToolRiskTier() async {
+        await withSandbox {
+            #expect(AgentToolRegistry.risk(for: "mcp__video-studio__drama_get", arguments: [:]) == .write)
+            #expect(AgentToolRegistry.risk(for: "mcp__video-studio__drama_save_shot", arguments: [:]) == .write)
+            #expect(AgentToolRegistry.risk(for: "mcp__video_studio__drama_get", arguments: [:]) == .write)
+            #expect(AgentToolRegistry.risk(for: "mcp__video-studio__drama_vanished", arguments: [:]) == .danger)
+            let risk = AgentToolRegistry.risk(for: "mcp__video-studio__drama_get", arguments: [:])
+            let source = await AppState().autoApprovalSource(
+                toolName: "mcp__video-studio__drama_get",
+                arguments: ["dramaID": .string("d")],
+                risk: risk,
+                rootDirectory: root,
+                interactionMode: .normal,
+                approvalMode: .smart
+            )
+            #expect(source == .staticAllowlist)
+        }
+    }
+
+    @Test("安全审核看到按参数表直接传的真实参数，不是空的 arguments_json")
+    func judgeSeesSchemaArguments() {
+        let direct = AgentToolAuthorization.pluginToolArgumentsJSON([
+            "dramaID": .string("d1"), "countPerModel": .number(2), "dryRun": .bool(false)
+        ])
+        #expect(direct == #"{"countPerModel":2,"dramaID":"d1","dryRun":false}"#)
+        #expect(AgentToolAuthorization.pluginToolArgumentsJSON(["arguments_json": .string(#"{"a":1}"#)]) == #"{"a":1}"#)
+        #expect(AgentToolAuthorization.pluginToolArgumentsJSON([:]) == "{}")
+    }
 }

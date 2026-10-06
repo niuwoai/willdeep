@@ -100,7 +100,7 @@ enum AgentToolPackCatalog {
     /// 宿主页面里的按钮与小部件动作不经模型，仍走原来的分发，照常可用。
     ///
     /// 短剧（1.409.0-rc7）：短剧生产改由 willdeep-video-studio 插件的 MCP 工具承担
-    /// （`mcp__video_studio__*`）。两套同时挂着时模型会挑宿主这套旧工具，写进另一份数据。
+    /// （`mcp__video-studio__*`）。两套同时挂着时模型会挑宿主这套旧工具，写进另一份数据。
     static let unmountedPacks: Set<AgentToolPackID> = [.shortDrama]
 
     static var mountedPacks: [AgentToolPack] {
@@ -117,7 +117,7 @@ enum AgentToolPackCatalog {
         guard let packID = packID(for: toolName), unmountedPacks.contains(packID) else { return nil }
         switch packID {
         case .shortDrama:
-            return "The host's native short-drama tools are unmounted. Nothing was executed. Drive short-drama production through the WillDeep video-studio plugin's MCP tools (names start with `mcp__video_studio__`, e.g. `mcp__video_studio__drama_get`); call `list_mcp_tools` to see them if they are not in this session's tool list."
+            return "The host's native short-drama tools are unmounted. Nothing was executed. Drive short-drama production through the WillDeep video-studio plugin's MCP tools (names start with `mcp__video-studio__`, e.g. `mcp__video-studio__drama_get`); call `list_mcp_tools` to see them if they are not in this session's tool list."
         default:
             return "The `\(packID.rawValue)` tool pack is unmounted in this build. Nothing was executed."
         }
@@ -157,7 +157,7 @@ enum AgentToolPackCatalog {
                 continue
             }
             if unmountedPacks.contains(id) {
-                let hint = id == .shortDrama ? " Use the video-studio plugin's MCP tools (`mcp__video_studio__*`) instead." : ""
+                let hint = id == .shortDrama ? " Use the video-studio plugin's MCP tools (`mcp__video-studio__*`) instead." : ""
                 throw AgentToolError.invalidArgument("Tool pack `\(rawID)` is unmounted.\(hint)")
             }
             result.append(id)
