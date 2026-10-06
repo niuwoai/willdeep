@@ -87,6 +87,10 @@ struct AgentToolDescriptor: Equatable {
     let description: String
     let risk: AgentToolRisk
     let parameters: [AgentToolParameter]
+    /// 工具自带的完整参数表（JSON Schema 文本，已经 `AgentToolInputSchema.normalized` 收敛过）。
+    /// 目前只有插件 MCP 工具有：模型客户端有它就直接发它，`parameters` 只在接口收不下这份表时兜底
+    /// （Gemini 不认自由对象，见 `AgentToolInputSchema.gemini`）。
+    var inputSchemaJSON: String? = nil
 }
 
 struct AgentQueuedDispatchSnapshot: Equatable {

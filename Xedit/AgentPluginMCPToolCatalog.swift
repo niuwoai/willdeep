@@ -34,6 +34,9 @@ nonisolated struct AgentPluginMCPToolEntry: Codable, Equatable {
     /// 起名叫 `get_x`，也就能谎报这个注解；这道口子由插件安装批准和服务器
     /// 信任级别（可改成不受信）兜着，不在这里另设。
     var readOnlyHint: Bool? = nil
+    /// 工具的参数表（`inputSchema`，已经 `AgentToolInputSchema.normalizedJSON` 收敛，1.410.0-rc1）。
+    /// 旧缓存没有这个键；收敛不了的也是 nil，这两种都退回单个 `arguments_json` 参数。
+    var inputSchema: String? = nil
 }
 
 /// 审批期需要的一个插件工具的全部事实。
@@ -55,6 +58,8 @@ nonisolated enum AgentPluginMCPToolCatalog {
         let pluginID: String
         let serverName: String
         var tools: [AgentPluginMCPToolEntry]
+        /// 拉这份目录时插件包的摘要（1.410.0-rc1）。插件升级后摘要变了，预热会重新拉一次。
+        var packageDigest: String? = nil
     }
 
     /// 测试入口：把目录缓存挪到临时 suite，不碰开发机上的真实缓存。
@@ -87,11 +92,14 @@ nonisolated enum AgentPluginMCPToolCatalog {
         serverID: String,
         pluginID: String,
         serverName: String,
-        listToolsPayload: String
+        listToolsPayload: String,
+        packageDigest: String? = nil
     ) {
         guard let tools = parseTools(from: listToolsPayload, serverName: serverName) else { return }
         var catalog = load()
-        catalog[serverID] = ServerTools(pluginID: pluginID, serverName: serverName, tools: tools)
+        let digest = packageDigest ?? AgentPluginRuntimeSnapshotStore.activePackages()
+            .first { $0.pluginID == pluginID }?.digest
+        catalog[serverID] = ServerTools(pluginID: pluginID, serverName: serverName, tools: tools, packageDigest: digest)
         save(catalog)
     }
 
@@ -129,6 +137,8 @@ nonisolated enum AgentPluginMCPToolCatalog {
                         // 信任级别在审批期判定，和 call_mcp_tool 同一套；在这里
                         // 猜成 .read 等于绕过那道门。
                         risk: .write,
+                        // 有参数表时客户端直接发参数表，这一个参数只在接口收不下参数表时兜底
+                        // （AgentToolDescriptor.inputSchemaJSON）。
                         parameters: [
                             AgentToolParameter(
                                 name: "arguments_json",
@@ -136,7 +146,8 @@ nonisolated enum AgentPluginMCPToolCatalog {
                                 description: "JSON object string passed as the MCP tool arguments. Defaults to {}.",
                                 required: false
                             )
-                        ]
+                        ],
+                        inputSchemaJSON: tool.inputSchema
                     )
                 }
             }
@@ -239,7 +250,8 @@ nonisolated enum AgentPluginMCPToolCatalog {
                 exposedName: exposed,
                 description: (tool["description"] as? String) ?? "",
                 // 只认布尔 true：`"true"` 字符串、缺省都不算声明。
-                readOnlyHint: ((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool) == true ? true : nil
+                readOnlyHint: ((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool) == true ? true : nil,
+                inputSchema: AgentToolInputSchema.normalizedJSON(tool["inputSchema"])
             ))
         }
         return entries

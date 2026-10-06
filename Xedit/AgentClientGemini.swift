@@ -718,6 +718,11 @@ struct GeminiAdapter {
     }
 
     nonisolated private static func encodeTool(_ descriptor: AgentToolDescriptor) -> [String: Any] {
+        // 插件 MCP 工具自带参数表时转成 Gemini 的子集；转不了（自由对象等）就退回 arguments_json。
+        if let schema = AgentToolInputSchema.object(fromJSON: descriptor.inputSchemaJSON),
+           let converted = AgentToolInputSchema.gemini(schema) {
+            return ["name": descriptor.name, "description": descriptor.description, "parameters": converted]
+        }
         var properties: [String: Any] = [:]
         var required: [String] = []
         for parameter in descriptor.parameters {
