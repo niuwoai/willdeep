@@ -176,8 +176,8 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
         case .shortDrama:
             return """
             === SHORT DRAMA EXPERT — ACTIVE ===
-            The user enabled the short-drama production expert for this session. You may use the `short_drama_*` tools to plan projects, maintain episode/shot/asset structure, generate or refresh media tasks, review storyboards, and export production packages.
-            Keep short-drama actions anchored by project/episode/shot/asset IDs. Prefer dry-run options for broad structure changes or batch generation before spending provider calls or mutating many records.
+            The user enabled the short-drama production expert for this session. Short-drama production runs through the WillDeep video-studio plugin's MCP tools (names start with `mcp__video_studio__`; call `list_mcp_tools` with query `video` when they are not in the tool list yet). The host's native `short_drama_*` tools are unmounted. Read the plugin's `video-studio` skill before the first production step.
+            Keep short-drama actions anchored by drama/episode/shot/asset IDs. Prefer dryRun for broad structure changes or batch generation before spending provider calls or mutating many records, and pass a stable requestID to billable tools.
             """
         case .browserOps:
             return """

@@ -1998,6 +1998,8 @@ AgentToolDescriptor(
             // 调用方传进来就说明该暴露；不在这里放行的话，惰性注册模式下
             // 「没有 packID」这一条会把它们全部过滤掉，于是永远不出现。
             if pluginMCPNames.contains(descriptor.name) { return true }
+            // 卸下的工具包（AgentToolPackCatalog.unmountedPacks）：全量注册表与惰性模式都不给。
+            if AgentToolPackCatalog.isUnmounted(toolName: descriptor.name) { return false }
             // `/no-subagent` is enforced here rather than by prompt, so a
             // model that ignores the instruction still cannot delegate.
             if !delegationPolicy.allowsTool(named: descriptor.name) {
