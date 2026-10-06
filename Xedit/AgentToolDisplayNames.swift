@@ -18,13 +18,22 @@ import AppKit
 nonisolated enum AgentToolDisplay {
     /// 工具 id → 中文展示名。未收录的工具回退到原始 id，绝不丢信息。
     static func name(for toolName: String) -> String {
-        toolNames[toolName] ?? toolName
+        toolNames[toolName] ?? pluginToolName(for: toolName) ?? toolName
+    }
+
+    /// 插件 MCP 工具的展示名（1.411.0-rc5）：插件给了中文名就用「中文名（服务名）」，例如
+    /// 「整集出首尾帧（video-studio）」；没给时返回 nil，调用方退回原名。
+    static func pluginToolName(for toolName: String) -> String? {
+        guard AgentPluginMCPToolCatalog.isPluginToolName(toolName),
+              let presentation = AgentPluginMCPToolCatalog.presentation(exposedName: toolName),
+              let title = presentation.title else { return nil }
+        return "\(title)（\(presentation.serverName)）"
     }
 
     /// 带括号原始 id 的展示名，例如「终端执行命令 (terminal_send_command)」，
     /// 既给中文用户读得懂的名字，也保留可检索的原始 id 供排查。
     static func nameWithRawID(for toolName: String) -> String {
-        guard let localized = toolNames[toolName] else { return toolName }
+        guard let localized = toolNames[toolName] ?? pluginToolName(for: toolName) else { return toolName }
         return "\(localized)（\(toolName)）"
     }
 
@@ -123,9 +132,10 @@ nonisolated enum AgentToolDisplay {
     /// 宿主写入，供沙箱判定和审计使用；把它们原样展示会泄露实现细节，
     /// 还会让英文安全原因挤掉文件路径、写入内容等关键信息。
     static func approvalArgumentsLines(
-        for arguments: [String: AgentJSONValue]
+        for arguments: [String: AgentJSONValue],
+        toolName: String? = nil
     ) -> String {
-        approvalArguments(for: arguments)
+        approvalArguments(for: arguments, toolName: toolName)
             .map { "\($0.label)：\(approvalValueSummary($0.value))" }
             .joined(separator: "\n")
     }
@@ -133,26 +143,41 @@ nonisolated enum AgentToolDisplay {
     /// 审批卡与审批解释共用的参数顺序和中文名。卡片要摘要，解释模型要
     /// 原文——两边只在「值怎么写」上分叉，筛选和排序必须是同一份。
     static func approvalArguments(
-        for arguments: [String: AgentJSONValue]
+        for arguments: [String: AgentJSONValue],
+        toolName: String? = nil
     ) -> [(label: String, value: AgentJSONValue)] {
-        arguments
+        // 插件工具的参数中文名由插件在 tools/list 的 _meta 里给（1.411.0-rc5）；宿主自己的名表优先。
+        let pluginLabels = toolName.flatMap { AgentPluginMCPToolCatalog.presentation(exposedName: $0)?.argumentLabels } ?? [:]
+        return arguments
             .filter { !$0.key.hasPrefix("_") }
             .sorted {
                 let left = argumentOrder[$0.key] ?? Int.max
                 let right = argumentOrder[$1.key] ?? Int.max
                 return left == right ? $0.key < $1.key : left < right
             }
-            .map { (label: argumentName(for: $0.key), value: $0.value) }
+            .map { (label: argumentNames[$0.key] ?? pluginLabels[$0.key] ?? $0.key, value: $0.value) }
     }
 
-    private static func argumentName(for key: String) -> String {
-        argumentNames[key] ?? key
-    }
+    /// 数组参数在确认卡上直接列出的上限：超过就只写「N 项」。
+    static let approvalArrayInlineLimit = 3
 
     static func approvalValueSummary(_ value: AgentJSONValue) -> String {
         switch value {
         case .bool(let enabled): return enabled ? "是" : "否"
         case .null: return "空"
+        // 数组、对象不再显示英文的「[1 items]」「{3 keys}」（1.411.0-rc5）：短的标量数组直接列出，其余写「N 项」。
+        case .array(let values):
+            let scalars = values.compactMap { item -> String? in
+                switch item {
+                case .string, .number, .bool: return approvalValueSummary(item)
+                default: return nil
+                }
+            }
+            if !values.isEmpty, scalars.count == values.count, values.count <= approvalArrayInlineLimit {
+                return scalars.joined(separator: "、")
+            }
+            return "\(values.count) 项"
+        case .object(let fields): return "\(fields.count) 个字段"
         default: return value.displaySummary
         }
     }
