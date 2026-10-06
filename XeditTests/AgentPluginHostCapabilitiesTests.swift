@@ -310,6 +310,54 @@ struct AgentPluginBridgeContractTests {
 }
 
 @Suite
+struct AgentPluginRecentWorkspacesTests {
+    private func date(_ seconds: TimeInterval) -> Date { Date(timeIntervalSince1970: seconds) }
+
+    @Test
+    func recentFoldersComeFirstThenSessionRootsByActivity() {
+        let entries = AgentPluginRecentWorkspaces.entries(
+            recentFolders: [URL(fileURLWithPath: "/w/b"), URL(fileURLWithPath: "/w/a")],
+            sessionRoots: [
+                .init(path: "/w/old", lastActivityAt: date(1)),
+                .init(path: "/w/new", lastActivityAt: date(9)),
+            ],
+            isLocalDirectory: { _ in true }
+        )
+        #expect(entries.compactMap { $0["path"] as? String } == ["/w/b", "/w/a", "/w/new", "/w/old"])
+        #expect(entries.first?["name"] as? String == "b")
+    }
+
+    @Test
+    func duplicatesCollapseAndMissingDirectoriesAreDropped() {
+        // 同一个目录写法不同（尾斜杠、`..`）也只出现一次；本机不存在的（远端会话的根）不回
+        let entries = AgentPluginRecentWorkspaces.entries(
+            recentFolders: [URL(fileURLWithPath: "/w/a/")],
+            sessionRoots: [
+                .init(path: "/w/x/../a", lastActivityAt: date(5)),
+                .init(path: "/remote/only", lastActivityAt: date(6)),
+                .init(path: "", lastActivityAt: date(7)),
+            ],
+            isLocalDirectory: { $0 != "/remote/only" }
+        )
+        #expect(entries.compactMap { $0["path"] as? String } == ["/w/a"])
+    }
+
+    @Test
+    func listIsCapped() {
+        let roots = (0..<100).map { AgentPluginRecentWorkspaces.SessionRoot(path: "/w/p\($0)", lastActivityAt: date(Double($0))) }
+        let entries = AgentPluginRecentWorkspaces.entries(recentFolders: [], sessionRoots: roots, isLocalDirectory: { _ in true })
+        #expect(entries.count == AgentPluginRecentWorkspaces.limit)
+        #expect(entries.first?["path"] as? String == "/w/p99")
+    }
+
+    @Test
+    func bridgeAdvertisesFolderPicking() {
+        #expect(AgentPluginPageBridge.capabilities.contains("workspace.recent"))
+        #expect(AgentPluginPageBridge.capabilities.contains("workspace.pickFolder"))
+    }
+}
+
+@Suite
 struct AgentPrimaryDestinationSidebarTests {
     @Test
     func onlyConversationLikeDestinationsKeepTheSessionList() {

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.411.0-rc1 - 2026-10-06
+
+### Added
+
+- **插件页面能让用户挑项目文件夹。** 插件桥升到 2.7.0，新增两项能力（需要 `workspace.read`）：
+  - `window.willdeep.workspace.recent()`：主 App 最近打开的文件夹在前，会话用过的本地工作区根在后（按最后活动时间），去重、去掉本机不存在的目录，最多 40 条（`AgentPluginRecentWorkspaces`）。
+  - `window.willdeep.workspace.pickFolder({title})`：弹系统选文件夹面板（当前窗口的 sheet），取消时回 `path: null`；同一时刻只允许一个面板。
+  - 待办插件用它在选项目时列出「最近打开」并提供「选择本地文件夹…」。
+
+### Impact
+
+- 两条都只回路径，不扩大 `fs.*` 的读范围——读文件仍只限当前会话已授权的工作区根。
+- 旧插件不受影响；插件应按 `window.willdeep.capabilities` 判断是否可用。说明见 `docs/PLUGIN_HOST_CAPABILITIES_DESIGN.md` 第六节。
+
 ## 1.410.0-rc1 - 2026-10-06
 
 ### Added

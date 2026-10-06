@@ -317,6 +317,31 @@ key，宿主允许插件 MCP 服务在处理 `tools/call` 期间**反过来向�
 
 ---
 
+## 六、`workspace.recent` / `workspace.pickFolder`：让用户挑项目文件夹（1.411.0-rc1，桥 2.7.0）
+
+插件要让用户把一条记录归到某个项目时，以前只能让用户手敲绝对路径。现在页面可以：
+
+```js
+const caps = window.willdeep.capabilities || [];
+if (caps.includes('workspace.recent')) {
+  const { workspaces } = await window.willdeep.workspace.recent();
+  // [{ path: '/Users/me/Sites/app', name: 'app' }, …]
+}
+if (caps.includes('workspace.pickFolder')) {
+  const { path } = await window.willdeep.workspace.pickFolder({ title: '选择项目文件夹' });
+  // 用户取消时 path 为 null
+}
+```
+
+- **权限**：`workspace.read`（或 `workspace.write`）。
+- **recent 的顺序**：主 App 最近打开的文件夹在前（打开先后），其后是会话用过的工作区根（按最后活动时间）；
+  规范化去重，本机不存在的目录（远端会话的根）不回，最多 40 条（`AgentPluginRecentWorkspaces`）。
+- **pickFolder**：系统 `NSOpenPanel`，只能选目录，可新建文件夹；挂成当前窗口的 sheet。同一时刻只允许一个面板，
+  重复调用直接报错。`title` 截到 120 字，空则用宿主文案。
+- **不扩大读权限**：两条都只回路径。`fs.*` 依旧只认当前会话已授权的工作区根，拿到路径不等于能读里面的文件。
+
+---
+
 ## 权限一览
 
 | 权限 | 给什么 | 状态 |
