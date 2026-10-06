@@ -95,8 +95,36 @@ enum AgentToolPackCatalog {
         )
     ]
 
+    /// 暂时卸下的工具包：不进模型的工具表、不进 `load_tool_pack` 的目录，专家激活也不再自动带上；
+    /// 模型按名字直接调用时当未知工具处理（`AgentToolNameAliases.isDispatchable`）。
+    /// 宿主页面里的按钮与小部件动作不经模型，仍走原来的分发，照常可用。
+    ///
+    /// 短剧（1.409.0-rc7）：短剧生产改由 willdeep-video-studio 插件的 MCP 工具承担
+    /// （`mcp__video_studio__*`）。两套同时挂着时模型会挑宿主这套旧工具，写进另一份数据。
+    static let unmountedPacks: Set<AgentToolPackID> = [.shortDrama]
+
+    static var mountedPacks: [AgentToolPack] {
+        packs.filter { !unmountedPacks.contains($0.id) }
+    }
+
+    static func isUnmounted(toolName: String) -> Bool {
+        guard let packID = packID(for: toolName) else { return false }
+        return unmountedPacks.contains(packID)
+    }
+
+    /// 模型调用了卸下的工具时给它的指路。
+    static func unmountedToolMessage(for toolName: String) -> String? {
+        guard let packID = packID(for: toolName), unmountedPacks.contains(packID) else { return nil }
+        switch packID {
+        case .shortDrama:
+            return "The host's native short-drama tools are unmounted. Nothing was executed. Drive short-drama production through the WillDeep video-studio plugin's MCP tools (names start with `mcp__video_studio__`, e.g. `mcp__video_studio__drama_get`); call `list_mcp_tools` to see them if they are not in this session's tool list."
+        default:
+            return "The `\(packID.rawValue)` tool pack is unmounted in this build. Nothing was executed."
+        }
+    }
+
     static var loaderDescriptor: AgentToolDescriptor {
-        let index = packs.map { "`\($0.id.rawValue)` — \($0.summary)" }.joined(separator: " ")
+        let index = mountedPacks.map { "`\($0.id.rawValue)` — \($0.summary)" }.joined(separator: " ")
         return AgentToolDescriptor(
             name: loaderToolName,
             description: "Load one or more optional native-tool categories for this conversation. Use this compact index when the required tool is not already available. Loaded packs are session-sticky: schemas are appended in a deterministic order and never unloaded, preserving prompt-cache reuse after the one-time expansion. Categories: \(index)",
@@ -123,10 +151,14 @@ enum AgentToolPackCatalog {
         for rawID in rawIDs {
             guard let id = AgentToolPackID(rawValue: rawID), seen.insert(id).inserted else {
                 if AgentToolPackID(rawValue: rawID) == nil {
-                    let allowed = AgentToolPackID.allCases.map(\.rawValue).joined(separator: ", ")
+                    let allowed = mountedPacks.map(\.id.rawValue).joined(separator: ", ")
                     throw AgentToolError.invalidArgument("Unknown tool pack `\(rawID)`. Allowed: \(allowed)")
                 }
                 continue
+            }
+            if unmountedPacks.contains(id) {
+                let hint = id == .shortDrama ? " Use the video-studio plugin's MCP tools (`mcp__video_studio__*`) instead." : ""
+                throw AgentToolError.invalidArgument("Tool pack `\(rawID)` is unmounted.\(hint)")
             }
             result.append(id)
         }
@@ -163,6 +195,7 @@ enum AgentToolPackCatalog {
             result.insert(.shortDrama)
             result.insert(.media)
         }
+        result.subtract(unmountedPacks)
         if activeExperts.contains(.browserOps) || activeExperts.contains(.webCoding) {
             result.insert(.browserWeb)
         }

@@ -357,7 +357,9 @@ struct WillDeepTests {
         #expect(!defaultTools.contains { $0.name.hasPrefix("short_drama_") })
         #expect(!defaultTools.contains { $0.name.hasPrefix("embedded_browser_") })
         #expect(!defaultTools.contains { $0.name.hasPrefix("chrome_") })
-        #expect(shortDramaTools.contains { $0.name == "short_drama_create_project" })
+        // 宿主自带的短剧工具已卸下（AgentToolPackCatalog.unmountedPacks），短剧生产走插件 MCP 工具。
+        #expect(!shortDramaTools.contains { $0.name.hasPrefix("short_drama_") })
+        #expect(shortDramaTools.contains { $0.name == "generate_image" })
         #expect(browserTools.contains { $0.name == "embedded_browser_capture_screenshot" })
         #expect(browserTools.contains { $0.name == "embedded_browser_console" })
         #expect(browserTools.contains { $0.name == "embedded_browser_network" })

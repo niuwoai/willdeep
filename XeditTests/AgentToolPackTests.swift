@@ -92,7 +92,37 @@ struct AgentToolPackTests {
         ).map(\.name))
 
         #expect(browserNames.contains("embedded_browser_snapshot"))
-        #expect(shortDramaNames.contains("short_drama_create_project"))
+        #expect(!shortDramaNames.contains { $0.hasPrefix("short_drama_") })
         #expect(shortDramaNames.contains("generate_image"))
+    }
+
+    @Test("unmounted packs stay out of the tool list, the pack index and model dispatch")
+    func unmountedShortDramaPackIsHiddenFromTheModel() {
+        #expect(AgentToolPackCatalog.unmountedPacks.contains(.shortDrama))
+        #expect(AgentToolPackCatalog.isUnmounted(toolName: "short_drama_create_project"))
+        #expect(!AgentToolPackCatalog.isUnmounted(toolName: "generate_image"))
+
+        let full = AgentToolRegistry.tools(activeExperts: [.shortDrama]).map(\.name)
+        let lazy = AgentToolRegistry.tools(activeExperts: [.shortDrama], loadedPacks: [.shortDrama, .media]).map(\.name)
+        #expect(!full.contains { $0.hasPrefix("short_drama_") })
+        #expect(!lazy.contains { $0.hasPrefix("short_drama_") })
+        #expect(!AgentToolPackCatalog.loaderDescriptor.description.contains("`short_drama`"))
+        let effective = AgentToolPackCatalog.effectiveLoadedPacks(
+            explicit: [.shortDrama], activeExperts: [.shortDrama], delegationPolicy: .automatic
+        )
+        #expect(!effective.contains(.shortDrama))
+        #expect(effective.contains(.media))
+        #expect(throws: AgentToolError.self) {
+            _ = try AgentToolPackCatalog.requestedPackIDs(from: ["pack_ids": .array([.string("short_drama")])])
+        }
+
+        #expect(!AgentToolNameAliases.isDispatchable("short_drama_create_project", advertisedToolNames: []))
+        let message = AgentToolNameAliases.unknownToolMessage(for: "short_drama_create_project", advertisedToolNames: [])
+        #expect(message.contains("mcp__video_studio__"))
+        #expect(message.contains("Nothing was executed"))
+
+        let plugin = AgentToolDescriptor(name: "mcp__video_studio__drama_get", description: "", risk: .read, parameters: [])
+        let withPlugin = AgentToolRegistry.tools(activeExperts: [.shortDrama], loadedPacks: [], pluginMCPTools: [plugin]).map(\.name)
+        #expect(withPlugin.contains("mcp__video_studio__drama_get"))
     }
 }

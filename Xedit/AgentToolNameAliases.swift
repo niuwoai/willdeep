@@ -57,6 +57,8 @@ nonisolated enum AgentToolNameAliases {
     static func isDispatchable(_ name: String, advertisedToolNames: Set<String>) -> Bool {
         if advertisedToolNames.contains(name) { return true }
         if unlistedDispatchableNames.contains(name) { return true }
+        // 卸下的工具包：模型这一侧当作不认识（页面按钮不走这里，照常可用）。
+        if AgentToolPackCatalog.isUnmounted(toolName: name) { return false }
         return AgentToolRegistry.descriptor(for: name) != nil
     }
 
@@ -99,6 +101,9 @@ nonisolated enum AgentToolNameAliases {
         for name: String,
         advertisedToolNames: Set<String>
     ) -> String {
+        if let unmounted = AgentToolPackCatalog.unmountedToolMessage(for: name) {
+            return unmounted
+        }
         var text = "Unknown tool: \(name). Nothing was executed and no user approval is involved."
         let hints = suggestions(for: name, advertisedToolNames: advertisedToolNames)
         if !hints.isEmpty {
