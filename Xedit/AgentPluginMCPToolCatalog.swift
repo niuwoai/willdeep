@@ -168,14 +168,35 @@ nonisolated enum AgentPluginMCPToolCatalog {
     nonisolated static func route(
         exposedName: String
     ) -> (pluginID: String, serverName: String, toolName: String)? {
-        guard exposedName.hasPrefix(exposedNamePrefix) else { return nil }
-        let catalog = load()
-        for (_, server) in catalog {
+        guard exposedName.hasPrefix(exposedNamePrefix),
+              let found = lookup(exposedName: exposedName, in: load()) else { return nil }
+        return (found.server.pluginID, found.server.serverName, found.tool.rawName)
+    }
+
+    /// 按暴露名找工具。精确匹配优先；找不到时把 `-` 与 `_` 当成同一个字符再找一遍，唯一命中才算
+    /// （1.410.0-rc2）。起因：短剧工坊技能与短剧专家提示把 `mcp__video-studio__…` 写成了
+    /// `mcp__video_studio__…`，模型照抄后查不到目录，只读工具也被当成未知、张张弹确认卡。
+    nonisolated private static func lookup(
+        exposedName: String,
+        in catalog: [String: ServerTools]
+    ) -> (serverID: String, server: ServerTools, tool: AgentPluginMCPToolEntry)? {
+        for (serverID, server) in catalog {
             if let tool = server.tools.first(where: { $0.exposedName == exposedName }) {
-                return (server.pluginID, server.serverName, tool.rawName)
+                return (serverID, server, tool)
             }
         }
-        return nil
+        let loose = looseName(exposedName)
+        var matches: [(serverID: String, server: ServerTools, tool: AgentPluginMCPToolEntry)] = []
+        for (serverID, server) in catalog {
+            for tool in server.tools where looseName(tool.exposedName) == loose {
+                matches.append((serverID, server, tool))
+            }
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    nonisolated static func looseName(_ name: String) -> String {
+        name.replacingOccurrences(of: "-", with: "_")
     }
 
     /// 审批用的解析：比 `route` 多带服务器 id 和只读声明。
@@ -183,18 +204,14 @@ nonisolated enum AgentPluginMCPToolCatalog {
     /// 信任级别按服务器 **id** 查，不按名字：两个插件完全可以各带一个叫
     /// `server` 的 MCP 服务，按名字查会让一个的信任设置串到另一个身上。
     nonisolated static func policyRoute(exposedName: String) -> AgentPluginMCPToolPolicyRoute? {
-        guard exposedName.hasPrefix(exposedNamePrefix) else { return nil }
-        for (serverID, server) in load() {
-            if let tool = server.tools.first(where: { $0.exposedName == exposedName }) {
-                return AgentPluginMCPToolPolicyRoute(
-                    serverID: serverID,
-                    serverName: server.serverName,
-                    toolName: tool.rawName,
-                    readOnlyHint: tool.readOnlyHint == true
-                )
-            }
-        }
-        return nil
+        guard exposedName.hasPrefix(exposedNamePrefix),
+              let found = lookup(exposedName: exposedName, in: load()) else { return nil }
+        return AgentPluginMCPToolPolicyRoute(
+            serverID: found.serverID,
+            serverName: found.server.serverName,
+            toolName: found.tool.rawName,
+            readOnlyHint: found.tool.readOnlyHint == true
+        )
     }
 
     nonisolated static func isPluginToolName(_ toolName: String) -> Bool {

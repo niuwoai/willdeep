@@ -118,11 +118,11 @@ struct AgentToolPackTests {
 
         #expect(!AgentToolNameAliases.isDispatchable("short_drama_create_project", advertisedToolNames: []))
         let message = AgentToolNameAliases.unknownToolMessage(for: "short_drama_create_project", advertisedToolNames: [])
-        #expect(message.contains("mcp__video_studio__"))
+        #expect(message.contains("mcp__video-studio__"))
         #expect(message.contains("Nothing was executed"))
 
-        let plugin = AgentToolDescriptor(name: "mcp__video_studio__drama_get", description: "", risk: .read, parameters: [])
+        let plugin = AgentToolDescriptor(name: "mcp__video-studio__drama_get", description: "", risk: .read, parameters: [])
         let withPlugin = AgentToolRegistry.tools(activeExperts: [.shortDrama], loadedPacks: [], pluginMCPTools: [plugin]).map(\.name)
-        #expect(withPlugin.contains("mcp__video_studio__drama_get"))
+        #expect(withPlugin.contains("mcp__video-studio__drama_get"))
     }
 }

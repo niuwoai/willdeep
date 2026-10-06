@@ -2127,6 +2127,14 @@ AgentToolDescriptor(
                 .lowercased()
             return scope == "all" ? .write : .read
         }
+        // 插件 MCP 一等工具（1.410.0-rc2）：不在原生注册表里，以前落到下面的 `.danger` 兜底——
+        // 危险级永远要人确认，插件目录里标了 readOnlyHint 的 `drama.get_progress` 也张张弹卡，
+        // 服务器信任级别、智能审核对它们全不生效。目录里查得到的按写级处理，交给审批层的
+        // 两档策略（只读放行 / 安全审核 / 不受信的服务器仍问人）；查不到的仍按危险处理。
+        if AgentPluginMCPToolCatalog.isPluginToolName(name),
+           AgentPluginMCPToolCatalog.policyRoute(exposedName: name) != nil {
+            return .write
+        }
         guard let descriptor = descriptor(for: name) else { return .danger }
         if descriptor.name == "run_command", let command = arguments["command"]?.stringValue() {
             let sandboxDecision = AgentSandboxPolicy.commandDecision(

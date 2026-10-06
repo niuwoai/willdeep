@@ -59,6 +59,11 @@ nonisolated enum AgentToolNameAliases {
         if unlistedDispatchableNames.contains(name) { return true }
         // 卸下的工具包：模型这一侧当作不认识（页面按钮不走这里，照常可用）。
         if AgentToolPackCatalog.isUnmounted(toolName: name) { return false }
+        // 插件工具名把 `-` 写成 `_`（或反过来）时仍能唯一对上目录里的工具（1.410.0-rc2）。
+        if AgentPluginMCPToolCatalog.isPluginToolName(name),
+           AgentPluginMCPToolCatalog.route(exposedName: name) != nil {
+            return true
+        }
         return AgentToolRegistry.descriptor(for: name) != nil
     }
 
