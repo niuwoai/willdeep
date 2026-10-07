@@ -34,13 +34,24 @@ nonisolated enum AgentMCPHostRequests {
     /// 没有页面可推增量。起因是内容审核——Agent 替用户出完图、出完片之后要让插件
     /// 配置的多模态审核模型看一眼，插件进程自己没有任何模型凭据。
     static let aiCompleteMethod = "willdeep/ai/complete"
-    static let supportedMethods = [imageGenerateMethod, aiCompleteMethod]
+    /// 开一场专家圆桌（1.412.0-rc1）：插件自带专家席、主持人规则与结论契约，宿主跑
+    /// 完整的圆桌（开场、每位专家发言、轮末小结、终稿），再按契约出一份结构化结论
+    /// 交回。起因是短剧工坊的专家席审稿——用户要在圆桌窗口里看到每位专家怎么说。
+    static let roundtableRunMethod = "willdeep/roundtable/run"
+    static let supportedMethods = [imageGenerateMethod, aiCompleteMethod, roundtableRunMethod]
 
     /// 单次反向请求的处理上限。出一张图通常几十秒，带参考图要先上传；
     /// 十分钟之外只可能是上游挂住了。宿主替服务端办事期间，等服务端应答的超时
     /// 暂停计时（见 `AgentMCPBridge.MCPLineInbox`），没有上限的话，上游挂住一次，
     /// 等这个服务端的请求就会一直等下去。
     static let maximumHandlingSeconds: TimeInterval = 600
+    /// 圆桌一场十几次模型调用（六位专家各两次、开场、小结、终稿、结论），放宽到半小时。
+    static let roundtableHandlingSeconds: TimeInterval = 1_800
+
+    /// 这条反向请求最多处理多久：按 method 定，圆桌比别的长。
+    static func handlingLimit(for message: [String: Any]) -> TimeInterval {
+        (message["method"] as? String) == roundtableRunMethod ? roundtableHandlingSeconds : maximumHandlingSeconds
+    }
 
     /// JSON-RPC 错误码。-32601 / -32602 是协议保留值，-32000 起是实现自定义。
     enum ErrorCode {
@@ -95,6 +106,32 @@ nonisolated enum AgentMCPHostRequests {
                     throw AgentPluginAIError.unavailable
                 }
                 return try await appState.runPluginAICompletion(pluginID: pluginID, request: request)
+            }.value
+        }
+    }
+
+    typealias RoundtableRunner = @Sendable (AgentPluginID, AgentPluginRoundtableRequest) async throws -> AgentPluginRoundtableResult
+
+    nonisolated(unsafe) private static var roundtableRunnerOverride: RoundtableRunner?
+
+    /// 测试入口：替换真实圆桌。传 nil 恢复。
+    static func setRoundtableRunnerForTesting(_ runner: RoundtableRunner?) {
+        overrideLock.lock()
+        defer { overrideLock.unlock() }
+        roundtableRunnerOverride = runner
+    }
+
+    private static func roundtableRunner() -> RoundtableRunner {
+        overrideLock.lock()
+        defer { overrideLock.unlock() }
+        if let roundtableRunnerOverride { return roundtableRunnerOverride }
+        return { pluginID, request in
+            try await Task { @MainActor in
+                let registry = EditorAppStateRegistry.shared
+                guard let appState = registry.current ?? registry.appStatesForTerminationCheck.first else {
+                    throw AgentPluginRoundtableError.unavailable
+                }
+                return try await appState.runPluginRoundtable(pluginID: pluginID, request: request)
             }.value
         }
     }
@@ -208,6 +245,25 @@ nonisolated enum AgentMCPHostRequests {
                         "providerID": result.providerID,
                         "toolCalls": result.toolCalls.map(\.jsonObject),
                     ],
+                ]
+            } catch {
+                return errorResponse(id: id, code: ErrorCode.failed, message: error.localizedDescription)
+            }
+        case roundtableRunMethod:
+            let params = message["params"] as? [String: Any] ?? [:]
+            let request: AgentPluginRoundtableRequest
+            switch AgentPluginRoundtableRequestValidator.request(from: params) {
+            case .failure(let error):
+                return errorResponse(id: id, code: ErrorCode.invalidParams, message: error.localizedDescription)
+            case .success(let validated):
+                request = validated
+            }
+            do {
+                let result = try await roundtableRunner()(pluginID, request)
+                return [
+                    "jsonrpc": "2.0",
+                    "id": id ?? NSNull(),
+                    "result": result.jsonObject,
                 ]
             } catch {
                 return errorResponse(id: id, code: ErrorCode.failed, message: error.localizedDescription)

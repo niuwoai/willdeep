@@ -255,8 +255,10 @@ enum AgentTranscriptMediaFingerprint {
     private static let lock = NSLock()
     private static var cache: [UUID: CachedReferences] = [:]
     private static let cacheLimit = 512
-    /// Cheap pre-filter: every media line contains a Markdown link target.
+    /// Cheap pre-filter: every media line contains a Markdown link target,
+    /// or is a bare `</abs/path.wav>` line the normalizer turns into one.
     private static let linkTargetMarker = "]("
+    private static let angleBracketPathMarker = "</"
 
     static func references(in message: AgentMessage) -> [MarkdownMediaReference] {
         guard message.role == .assistant || message.role == .system else { return [] }
@@ -278,7 +280,7 @@ enum AgentTranscriptMediaFingerprint {
     }
 
     static func parseReferences(in content: String) -> [MarkdownMediaReference] {
-        guard content.contains(linkTargetMarker) else { return [] }
+        guard content.contains(linkTargetMarker) || content.contains(angleBracketPathMarker) else { return [] }
         let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(content)
         return MarkdownPreviewParser.blocks(from: normalized).compactMap(\.media)
     }

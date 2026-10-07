@@ -298,8 +298,11 @@ extension AppState {
 
     /// 启动一次圆桌驱动:跑引擎到暂停点或终稿,并按结果落状态。首跑与续跑
     /// 共用同一条路径,靠引擎的幂等性保证续跑不重复已完成阶段。
-    private func driveRoundtable(reportID: UUID, runtimeID: UUID) {
-        guard let (configuration, someIMContext) = roundtableTurnContext(runtimeID: runtimeID, reportID: reportID) else { return }
+    func driveRoundtable(reportID: UUID, runtimeID: UUID) {
+        guard let (configuration, someIMContext) = roundtableTurnContext(runtimeID: runtimeID, reportID: reportID) else {
+            resolvePluginRoundtableWaiter(reportID: reportID)
+            return
+        }
 
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -365,6 +368,7 @@ extension AppState {
                     if var detail = item.roundtable {
                         detail.phase = .cancelled
                         detail.activeExpert = nil
+                        detail.activeCustomExpertID = nil
                         detail.activeExpertDraft = nil
                         detail.activeExpertDraftIsComplete = nil
                         item.roundtable = detail
@@ -379,6 +383,7 @@ extension AppState {
                     if var detail = item.roundtable {
                         detail.phase = .failed
                         detail.activeExpert = nil
+                        detail.activeCustomExpertID = nil
                         detail.activeExpertDraft = nil
                         detail.activeExpertDraftIsComplete = nil
                         item.roundtable = detail
@@ -387,6 +392,8 @@ extension AppState {
                 self.persistWorkflowRuntime(runtimeID: runtimeID)
             }
             self.agentRoundtableTasks[reportID] = nil
+            // 插件开的圆桌(1.412.0-rc1):驱动结束就唤醒等结果的反向请求。
+            self.resolvePluginRoundtableWaiter(reportID: reportID)
         }
         agentRoundtableTasks[reportID] = task
     }
@@ -395,7 +402,8 @@ extension AppState {
     /// 若本场圆桌在开会时选定了 provider/模型(report.selectedProviderEntryID),
     /// 用该 entry 现造配置、仅本场生效,不动全局活跃 provider;否则回退到当前
     /// 全局活跃 provider 的路由结果。
-    private func roundtableTurnContext(
+    /// 插件开的圆桌（AppStateAgentPluginRoundtable.swift）也要拿本场的配置回报模型名，故不设 private。
+    func roundtableTurnContext(
         runtimeID: UUID,
         reportID: UUID
     ) -> (AgentConfiguration, SomeIMRequestContext?)? {

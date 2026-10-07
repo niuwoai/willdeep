@@ -47,7 +47,7 @@ struct AgentMCPHostRequestsTests {
     func initializeAdvertisesCapabilityOnlyForPlugins() {
         let pluginExtensions = (AgentMCPBridge.initializeParams(for: pluginServer())["capabilities"] as? [String: Any])?["extensions"] as? [String: Any]
         let advertised = pluginExtensions?[AgentMCPHostRequests.capabilityKey] as? [String: Any]
-        #expect(advertised?["methods"] as? [String] == ["willdeep/images/generate", "willdeep/ai/complete"])
+        #expect(advertised?["methods"] as? [String] == ["willdeep/images/generate", "willdeep/ai/complete", "willdeep/roundtable/run"])
         #expect(pluginExtensions?["io.modelcontextprotocol/ui"] != nil, "原有的 UI 扩展不能丢")
 
         let user = AgentMCPServerConfig(name: "x", source: .user, transport: .stdio, command: "/bin/echo")

@@ -53,11 +53,21 @@ struct RoundtableRouter: View {
 // MARK: - 嵌入主窗口宿主(.roundtable 目的地)
 
 struct RoundtableEmbeddedView: View {
+    @EnvironmentObject private var appState: AppState
     @State private var route: RoundtableRoute = .home
 
     var body: some View {
         RoundtableRouter(route: $route)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 插件经 willdeep/roundtable/run 开的圆桌(1.412.0-rc1):跳到那一场,然后把请求消费掉。
+        .onAppear(perform: consumeRequestedRoute)
+        .onChange(of: appState.requestedRoundtableRoute) { _ in consumeRequestedRoute() }
+    }
+
+    private func consumeRequestedRoute() {
+        guard let requested = appState.requestedRoundtableRoute else { return }
+        route = requested
+        appState.requestedRoundtableRoute = nil
     }
 }
 
@@ -370,7 +380,7 @@ private struct RoundtableHistoryRow: View {
     }
 
     private var subtitle: String {
-        let names = report.experts.map(\.displayName).joined(separator: " · ")
+        let names = report.seats.map(\.displayName).joined(separator: " · ")
         return names.isEmpty ? report.topic : names
     }
 
@@ -589,7 +599,7 @@ private struct LegacyRoundtableBubble: View {
         switch message.speaker {
         case .chair: return "W"
         case .user: return "你"
-        case .expert: return message.role?.avatarInitial ?? "专"
+        case .expert: return message.seat?.avatarInitial ?? "专"
         }
     }
 
@@ -669,22 +679,23 @@ private struct LegacyRoundtableDashboard: View {
 
     private var latestStances: [StanceEntry] {
         guard let messages = report?.messages else { return [] }
-        var latest: [AgentRoundtableExpertRole: RoundtableOSR] = [:]
+        // 按席位 id 记最新立场(内置与自带专家同一张表,1.412.0-rc1)。
+        var latest: [String: (name: String, osr: RoundtableOSR)] = [:]
         for message in messages {
-            if message.speaker == .expert, let role = message.role, let osr = message.osr {
-                latest[role] = osr
+            if message.speaker == .expert, let seatID = message.seatID, let osr = message.osr {
+                latest[seatID] = (message.seat?.displayName ?? message.speakerName, osr)
             }
         }
-        return latest.map { role, osr in
+        return latest.values.map { entry in
             let color: Color = {
-                switch osr.stance {
+                switch entry.osr.stance {
                 case .support: return .green
                 case .oppose: return .red
                 case .neutral: return .secondary
                 case .undecided: return .orange
                 }
             }()
-            return StanceEntry(name: role.displayName, stance: osr.stance.displayName, color: color)
+            return StanceEntry(name: entry.name, stance: entry.osr.stance.displayName, color: color)
         }.sorted { $0.name < $1.name }
     }
 }

@@ -676,7 +676,7 @@ enum AgentMCPBridge {
                 let response = await AgentMCPHostRequests.respond(
                     to: message,
                     server: server,
-                    within: AgentMCPHostRequests.maximumHandlingSeconds
+                    within: AgentMCPHostRequests.handlingLimit(for: message)
                 )
                 try? stdin.send(response)
             }
