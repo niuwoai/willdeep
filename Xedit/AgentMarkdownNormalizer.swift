@@ -5,9 +5,14 @@
 //  Pre-pass for raw model output before it reaches MarkdownPreviewParser.
 //  It preserves a small set of HTML block elements by fencing them as html
 //  and coalesces hr-style divider lines into a stable markdown divider.
+//  A standalone `</abs/path.png>` line — the angle-bracket half of
+//  `![](</path with spaces.png>)` that models sometimes write on its own —
+//  becomes that image line, so local images, audio and video render inline
+//  instead of showing the raw path.
 //
 
 import Foundation
+import UniformTypeIdentifiers
 
 enum AgentMarkdownNormalizer {
     // Bounded LRU keyed by source hash. During streaming this function is
@@ -69,6 +74,13 @@ enum AgentMarkdownNormalizer {
                 continue
             }
 
+            if !isInFence, let mediaLine = standaloneAngleBracketMediaLine(trimmed) {
+                let indent = line.prefix(while: { $0 == " " || $0 == "\t" })
+                output.append(indent + mediaLine)
+                index += 1
+                continue
+            }
+
             if !isInFence, let endMarker = htmlBlockEndMarker(for: trimmed) {
                 output.append("```html")
                 output.append(line)
@@ -99,6 +111,30 @@ enum AgentMarkdownNormalizer {
             return false
         }
         return collapsed.allSatisfy { $0 == first }
+    }
+
+    /// `</Users/me/Application Support/a.png>` → `![](</Users/me/Application Support/a.png>)`.
+    /// Only a whole line, only an absolute local path (`/`, `~/`, `file://`),
+    /// and only when the extension is an image or transcript media, so an
+    /// ordinary `<https://…>` autolink or an HTML tag is never touched.
+    static func standaloneAngleBracketMediaLine(_ trimmed: String) -> String? {
+        guard trimmed.count > 2, trimmed.hasPrefix("<"), trimmed.hasSuffix(">") else { return nil }
+        let inner = trimmed.dropFirst().dropLast().trimmingCharacters(in: .whitespaces)
+        guard !inner.isEmpty,
+              !inner.contains(where: { $0 == "<" || $0 == ">" || $0.isNewline }),
+              inner.hasPrefix("/") || inner.hasPrefix("~/") || inner.lowercased().hasPrefix("file://") else {
+            return nil
+        }
+        guard isImageSource(inner) || AgentTranscriptMediaFormat.kind(forSource: inner) != nil else {
+            return nil
+        }
+        return "![](<\(inner)>)"
+    }
+
+    private static func isImageSource(_ source: String) -> Bool {
+        let ext = AgentTranscriptMediaFormat.pathExtension(ofSource: source)
+        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .image)
     }
 
     private static func htmlBlockEndMarker(for line: String) -> String? {

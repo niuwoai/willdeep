@@ -96,6 +96,49 @@ struct AgentTranscriptMediaTests {
         #expect(MarkdownPreviewParser.blocks(from: "[report](/tmp/a.pdf)").map(\.kind) == [.paragraph])
     }
 
+    // A model writing the `<…>` half of `![](</path with spaces.png>)` on its
+    // own used to leave the raw path on screen (video-studio replies with
+    // "Application Support" paths, 2026-10-07).
+    @Test
+    func standaloneAngleBracketLocalPathBecomesAnImageLine() {
+        let path = "/Users/me/Library/Application Support/WillDeep/a b.png"
+        let normalized = AgentMarkdownNormalizer.normalizedForChatRendering("首帧：\n\n<\(path)>\n\n完毕")
+        #expect(normalized == "首帧：\n\n![](<\(path)>)\n\n完毕")
+        #expect(MarkdownPreviewParser.blocks(from: normalized).map(\.kind) == [.paragraph, .image, .paragraph])
+    }
+
+    @Test
+    func angleBracketLinesThatAreNotLocalMediaStayUntouched() {
+        for line in [
+            "<https://example.com/a.png>",
+            "</div>",
+            "<relative/a.png>",
+            "</Users/me/notes.txt>",
+            "看这里 </Users/me/a.png> 的图",
+        ] {
+            #expect(AgentMarkdownNormalizer.standaloneAngleBracketMediaLine(line) == nil, "\(line)")
+        }
+        let fenced = "```\n</Users/me/a.png>\n```"
+        #expect(AgentMarkdownNormalizer.normalizedForChatRendering(fenced) == fenced)
+    }
+
+    @Test
+    func standaloneAngleBracketAudioPathRendersAsMedia() throws {
+        let fixture = try MediaFixture()
+        defer { fixture.remove() }
+        let voice = try fixture.file("Application Support/voice.wav")
+        let content = "一句配音：\n\n<\(voice.path)>"
+
+        let references = AgentTranscriptMediaFingerprint.parseReferences(in: content)
+        #expect(references.map(\.kind) == [.audio])
+        #expect(references.first?.source == voice.path)
+
+        let rendered = render(content)
+        let payloads = mediaPayloads(in: rendered)
+        #expect(payloads.map(\.kind) == [.audio])
+        #expect(payloads.first?.url == voice.standardizedFileURL)
+    }
+
     // MARK: - Formatter output
 
     @Test
