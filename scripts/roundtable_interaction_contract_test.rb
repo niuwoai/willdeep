@@ -81,7 +81,9 @@ add_check.call(
   includes_all?(
     engine_source,
     [
-      "$0.activeExpert = role",
+      "setActive(seat)",
+      "$0.activeExpert = seat.builtinRole",
+      "$0.activeCustomExpertID = seat.customExpert?.id",
       "$0.activeExpertDraft = nil",
       "let payload = try await runExpert",
       "$0.activeExpert = nil"
@@ -95,8 +97,8 @@ add_check.call(
   includes_all?(
     discussion_source,
     [
-      "if let activeExpert = report?.activeExpert",
-      "activeSpeakerBanner(activeExpert)",
+      "if let activeSeat = report?.activeSeat",
+      "activeSpeakerBanner(activeSeat)",
       "L10n.Roundtable.expertWillSpeakFormat",
       "role.personalName",
       "ProgressView()"
@@ -136,14 +138,34 @@ add_check.call(
     window_source + app_state_source + model_source,
     [
       "case preparation(runtimeID: UUID, reportID: UUID)",
-      "phase: .clarifying",
+      "startImmediately: Bool = false",
+      "phase: startImmediately ? .recommending : .clarifying",
       "RoundtablePreparation(originalTopic: trimmed)",
       "driveRoundtablePreparation(",
       "case clarifying",
       "case selectingExperts"
     ]
   ),
-  "Submitting a topic must route into clarification and expert selection rather than silently starting the formal discussion."
+  "The default UI topic entry must retain preparation; only an explicitly authorized chat tool may start immediately."
+)
+
+chat_source = read_file(repo_root, "Xedit/AgentPluginRoundtableChatProgress.swift")
+timeline_source = read_file(repo_root, "Xedit/AgentRoundtableChatTimeline.swift")
+add_check.call(
+  "chat roundtable card is read-only and navigates to the existing menu destination",
+  includes_all?(chat_source, [
+    "Button(action: onOpen)",
+    "requestedRoundtableRoute = .discussion(runtimeID: runtime.id, reportID: workflow.id)",
+    "agentPrimaryDestination = .roundtable",
+    "report.originSessionID == originSessionID"
+  ]) && !chat_source.include?("submitRoundtableUserReply") && !chat_source.include?("stopAgentRoundtable"),
+  "The chat card must not answer or stop a roundtable; its navigation action must open the exact discussion in Expert Roundtable."
+)
+add_check.call(
+  "chat timeline bounds historical entries and streams only a fixed-height public preview",
+  includes_all?(timeline_source, ["completedPreviewLimit = 220", "visibleEntryLimit = 3", "message.content.prefix(completedPreviewLimit)"]) &&
+    includes_all?(chat_source, [".frame(height: 140)", "draft.suffix(previewLimit)", "@ObservedObject var runtime: AgentRuntime"]),
+  "Long speeches must not grow the main transcript or duplicate raw model reasoning."
 )
 
 add_check.call(

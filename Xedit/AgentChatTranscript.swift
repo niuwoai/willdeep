@@ -505,6 +505,11 @@ struct AgentChatTranscript: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 
+                    if let runtime = appState.activeRuntime {
+                        AgentPluginRoundtableChatProgressList(sessionID: runtime.id)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+
                     // 消息已发出、但还没抢到 provider 并发槽（同一 provider
                     // 已有 perProviderConcurrencyLimit 个 turn 在跑，比如多
                     // 会话/双开/routine 并发）时，dispatch 走排队分支、

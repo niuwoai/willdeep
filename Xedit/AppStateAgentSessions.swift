@@ -2347,6 +2347,13 @@ extension AppState {
         }
         protectedIDs.formUnion(pendingDispatchQueue.map(\.runtimeID))
         protectedIDs.formUnion(titleSummarizationsInFlight)
+        // 圆桌运行/等待答复时，其 runtime 承载聊天卡片的实时观察源，不能按空闲逐出。
+        protectedIDs.formUnion(agentRuntimes.values.filter {
+            $0.messages.contains { message in
+                guard let report = message.workflowReport?.roundtable else { return false }
+                return !AgentRoundtableChatTimeline.isTerminal(report.phase)
+            }
+        }.map(\.id))
         // A Goal waiting to resume is not idle; its wait lives on this runtime.
         protectedIDs.formUnion(agentRuntimes.values.filter { $0.currentGoal?.scheduledWake != nil }.map(\.id))
         let idle = agentRuntimes.values

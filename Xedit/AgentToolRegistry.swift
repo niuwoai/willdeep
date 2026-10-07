@@ -336,6 +336,8 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "reason", type: .string, description: "Brief user-facing reason for activating this expert.", required: false)
             ]
         ),
+        AgentRoundtableTools.startDescriptor,
+        AgentRoundtableTools.statusDescriptor,
         AgentToolDescriptor(
             name: "add_memory",
             description: "Save a durable user or project memory when the conversation reveals a preference, rule, recurring fact, or reusable constraint that should influence future turns. Do not store secrets. Requires approval outside autonomous modes.",

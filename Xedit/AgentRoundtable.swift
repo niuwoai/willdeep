@@ -681,6 +681,8 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
     var activeCustomExpertID: String?
     /// 外部(插件)发起的无人值守圆桌;nil 就是用户自己开的。
     var external: RoundtableExternalRun?
+    /// 对话工具的发起会话；圆桌界面自行创建的会话没有这个字段。
+    var originSessionID: UUID?
     var createdAt: Date
     var updatedAt: Date
 
@@ -705,6 +707,7 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
         customExperts: [RoundtableCustomExpert]? = nil,
         activeCustomExpertID: String? = nil,
         external: RoundtableExternalRun? = nil,
+        originSessionID: UUID? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -728,6 +731,7 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
         self.customExperts = customExperts
         self.activeCustomExpertID = activeCustomExpertID
         self.external = external
+        self.originSessionID = originSessionID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

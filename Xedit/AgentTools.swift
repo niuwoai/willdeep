@@ -499,6 +499,8 @@ enum AgentToolRunner {
                 result = try AgentSkillCatalog.readSkill(arguments: activeArguments)
             case "activate_expert":
                 result = try await activateExpert(arguments: activeArguments, context: activeContext)
+            case "start_roundtable", "get_roundtable_status":
+                result = try await AgentRoundtableTools.run(name: name, arguments: activeArguments, context: activeContext)
             case "add_memory":
                 result = try AgentSelfLearning.addMemory(arguments: activeArguments, rootDirectory: activeContext.rootDirectory)
             case "read_memory":

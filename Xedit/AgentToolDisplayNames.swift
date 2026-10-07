@@ -247,6 +247,8 @@ nonisolated enum AgentToolDisplay {
         "list_skills": "查看技能",
         "read_skill": "读取技能",
         "activate_expert": "激活技能包",
+        "start_roundtable": "启动专家圆桌",
+        "get_roundtable_status": "查看专家圆桌进度",
         "update_plan": "更新计划进度",
         "add_memory": "记忆要点",
         "create_user_skill": "新建技能",

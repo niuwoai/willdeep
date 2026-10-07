@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-29 | Current version: v1.412.0-rc1
+> Last updated: 2026-10-07 | Current version: v1.413.0-rc1
+
+主会话专家圆桌（1.413.0-rc1）：`start_roundtable` 启动后台专家交锋，`get_roundtable_status` 读取本会话圆桌的进展与终稿。聊天里的只读时间线展示专家席、轮次、近期发言和限高流式正文；长发言仅展示片段。唯一操作“前往专家圆桌”打开左侧主菜单的对应场次，用户答复、插话、续轮和停止都在完整圆桌页完成。圆桌提问或收敛时可以等待用户操作，启动成功不代表讨论已完成。
 
 设置 → MCP 支持刷新全部已启用服务器的工具列表。刷新后，下一次模型请求会使用最新工具定义，不用重启 App 或会话。
 

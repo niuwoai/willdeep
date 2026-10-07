@@ -21,7 +21,13 @@ extension AppState {
     /// 发起一场新的圆桌讨论。返回承载它的 session id 供 UI 跟踪。
     /// 不切 activeAgentSessionID —— 圆桌活在独立窗口/嵌入页里,不该动主 Agent 会话。
     @discardableResult
-    func startAgentRoundtable(topic: String) -> UUID? {
+    func startAgentRoundtable(
+        topic: String,
+        title: String = "",
+        experts: [AgentRoundtableExpertRole] = [],
+        originSessionID: UUID? = nil,
+        startImmediately: Bool = false
+    ) -> UUID? {
         let trimmed = topic.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -44,8 +50,11 @@ extension AppState {
 
         let roundtable = AgentRoundtableReport(
             topic: trimmed,
-            phase: .clarifying,
-            preparation: RoundtablePreparation(originalTopic: trimmed)
+            title: title,
+            phase: startImmediately ? .recommending : .clarifying,
+            preparation: startImmediately ? nil : RoundtablePreparation(originalTopic: trimmed),
+            experts: experts,
+            originSessionID: originSessionID
         )
         let report = WorkflowReport(
             workflowName: "expert-roundtable",
@@ -61,7 +70,11 @@ extension AppState {
         AgentSessionStore.saveAsync(session)
         persistWorkflowRuntime(runtimeID: session.id)
 
-        driveRoundtablePreparation(reportID: report.id, runtimeID: session.id)
+        if startImmediately {
+            driveRoundtable(reportID: report.id, runtimeID: session.id)
+        } else {
+            driveRoundtablePreparation(reportID: report.id, runtimeID: session.id)
+        }
         return session.id
     }
 

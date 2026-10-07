@@ -26,14 +26,16 @@ struct AgentToolPackTests {
         let tools = AgentToolRegistry.tools(activeExperts: [], loadedPacks: [])
         let names = tools.map(\.name)
 
-        // 26 since background-task contract C2: `monitor`, `send_agent_message`
-        // and `stop_agent` are core like the job tools they complement.
-        #expect(names.count <= 26)
+        // Background tasks keep their stable core; starting and reading a roundtable
+        // add two directly discoverable tools for conversational expert debate.
+        #expect(names.count <= 28)
         #expect(names.first == AgentToolPackCatalog.loaderToolName)
         #expect(names.contains("read_file"))
         #expect(names.contains("edit_file"))
         #expect(names.contains("run_command"))
         #expect(names.contains("list_skills"))
+        #expect(names.contains("start_roundtable"))
+        #expect(names.contains("get_roundtable_status"))
         #expect(!names.contains("chrome_snapshot"))
         #expect(!names.contains("generate_image"))
     }

@@ -32,6 +32,15 @@ extension AppState {
             throw AgentPluginRoundtableError.permissionDenied
         }
 
+        // 反向请求也可能来自外部 CLI / 页面，没有会话 id。只在当前窗口唯一
+        // 正在执行的主会话就是活动会话时展示；多个主会话并发时不猜归属。
+        let originSessionID = AgentPluginRoundtableChatOrigin.resolve(
+            activeSessionID: activeAgentSessionID,
+            respondingSessionIDs: agentRuntimes.values.filter {
+                $0.session.presentationScope == .workspace && $0.isResponding
+            }.map(\.id)
+        )
+
         reconcileSomeIMProviderFromSharedSession()
         ensureActiveProviderIsUsableForChatSelection()
         let managedRouting = defaultSomeIMManagedRoutingState()
@@ -71,7 +80,8 @@ extension AppState {
                 chairPersona: request.chairPersona,
                 verdictInstruction: request.verdictInstruction,
                 roundLimit: request.rounds
-            )
+            ),
+            originSessionID: originSessionID
         )
         let report = WorkflowReport(
             workflowName: "expert-roundtable",
