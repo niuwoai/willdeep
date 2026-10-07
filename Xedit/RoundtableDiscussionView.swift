@@ -62,14 +62,14 @@ struct RoundtableDiscussionView: View {
             .frame(width: 292)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .animation(.easeInOut(duration: 0.2), value: report?.activeExpert)
+        .animation(.easeInOut(duration: 0.2), value: report?.activeSeatID)
     }
 
     private var conversation: some View {
         VStack(spacing: 0) {
             header
-            if let activeExpert = report?.activeExpert {
-                activeSpeakerBanner(activeExpert)
+            if let activeSeat = report?.activeSeat {
+                activeSpeakerBanner(activeSeat)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 10)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -97,13 +97,13 @@ struct RoundtableDiscussionView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .lineLimit(1)
 
-            if let experts = report?.experts, !experts.isEmpty {
+            if let seats = report?.seats, !seats.isEmpty {
                 HStack(spacing: -7) {
-                    ForEach(experts) { role in
-                        RoundtableExpertAvatar(
-                            role: role,
+                    ForEach(seats) { seat in
+                        RoundtableSeatAvatar(
+                            seat: seat,
                             size: 25,
-                            isActive: report?.activeExpert == role
+                            isActive: report?.activeSeatID == seat.id
                         )
                     }
                 }
@@ -137,11 +137,11 @@ struct RoundtableDiscussionView: View {
                             )
                         }
                     }
-                    if let role = report?.activeExpert,
+                    if let seat = report?.activeSeat,
                        let draft = report?.activeExpertDraft,
                        !draft.isEmpty {
                         RoundtableStreamingMessageBubble(
-                            role: role,
+                            seat: seat,
                             draft: draft,
                             isComplete: report?.activeExpertDraftIsComplete == true
                         )
@@ -373,11 +373,12 @@ struct RoundtableDiscussionView: View {
         .background(RoundedRectangle(cornerRadius: 9).fill(Color.accentColor.opacity(0.08)))
     }
 
-    private func activeSpeakerBanner(_ role: AgentRoundtableExpertRole) -> some View {
+    /// 席位版(1.412.0-rc1):内置与自带专家同一条横幅;参数仍叫 role,下面的名字、颜色取法不变。
+    private func activeSpeakerBanner(_ role: RoundtableSeat) -> some View {
         let isSpeaking = !(report?.activeExpertDraft?.isEmpty ?? true)
         let isAnalyzing = report?.activeExpertDraftIsComplete == true
         return HStack(spacing: 10) {
-            RoundtableExpertAvatar(role: role, size: 32, isActive: true)
+            RoundtableSeatAvatar(seat: role, size: 32, isActive: true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(
                     isAnalyzing
@@ -451,13 +452,16 @@ struct RoundtableDiscussionView: View {
 }
 
 private struct RoundtableStreamingMessageBubble: View {
-    let role: AgentRoundtableExpertRole
+    let seat: RoundtableSeat
     let draft: String
     let isComplete: Bool
 
+    /// 下面的名字、职责与颜色都按席位取;保留 role 这个名字只为少改几行。
+    private var role: RoundtableSeat { seat }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            RoundtableExpertAvatar(role: role, size: 34, isActive: true)
+            RoundtableSeatAvatar(seat: seat, size: 34, isActive: true)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(role.personalName)
@@ -617,8 +621,8 @@ private struct RoundtableMessageBubble: View {
 
     @ViewBuilder
     private var avatar: some View {
-        if let role = message.role, message.speaker == .expert {
-            RoundtableExpertAvatar(role: role, size: 38)
+        if message.speaker == .expert, let seat = message.seat {
+            RoundtableSeatAvatar(seat: seat, size: 38)
         } else if message.speaker == .user {
             // The human moderator ("你（主持人）") reuses the signed-in some.im
             // account avatar — the same one the sidebar footer shows — and
@@ -675,7 +679,7 @@ private struct RoundtableMessageBubble: View {
 
     private var speakerHeader: some View {
         HStack(spacing: 6) {
-            if let role = message.role {
+            if let role = message.seat {
                 Text(role.personalName)
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(RoundtableVisuals.accent(for: role))
@@ -700,7 +704,7 @@ private struct RoundtableMessageBubble: View {
         switch message.speaker {
         case .chair: return .accentColor
         case .user: return .secondary
-        case .expert: return message.role.map { RoundtableVisuals.accent(for: $0) } ?? .purple
+        case .expert: return message.seat.map { RoundtableVisuals.accent(for: $0) } ?? .purple
         }
     }
 
@@ -872,16 +876,17 @@ private struct RoundtableLiveDashboard: View {
     private var expertsCard: some View {
         dashboardCard(title: L10n.Roundtable.expertPanel, symbol: "person.3.fill") {
             VStack(alignment: .leading, spacing: 9) {
-                ForEach(report?.experts ?? []) { role in
-                    let entry = latestByRole[role]
+                ForEach(report?.seats ?? []) { role in
+                    let entry = latestBySeat[role.id]
                     Button {
-                        onSelectExpert(role)
+                        // 资料页只有内置专家才有;自带专家(插件带来的)点了不跳。
+                        if let builtin = role.builtinRole { onSelectExpert(builtin) }
                     } label: {
                         HStack(spacing: 9) {
-                        RoundtableExpertAvatar(
-                            role: role,
+                        RoundtableSeatAvatar(
+                            seat: role,
                             size: 31,
-                            isActive: report?.activeExpert == role
+                            isActive: report?.activeSeatID == role.id
                         )
                         VStack(alignment: .leading, spacing: 1) {
                             Text(role.personalName)
@@ -893,7 +898,7 @@ private struct RoundtableLiveDashboard: View {
                                 .lineLimit(1)
                             // 「谁支持什么」:立场徽标 + 该专家自述的议题,让右侧「支持N」
                             // 不再是无锚点的抽象计数。仅在该专家已发言且非当前发言态时显示。
-                            if report?.activeExpert != role, let osr = entry {
+                            if report?.activeSeatID != role.id, let osr = entry {
                                 HStack(spacing: 3) {
                                     Circle()
                                         .fill(RoundtableVisuals.color(for: osr.stance))
@@ -911,7 +916,7 @@ private struct RoundtableLiveDashboard: View {
                             }
                         }
                         Spacer(minLength: 0)
-                        if report?.activeExpert == role {
+                        if report?.activeSeatID == role.id {
                             Text(
                                 report?.activeExpertDraft?.isEmpty == false
                                     ? (
@@ -986,7 +991,7 @@ private struct RoundtableLiveDashboard: View {
     }
 
     private struct StanceEntry {
-        let role: AgentRoundtableExpertRole
+        let seat: RoundtableSeat
         let stance: RoundtableOSR.Stance
     }
 
@@ -1002,20 +1007,21 @@ private struct RoundtableLiveDashboard: View {
         let color: Color
     }
 
-    private var latestByRole: [AgentRoundtableExpertRole: RoundtableOSR] {
+    /// 每个席位最新一次发言的立场,按席位 id 记(内置与自带专家同一张表,1.412.0-rc1)。
+    private var latestBySeat: [String: RoundtableOSR] {
         guard let messages = report?.messages else { return [:] }
-        var latest: [AgentRoundtableExpertRole: RoundtableOSR] = [:]
+        var latest: [String: RoundtableOSR] = [:]
         for message in messages {
-            if message.speaker == .expert, let role = message.role, let osr = message.osr {
-                latest[role] = osr
+            if message.speaker == .expert, let seatID = message.seatID, let osr = message.osr {
+                latest[seatID] = osr
             }
         }
         return latest
     }
 
     private var latestStances: [StanceEntry] {
-        (report?.experts ?? []).compactMap { role in
-            latestByRole[role].map { StanceEntry(role: role, stance: $0.stance) }
+        (report?.seats ?? []).compactMap { seat in
+            latestBySeat[seat.id].map { StanceEntry(seat: seat, stance: $0.stance) }
         }
     }
 
@@ -1049,7 +1055,7 @@ private struct RoundtableLiveDashboard: View {
         case .failed, .cancelled: return .red
         case .awaitingUser: return .orange
         default:
-            return report?.activeExpert.map { RoundtableVisuals.accent(for: $0) } ?? .accentColor
+            return report?.activeSeat.map { RoundtableVisuals.accent(for: $0) } ?? .accentColor
         }
     }
 
@@ -1070,23 +1076,23 @@ private struct RoundtableLiveDashboard: View {
     }
 
     private var phaseDetail: String {
-        if let role = report?.activeExpert {
+        if let role = report?.activeSeat {
             return String(format: L10n.Roundtable.expertWillSpeakFormat, role.personalName)
         }
         return String(format: L10n.Roundtable.roundLabelFormat, max(1, report?.currentRound ?? 1))
     }
 
     private var speakingProgress: Double {
-        guard let report, !report.experts.isEmpty else { return 0 }
-        let spoken = Set(report.messages.compactMap { message -> AgentRoundtableExpertRole? in
+        guard let report, !report.seats.isEmpty else { return 0 }
+        let spoken = Set(report.messages.compactMap { message -> String? in
             guard message.round == report.currentRound, message.speaker == .expert else { return nil }
-            return message.role
+            return message.seatID
         }).count
-        return min(1, Double(spoken) / Double(report.experts.count))
+        return min(1, Double(spoken) / Double(report.seats.count))
     }
 
     private var progressLabel: String {
-        let total = report?.experts.count ?? 0
+        let total = report?.seats.count ?? 0
         let value = Int((speakingProgress * Double(total)).rounded())
         return String(format: L10n.Roundtable.progressFormat, value, total)
     }

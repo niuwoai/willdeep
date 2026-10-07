@@ -212,6 +212,22 @@ enum RoundtableVisuals {
         }
     }
 
+    /// 自带专家没有专属色,按 id 的稳定散列从调色板里取一个;同一位专家整场一个颜色。
+    private static let customPalette: [Color] = [
+        Color(nsColor: .systemTeal), Color(nsColor: .systemIndigo), Color(nsColor: .systemPink),
+        Color(nsColor: .systemOrange), Color(nsColor: .systemGreen), Color(nsColor: .systemPurple),
+        Color(nsColor: .systemBlue), Color(nsColor: .systemBrown),
+    ]
+
+    static func accent(for seat: RoundtableSeat) -> Color {
+        switch seat {
+        case .builtin(let role): return accent(for: role)
+        case .custom(let expert):
+            let hash = expert.id.unicodeScalars.reduce(UInt32(5_381)) { ($0 &* 33) &+ UInt32($1.value) }
+            return customPalette[Int(hash % UInt32(customPalette.count))]
+        }
+    }
+
     static func color(for stance: RoundtableOSR.Stance) -> Color {
         switch stance {
         case .support: return Color(nsColor: .systemGreen)
@@ -276,6 +292,54 @@ struct RoundtableExpertAvatar: View {
                 }
             }
             .accessibilityLabel(role.displayName)
+    }
+}
+
+/// 席位头像(1.412.0-rc1):内置专家用矢量头像,自带专家(插件带来的)画首字圆标,
+/// 颜色按 id 稳定取色;活跃态的脉冲点与内置专家一致。
+struct RoundtableSeatAvatar: View {
+    let seat: RoundtableSeat
+    var size: CGFloat = 38
+    var isActive = false
+    @State private var pulse = false
+
+    var body: some View {
+        switch seat {
+        case .builtin(let role):
+            RoundtableExpertAvatar(role: role, size: size, isActive: isActive)
+        case .custom(let expert):
+            let accent = RoundtableVisuals.accent(for: seat)
+            ZStack {
+                Circle().fill(accent.opacity(0.16))
+                Text(expert.avatarInitial)
+                    .font(.system(size: max(10, size * 0.42), weight: .semibold))
+                    .foregroundStyle(accent)
+            }
+            .frame(width: size, height: size)
+            .overlay(Circle().stroke(accent, lineWidth: isActive ? 2.5 : 1))
+            .overlay(alignment: .bottomTrailing) {
+                if isActive {
+                    Circle()
+                        .fill(accent)
+                        .frame(width: max(8, size * 0.24), height: max(8, size * 0.24))
+                        .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                        .scaleEffect(pulse ? 1.16 : 0.86)
+                }
+            }
+            .shadow(color: isActive ? accent.opacity(0.45) : .clear, radius: 7)
+            .onAppear {
+                guard isActive else { return }
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
+            }
+            .onChange(of: isActive) { active in
+                if active {
+                    withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
+                } else {
+                    pulse = false
+                }
+            }
+            .accessibilityLabel(expert.name)
+        }
     }
 }
 

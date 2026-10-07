@@ -225,7 +225,7 @@ key，宿主允许插件 MCP 服务在处理 `tools/call` 期间**反过来向�
 宿主只对**插件来源的 stdio 服务**在 `initialize` 里宣告：
 
 ```json
-{ "capabilities": { "extensions": { "io.willdeep/host-requests": { "methods": ["willdeep/images/generate", "willdeep/ai/complete"] } } } }
+{ "capabilities": { "extensions": { "io.willdeep/host-requests": { "methods": ["willdeep/images/generate", "willdeep/ai/complete", "willdeep/roundtable/run"] } } } }
 ```
 
 插件据此判断宿主支不支持**哪个方法**（`willdeep/ai/complete` 从 1.380.0-rc1 起才有）。
@@ -245,6 +245,39 @@ key，宿主允许插件 MCP 服务在处理 `tools/call` 期间**反过来向�
 
 起因是短剧工坊的 `review.run`：Agent 替用户出完图、出完片后要让插件配置的多模态审核模型
 看一眼，插件进程自己没有模型凭据。
+
+### 开一场专家圆桌：`willdeep/roundtable/run`（1.412.0-rc1）
+
+插件带着自己的专家席来开会：宿主跑完整的圆桌（开场、每位专家各发言一次、轮末小结、
+终稿），终稿之后再按插件给的契约问一次主持人，把结构化结论连同发言记录交回。用户在
+圆桌页（Agent 窗口的「圆桌」目的地）里实时看到每位专家怎么说；会话进历史，随时能点开。
+起因是短剧工坊的「专家席审稿」：插件自己用 `willdeep/ai/complete` 问六位专家也能得出
+结论，但用户看不见过程。
+
+`params`：
+
+| 字段 | 含义 |
+| --- | --- |
+| `title` | 报告标题（≤ 160 字），圆桌主页列表里显示 |
+| `topic` | 被审读的材料（≤ 60000 字），所有专家与主持人看同一份 |
+| `experts[]` | 2～8 位，每位 `{ id?, name (≤ 80), expertise \| role (≤ 200), persona (≤ 12000) }`；`persona` 作为该专家发言时的 system 指令，`id` 缺省按序号编，不许重复 |
+| `chairPersona` | 可选，调用方的主持人规则，拼在开场、终稿、结论提示词最前面 |
+| `verdictInstruction` | 可选（≤ 6000 字），结构化结论的契约；给了就在终稿之后再问一次，原文放进 `result.verdict` |
+| `rounds` | 1～3，默认 1 |
+| `provider` / `model` | 同 `willdeep/ai/complete`，缺省跟随当前活跃 provider |
+
+校验器 `AgentPluginRoundtableRequestValidator`；权限同 `ai.chat`。圆桌是**无人值守**的：专家
+反问不暂停、收敛即出终稿；不走准备室与专家推荐（席位是调用方给定的）。
+
+成功时 `result = { reportID, sessionID, document, verdict | null, transcript[], model, providerID, rounds }`，
+`transcript[]` 每项 `{ seatID, name, round, content, stance?, isError }`。失败（所有专家都没发言、
+主持人没产出）回 -32000；这条方法的处理上限是 1800 秒（`roundtableHandlingSeconds`），
+其余反向请求仍是 600 秒。
+
+实现：`AppState.runPluginRoundtable`（`AppStateAgentPluginRoundtable.swift`）建一个
+`.roundtable` 作用域的会话，报告带 `customExperts` 与 `external`（插件 id、主持人规则、契约、
+轮数），复用 `driveRoundtable` 与 `AgentRoundtableEngine`；引擎 1.412.0-rc1 起按「席位」
+（`RoundtableSeat`：内置专家或自带专家）跑发言循环。
 
 ### 请求
 

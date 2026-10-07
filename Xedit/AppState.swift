@@ -582,6 +582,10 @@ final class AppState: ObservableObject {
     /// roundtable window can stop exactly its own orchestration.
     var agentRoundtableTasks: [UUID: Task<Void, Never>] = [:]
 
+    /// 插件经 `willdeep/roundtable/run` 开的圆桌（1.412.0-rc1）：请圆桌页切到这一场的
+    /// 讨论视图。圆桌页消费后置回 nil；页面没开时留着，下次打开再跳。
+    @Published var requestedRoundtableRoute: RoundtableRoute?
+
     /// Maps each in-flight consultation (report id) to the runtime that owns
     /// it, so the "already running" guard and the composer's disabled state
     /// are scoped per session instead of blocking every other conversation.
