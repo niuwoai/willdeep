@@ -128,6 +128,14 @@ extension EditorSettingsView {
                     .foregroundStyle(.secondary)
             }
 
+            Section(L10n.RSI.settingsSection) {
+                Toggle(L10n.RSI.settingsToggle, isOn: $appState.agentFeedbackPanelEnabled)
+                    .accessibilityIdentifier("settings.agent.feedback-panel")
+                Text(L10n.RSI.settingsHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L10n.SpecGateSettings.sectionTitle) {
                 Toggle(L10n.SpecGateSettings.detectionToggle, isOn: $appState.agentSpecGateEnabled)
                 Text(L10n.SpecGateSettings.detectionFootnote)

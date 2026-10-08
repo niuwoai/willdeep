@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-10-08 | Current version: v1.415.0-rc1
+回合反馈采用灰度分区面板，主按钮黑底白字：工具计数、人工反馈与模型辅助审阅分组，运行配置默认折叠在页脚，窄窗口自动调整布局。面板默认显示，可在设置 → Agent 外观中关闭，偏好持久化。
+
+> Last updated: 2026-10-09 | Current version: v1.416.0-rc1
 
 跨端运行参数与轻量反馈（1.415.0-rc1）：Mac 与 Rust 读取同一无凭据 JSON，严格校验并记录本轮参数指纹；输入区可查看、复制和导出配置。每轮结束提供一键人工反馈和按需模型异常分流，模型与人工结论分别归档。契约、预算边界与两端执行差异见 [RSI 运行参数 v1](docs/RSI_RUNTIME_PARAMETERS_V1.md)。
 

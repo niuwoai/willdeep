@@ -81,6 +81,7 @@ enum AgentSettingsStore {
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     private static let specGateEnabledKey = "com.willdeep.agentSettings.specGate.v1"
     private static let inputSuggestionsEnabledKey = "com.willdeep.agentSettings.inputSuggestions.v1"
+    private static let feedbackPanelEnabledKey = "com.willdeep.agentSettings.feedbackPanel.v1"
     private static let specGateEnforcementKey = "com.willdeep.agentSettings.specGateEnforcement.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
 
@@ -427,6 +428,16 @@ enum AgentSettingsStore {
     static func saveAgentChatBaseFontSize(_ size: CGFloat) {
         let clamped = clampChatBaseFontSize(size)
         defaults.set(Double(clamped), forKey: chatBaseFontSizeKey)
+    }
+
+    static func loadFeedbackPanelEnabled(from storage: UserDefaults? = nil) -> Bool {
+        let storage = storage ?? defaults
+        guard storage.object(forKey: feedbackPanelEnabledKey) != nil else { return true }
+        return storage.bool(forKey: feedbackPanelEnabledKey)
+    }
+
+    static func saveFeedbackPanelEnabled(_ enabled: Bool, to storage: UserDefaults? = nil) {
+        (storage ?? defaults).set(enabled, forKey: feedbackPanelEnabledKey)
     }
 
     /// Whether macOS font smoothing is on for this app.

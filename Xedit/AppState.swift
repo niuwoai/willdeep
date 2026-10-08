@@ -294,6 +294,11 @@ final class AppState: ObservableObject {
             AgentFontSmoothing.apply(enabled: agentFontSmoothingEnabled)
         }
     }
+    /// 默认展示回合反馈与运行配置；关闭仅影响界面。
+    @Published var agentFeedbackPanelEnabled: Bool = AgentSettingsStore.loadFeedbackPanelEnabled() {
+        didSet { AgentSettingsStore.saveFeedbackPanelEnabled(agentFeedbackPanelEnabled) }
+    }
+
     /// 回合结束后在输入框里预测下一句（Tab 采用）。
     @Published var agentInputSuggestionsEnabled: Bool = AgentSettingsStore.loadInputSuggestionsEnabled() {
         didSet {

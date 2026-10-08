@@ -101,7 +101,7 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
-                if let runtime = appState.activeRuntime {
+                if appState.agentFeedbackPanelEnabled, let runtime = appState.activeRuntime {
                     AgentFeedbackReviewView(runtime: runtime)
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
