@@ -229,10 +229,14 @@ struct AgentMCPHostRequestsTests {
     @Test("回归：宿主替插件出图期间，插件对别的请求的应答照常送达，进程不被结束")
     func otherResponsesFlowWhileHostHandlesReverseRequest() async throws {
         let generation = GenerationProbe()
+        defer { generation.allowFinish() }
         AgentMCPHostRequests.setImageGeneratorForTesting { pluginID, request in
             generation.markStarted()
-            // 比服务端超时（2 秒）长：探活的应答若要等出图办完，必然先超时。
-            try await Task.sleep(nanoseconds: 4_000_000_000)
+            // 只有探活的应答送达后才能结束出图。若 stdout 被出图阻塞，
+            // tools/list 会超时；不再依赖整套测试负载下的固定四秒窗口。
+            while !generation.finishAllowed {
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
             generation.markFinished()
             return self.fakeImage(pluginID, request)
         }
@@ -251,6 +255,7 @@ struct AgentMCPHostRequestsTests {
         let listed = try await Self.request(server, "tools/list", [:])
         #expect(!generation.finished, "应答要在出图办完之前送达，不能被堵在读 stdout 的线程后面")
         let pid = try #require(listed["pid"] as? Int)
+        generation.allowFinish()
 
         // 出图办完后插件拿到了答复，并且还是同一个进程。
         var reply: [String: Any]?
@@ -358,10 +363,13 @@ struct AgentMCPHostRequestsTests {
         private let lock = NSLock()
         private var didStart = false
         private var didFinish = false
+        private var permittedToFinish = false
         func markStarted() { lock.lock(); didStart = true; lock.unlock() }
         func markFinished() { lock.lock(); didFinish = true; lock.unlock() }
+        func allowFinish() { lock.lock(); permittedToFinish = true; lock.unlock() }
         var started: Bool { lock.lock(); defer { lock.unlock() }; return didStart }
         var finished: Bool { lock.lock(); defer { lock.unlock() }; return didFinish }
+        var finishAllowed: Bool { lock.lock(); defer { lock.unlock() }; return permittedToFinish }
     }
 
     private final class CallRecorder: @unchecked Sendable {

@@ -172,10 +172,8 @@ nonisolated enum AgentGoalWakePolicy {
     /// The wall-clock budget is the only thing that ends a waiting Goal. A
     /// segment that has not started its clock yet has its whole runway.
     static func hasWallClockRunway(_ budget: AgentGoalContinuationBudget?, now: Date) -> Bool {
-        guard let budget,
-              let limit = budget.wallClockLimit,
-              let startedAt = budget.segmentStartedAt else { return true }
-        return now.timeIntervalSince(startedAt) < limit
+        guard let budget, let limit = budget.wallClockLimit else { return true }
+        return budget.elapsed(at: now) < limit
     }
 
     /// Pure half of "may this Goal park on a wait instead of stopping".

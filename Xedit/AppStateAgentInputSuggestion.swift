@@ -14,7 +14,7 @@ import Foundation
 extension AppState {
     func requestAgentInputSuggestionIfNeeded(for runtime: AgentRuntime) {
         runtime.clearInputSuggestion()
-        guard agentInputSuggestionsEnabled,
+        guard runtime.runtimeParameters?.inputSuggestions ?? agentInputSuggestionsEnabled,
               !runtime.isResponding,
               runtime.lastTurnFailure == nil,
               // 定时任务拉起的会话没有人在输入框前面。
@@ -62,7 +62,7 @@ extension AppState {
                       let runtime,
                       runtime.inputSuggestionEpoch == epoch,
                       let suggestion = result.suggestion,
-                      self.agentInputSuggestionsEnabled,
+                      (runtime.runtimeParameters?.inputSuggestions ?? self.agentInputSuggestionsEnabled),
                       !runtime.isResponding,
                       runtime.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       runtime.messages.last?.id == lastMessageID else { return }

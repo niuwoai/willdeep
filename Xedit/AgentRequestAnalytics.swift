@@ -7,6 +7,7 @@ nonisolated enum AgentAuxiliaryRequestPurpose: String, Codable, Equatable, Senda
     case workerRouting
     /// 回合结束后预测用户下一句，显示为输入框灰字。
     case inputSuggestion
+    case feedbackAssessment
     /// 命令安全裁判（someim-security-guard 或兜底 provider）。
     case safetyJudge
     /// 省心托管的路由裁判（someim-judge 选主模型）。

@@ -23,6 +23,7 @@ struct AgentGoalSoakTests {
         var handoffPending = false
         var lastFaultRead = -1
         var budgetStart: Date?
+        var lastExecutionElapsed: TimeInterval = 0
         var reachedDuration = false
         var ledgerAttempts = -1
         var unfinishedRequests = -1
@@ -65,7 +66,9 @@ struct AgentGoalSoakTests {
             trace.requests += 1
             if trace.budgetStart == nil { trace.budgetStart = f.runtime.currentGoal?.continuationBudget?.segmentStartedAt }
             trace.check(trace.budgetStart != nil, "budget_not_started")
-            trace.check(f.runtime.currentGoal?.continuationBudget?.segmentStartedAt == trace.budgetStart, "budget_start_changed")
+            let elapsed = f.runtime.currentGoal?.continuationBudget?.elapsed(at: Date()) ?? 0
+            trace.check(elapsed >= trace.lastExecutionElapsed, "budget_spend_reset")
+            trace.lastExecutionElapsed = elapsed
             trace.check(f.runtime.currentGoal?.checklist.first?.done == false, "false_completion")
             trace.check(f.runtime.pendingToolDecisions.isEmpty, "unexpected_user_decision")
             trace.check(f.runtime.messages.filter(\.isOperatorInput).count <= 1, "synthetic_operator_input")

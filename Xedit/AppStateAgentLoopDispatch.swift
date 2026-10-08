@@ -29,6 +29,16 @@ extension AppState {
         source: AgentMessageSource = .operatorInput
     ) {
         if source != .operatorInput && dispatchContinuationIsSuspended(runtime) { return }
+        do { runtime.runtimeParameters = try runtimeParametersForNewTurn() }
+        catch {
+            runtime.errorMessage = error.localizedDescription
+            runtime.errorDetails = nil
+            runtime.session.automaticWakeSuppressedAfterUserStop = true
+            return
+        }
+        runtime.deepAdmissionObservation.deepCalls = 0
+        applySharedGoalLimits(for: runtime)
+        guard runtime.runtimeParameters != nil else { return }
         // A message — the user's or the host's — supersedes a Goal wait, even
         // one that has to queue for a provider slot first.
         cancelGoalWake(for: runtime, reason: "dispatch")
@@ -58,7 +68,8 @@ extension AppState {
             routeDecision = AgentRequestRouter.pinnedDecision(profileID: pinnedWorker)
         } else {
             routeDecision = source == .operatorInput
-                ? AgentRequestRouter.routedDecision(for: text, delegationPolicy: delegationPolicy)
+                ? AgentRequestRouter.routedDecision(for: text, delegationPolicy: delegationPolicy,
+                    sharedConfig: runtime.runtimeParameters?.routingConfig ?? AgentSharedRuntimeConfig())
                 : nil
         }
         runtime.currentTurnRouteDecision = routeDecision
@@ -323,7 +334,7 @@ extension AppState {
                 // operator has not already accepted. With the preflight off
                 // (the default) the veto is collected at the tool boundary
                 // instead and the first token is untouched.
-                if Self.readOnlyPreflightEnabled() {
+                if runtime.runtimeParameters?.autoDispatchReadOnly == true {
                     await self.resolveRouteVetoIfPending(for: runtime)
                 }
                 let codingPlan = await self.runReadOnlyPreflightIfNeeded(

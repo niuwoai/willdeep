@@ -715,6 +715,8 @@ final class AppState: ObservableObject {
     /// Configuration and transport are supplied together; neither is persisted
     /// to the user's provider library. Scheduling and tool execution stay real.
     var agentLoopInferenceEnvironment: (configuration: AgentConfiguration, session: URLSession)?
+    /// Keep loop fixtures independent of the operator's shared configuration.
+    var agentLoopRuntimeParametersOverride: AgentRuntimeParameters?
     /// Test transport only; verdict parsing, candidate fallback and admission remain real.
     var safetyJudgeInferenceEnvironment: (configurations: [AgentConfiguration], session: URLSession)?
     private var activeRuntimeForwardTask: Task<Void, Never>?

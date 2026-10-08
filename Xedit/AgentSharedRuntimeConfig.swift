@@ -85,6 +85,13 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
     /// rs name says "harness"; WillDeep applies it per session, which is the
     /// closest equivalent unit it has.
     var maxDeepCallsPerHarness: Int?
+    var maxTurns: Int?
+    var tokenBudget: Int?
+    var goalTokenBudget: Int?
+    var goalWallClockMinutes: Int?
+    var goalMaxContinuations: Int?
+    var inputSuggestions: Bool?
+    var runtimeParameterErrors: [String] = []
 
     static let sectionName = "agent"
 
@@ -102,6 +109,7 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
     static func parse(_ text: String) -> AgentSharedRuntimeConfig {
         var inside = false
         var values: [String: String] = [:]
+        var duplicateKeys: [String] = []
         for line in text.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
@@ -121,6 +129,7 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
                 value = String(value[value.startIndex..<hash])
                     .trimmingCharacters(in: .whitespaces)
             }
+            if values[key] != nil { duplicateKeys.append(key) }
             values[key] = value
         }
 
@@ -129,6 +138,17 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
         config.autoDispatchReadOnly = values["auto_dispatch_read_only"].flatMap(parseBool)
         config.speculativeScout = values["speculative_scout"].flatMap(parseBool)
         config.maxDeepCallsPerHarness = values["max_deep_calls_per_harness"].flatMap { Int($0) }
+        config.maxTurns = values["max_turns"].flatMap(Int.init)
+        config.tokenBudget = values["token_budget"].flatMap(Int.init)
+        config.goalTokenBudget = values["goal_token_budget"].flatMap(Int.init)
+        config.goalWallClockMinutes = values["goal_wall_clock_minutes"].flatMap(Int.init)
+        config.goalMaxContinuations = values["goal_max_continuations"].flatMap(Int.init)
+        config.inputSuggestions = values["input_suggestions"].flatMap(parseBool)
+        let integerKeys = ["max_turns", "token_budget", "goal_token_budget", "goal_wall_clock_minutes", "goal_max_continuations", "max_deep_calls_per_harness"]
+        let booleanKeys = ["input_suggestions", "small_model_routing", "auto_dispatch_read_only"]
+        config.runtimeParameterErrors = integerKeys.filter { values[$0].map { Int($0) == nil } ?? false }
+            + booleanKeys.filter { values[$0].map { !["true", "false"].contains($0) } ?? false }
+            + duplicateKeys.filter { (integerKeys + booleanKeys).contains($0) }
         return config
     }
 

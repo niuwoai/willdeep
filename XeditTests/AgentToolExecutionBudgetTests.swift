@@ -82,6 +82,23 @@ struct AgentToolExecutionBudgetTests {
         #expect(throws: AgentToolExecutionBudgetError.exhausted) { try envelope.check(now: start.addingTimeInterval(11)) }
     }
 
+    @Test("续跑请求只获得累计执行后的剩余时间")
+    func resumedDeadlineUsesRemainingTime() throws {
+        let start = Date(timeIntervalSince1970: 1_000)
+        var budget = AgentGoalContinuationBudget(wallClockLimit: 100, segmentStartedAt: start)
+        budget.activeElapsedSeconds = 70
+        let envelope = AgentToolExecutionBudget(budget: budget)
+        #expect(envelope.deadline == start.addingTimeInterval(30))
+        try envelope.check(now: start.addingTimeInterval(29))
+        #expect(throws: AgentToolExecutionBudgetError.exhausted) {
+            try envelope.check(now: start.addingTimeInterval(30))
+        }
+        budget.activeElapsedSeconds = 100
+        #expect(throws: AgentToolExecutionBudgetError.exhausted) {
+            try AgentToolExecutionBudget(budget: budget).check(now: start)
+        }
+    }
+
     @Test("收尾阶段无论剩余时间多少都拒绝新工具")
     func wrapUpIsNotAnInstructionOnly() {
         let envelope = AgentToolExecutionBudget(budget: .init(wallClockLimit: nil, wrapUpDispatched: true))

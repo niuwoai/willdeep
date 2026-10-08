@@ -13,7 +13,9 @@ nonisolated struct AgentToolExecutionBudget: Equatable, Sendable {
         self.requestLedger = requestLedger
         self.ownerGate = ownerGate
         deadline = budget.segmentStartedAt.flatMap { start in
-            budget.wallClockLimit.map { start.addingTimeInterval($0) }
+            budget.wallClockLimit.map {
+                start.addingTimeInterval(max(0, $0 - (budget.activeElapsedSeconds ?? 0)))
+            }
         }
         wrapUpOnly = budget.wrapUpDispatched
     }

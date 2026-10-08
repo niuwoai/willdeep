@@ -61,13 +61,36 @@ extension AppState {
                                 providerID: configuration.providerID, shouldResumePendingEvents: false)
             return
         }
+        // Direct harness calls also validate before sending any provider request.
+        let parameters: AgentRuntimeParameters
+        do {
+            runtime.runtimeParameters = try runtime.runtimeParameters ?? runtimeParametersForNewTurn()
+            applySharedGoalLimits(for: runtime)
+            guard let effective = runtime.runtimeParameters else { throw AgentRuntimeParameters.Failure.invalid }
+            parameters = effective
+        } catch {
+            runtime.errorMessage = error.localizedDescription
+            runtime.session.automaticWakeSuppressedAfterUserStop = true
+            finishAgentLoopTurn(for: runtime, turnID: turnID, providerSlotClaimID: providerSlotClaimID,
+                                providerID: configuration.providerID, shouldResumePendingEvents: false)
+            return
+        }
         // This turn just went live (isResponding was set true by the caller).
         runtime.beginFeedbackRun(turnID: turnID, provider: configuration.providerID, model: configuration.model)
+        let tokenBudget = AgentRuntimeTokenBudget(limit: parameters.tokenBudget)
+        runtime.runtimeTokenBudget = tokenBudget
+        defer { if runtime.activeTurnID == turnID || runtime.activeTurnID == nil { runtime.runtimeTokenBudget = nil } }
         // Refresh the same-checkout collision hint so the foreground composer
         // reflects a background session now working in its directory.
         refreshAgentWorkspaceCollision()
         noteGoalTurnStarted(for: runtime)
         _ = startAgentGoalPlanningIfNeeded(for: runtime)
+        applySharedGoalLimits(for: runtime)
+        guard runtime.runtimeParameters != nil else {
+            finishAgentLoopTurn(for: runtime, turnID: turnID, providerSlotClaimID: providerSlotClaimID,
+                                providerID: configuration.providerID, shouldResumePendingEvents: false)
+            return
+        }
         // 本回合的遥测累计。回合内可能跑多轮 provider 请求（工具调用循环），
         // token 累加、降级次数累加；下面的 defer 在每条退出路径上提交一次。
         // 只记供应商、模型、耗时、token 和结构化错误码——不碰任何消息内容。
@@ -266,7 +289,12 @@ extension AppState {
         var toolRoundsSinceLastPlanUpdate = 0
         var planUpdateCallsSeen = 0
 
-        for toolRound in 0..<Self.maxAgentToolRounds {
+        for toolRound in 0..<parameters.maxTurns {
+            if tokenBudget.isBlocked {
+                shouldResumePendingEventsAtTurnEnd = false
+                pauseForRuntimeBudget(runtime, reason: tokenBudget.hasUnknownUsage ? "unknown_usage" : "token_budget")
+                return
+            }
             beginGoalExecutionBudgetIfNeeded(for: runtime)
             // The host kernel is the single prioritized interrupt queue. It
             // persists events across restarts and delivers them only at a
@@ -794,6 +822,13 @@ extension AppState {
                 turnTelemetry.noteRequestStarted()
                 runtime.currentTurnTiming?.noteRequestSent()
                 while true {
+                    if tokenBudget.isBlocked {
+                        shouldResumePendingEventsAtTurnEnd = false
+                        pauseForRuntimeBudget(runtime, reason: tokenBudget.hasUnknownUsage ? "unknown_usage" : "token_budget")
+                        return
+                    }
+                    let budgetRequestID = UUID()
+                    tokenBudget.begin(budgetRequestID)
                     do {
                         try await client.streamChat(
                             messages: requestMessages,
@@ -845,6 +880,8 @@ extension AppState {
                                     streamBuffer.flushPending()
                                     finishReason = reason
                                 case .usageReported(let prompt, let completion, let total, let cachedPrompt, let cacheWritePrompt, let reasoning):
+                                    let sum = prompt.addingReportingOverflow(completion)
+                                    tokenBudget.report(budgetRequestID, total: sum.overflow ? Int.max : max(total, sum.partialValue))
                                     streamBuffer.flushPending()
                                     turnTelemetry.addUsage(promptTokens: prompt, completionTokens: completion)
                                     runtime.messages[index].usageTokens = total
@@ -976,6 +1013,11 @@ extension AppState {
                 return
             }
 
+            if tokenBudget.isBlocked {
+                shouldResumePendingEventsAtTurnEnd = false
+                pauseForRuntimeBudget(runtime, reason: tokenBudget.hasUnknownUsage ? "unknown_usage" : "token_budget")
+                return
+            }
             // Snapshot the assistant's final tool_calls list (the .toolCallsUpdated
             // closure may not have published the very last fragment yet if the
             // stream ended on the same chunk).
@@ -2862,9 +2904,10 @@ extension AppState {
             // Otherwise: loop again so the model can react to the tool outputs.
         }
 
-        if continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .toolRoundLimit) { return }
-        runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
-        runtime.errorDetails = nil
+        if !continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .toolRoundLimit) {
+            shouldResumePendingEventsAtTurnEnd = false
+            pauseForRuntimeBudget(runtime, reason: "max_turns")
+        }
     }
 
 }

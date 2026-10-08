@@ -32,6 +32,15 @@ nonisolated struct AgentFeedbackEvent: Codable, Sendable {
     var decision: String?
     var queuedBehind: Bool?
     var promptBundle: String?
+    var runtimeParameters: AgentRuntimeParameters?
+    var runtimeParametersSha256: String?
+    var judgment: String?
+    var judgmentSource: String?
+    var confidence: Int?
+    var reasonCode: String?
+    var assessmentProvider: String?
+    var assessmentModel: String?
+    var assessmentPromptSha256: String?
 
     static func hash(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

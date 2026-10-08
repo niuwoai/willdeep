@@ -173,6 +173,7 @@ extension AppState {
         }
         let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
         let wasUserStopped = runtime.userStoppedTurnID == turnID
+        let wasRuntimeBudgetStopped = runtime.feedbackBudgetStopReason != nil
         runtime.isResponding = false
         runtime.turnStartedAt = nil
         runtime.requestTask = nil
@@ -185,7 +186,7 @@ extension AppState {
         auditDelegationPolicyForFinishedTurn(in: runtime)
         // Turn finished — one fewer concurrent worker on this checkout.
         refreshAgentWorkspaceCollision()
-        if !wasUserStopped {
+        if !wasUserStopped && !wasRuntimeBudgetStopped {
             captureAgentPlanFromLatestMessage(for: runtime)
             let didDefineGoal = captureAgentGoalDefinitionFromLatestMessage(for: runtime)
             // Only the successful prose-only reply path may evaluate a
@@ -203,7 +204,7 @@ extension AppState {
         // state the session file just captured. No-op for anything a
         // human started.
         recordRoutineRunCompletionIfNeeded(for: runtime)
-        if !wasUserStopped, !shouldConsumeQueueAfterStop {
+        if !wasUserStopped, !wasRuntimeBudgetStopped, !shouldConsumeQueueAfterStop {
             // A runway stop means the window is already at 90%, well past
             // the ordinary 75% trigger — but `shouldAutoCompressNow` can
             // still refuse (too few messages, a tail that will not split).
@@ -234,7 +235,7 @@ extension AppState {
         }
         // 放在最后：排队消息或后台完成若已经拉起新一轮，这里看到的是
         // isResponding == true，自然不预测。
-        if !wasUserStopped {
+        if !wasUserStopped && !wasRuntimeBudgetStopped {
             requestAgentInputSuggestionIfNeeded(for: runtime)
         }
         noteGoalTurnFinished(for: runtime, turnID: turnID)

@@ -207,13 +207,17 @@ extension AppState {
         userMessageID: UUID
     ) {
         runtime.speculativeScout = nil
+        var scoutConfig = AgentSharedRuntimeConfig.load()
+        if let parameters = runtime.runtimeParameters {
+            scoutConfig.smallModelRouting = parameters.smallModelRouting
+        }
         guard runtime.currentTurnDelegationPolicy != .agentPreferred else { return }
         guard !runtime.isUnattendedDispatchTask else { return }
         guard let profileID = Self.speculativeScoutProfileID(
             decision: runtime.currentTurnRouteDecision,
             delegationPolicy: runtime.currentTurnDelegationPolicy,
-            serialPreflightEnabled: Self.readOnlyPreflightEnabled(),
-            speculativeEnabled: Self.speculativeScoutEnabled()
+            serialPreflightEnabled: runtime.runtimeParameters?.autoDispatchReadOnly ?? Self.readOnlyPreflightEnabled(),
+            speculativeEnabled: Self.speculativeScoutEnabled(sharedConfig: scoutConfig)
         ) else { return }
 
         let workspaceLocation = runtime.workspaceLocation

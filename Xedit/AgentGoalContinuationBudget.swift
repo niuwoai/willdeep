@@ -28,6 +28,9 @@ nonisolated struct AgentGoalContinuationBudget: Codable, Equatable {
     /// Start of execution, persisted before the first executing request.
     /// Legacy sessions without a stamp initialize at their next boundary.
     var segmentStartedAt: Date?
+    /// Shared runtime profiles count active execution only. Nil keeps the
+    /// legacy segment clock until the profile is applied for the first time.
+    var activeElapsedSeconds: TimeInterval?
     /// Continuations already spent in this segment.
     var continuationsUsed: Int
     /// Consecutive acceptance rounds without checklist progress: the rung of
@@ -64,10 +67,16 @@ nonisolated struct AgentGoalContinuationBudget: Codable, Equatable {
 
     /// A fresh segment that keeps the configured limits but drops all spend.
     var restarted: AgentGoalContinuationBudget {
-        AgentGoalContinuationBudget(
+        var budget = AgentGoalContinuationBudget(
             wallClockLimit: wallClockLimit,
             maximumContinuations: maximumContinuations
         )
+        budget.activeElapsedSeconds = activeElapsedSeconds.map { _ in 0 }
+        return budget
+    }
+
+    func elapsed(at now: Date) -> TimeInterval {
+        (activeElapsedSeconds ?? 0) + (segmentStartedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0)
     }
 
     /// A fresh segment under a newly chosen wall-clock limit — what Play does,
@@ -131,7 +140,7 @@ nonisolated enum AgentGoalContinuationPolicy {
         budget.segmentStartedAt = startedAt
 
         if let limit = budget.wallClockLimit,
-           now.timeIntervalSince(startedAt) >= limit {
+           budget.elapsed(at: now) >= limit {
             budget.wrapUpDispatched = true
             return (.wrapUp(reason: .wallClock), budget)
         }

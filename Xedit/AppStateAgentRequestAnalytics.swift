@@ -13,6 +13,7 @@ extension AppState {
         guard let runtime = agentRuntimes[runtimeID],
               let sessionIndex = agentSessions.firstIndex(where: { $0.id == runtimeID }) else { return }
         runtime.session.auxiliaryModelRequests.append(record)
+        runtime.runtimeTokenBudget?.recordCompression(record)
         let maximumRecords = 20_000
         if runtime.session.auxiliaryModelRequests.count > maximumRecords {
             runtime.session.auxiliaryModelRequests.removeFirst(

@@ -226,7 +226,7 @@ extension AppState {
             switch AgentDeepAdmission.authorize(
                 ticket: ticket,
                 observation: runtime.deepAdmissionObservation,
-                budget: AgentSettingsStore.loadDeepAdmissionBudget()
+                budget: runtime.runtimeParameters?.maxDeepCallsPerHarness ?? AgentSettingsStore.loadDeepAdmissionBudget()
             ) {
             case .success(let updated):
                 runtime.deepAdmissionObservation = updated

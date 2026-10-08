@@ -14,6 +14,10 @@ extension AgentRuntime {
     func beginFeedbackRun(turnID: UUID, provider: String, model: String) {
         guard feedbackTurnID != turnID else { return }
         if feedbackRunID != nil { endFeedbackRun(reason: "replaced") }
+        feedbackAssessmentTask?.cancel()
+        feedbackAssessmentTask = nil
+        feedbackReview = nil
+        feedbackBudgetStopReason = nil
         feedbackRunID = UUID()
         feedbackTurnID = turnID
         feedbackProvider = provider
@@ -21,11 +25,29 @@ extension AgentRuntime {
         // History belongs to earlier runs. Only new/pending calls may settle
         // into this run's denominator, even when the whole array publishes.
         feedbackRecordedTools = Set(toolCalls.filter { $0.status.isTerminal }.map(\.id))
-        recordFeedback("run_started")
+        feedbackHistoricalToolIDs = feedbackRecordedTools
+        recordFeedback("run_started") {
+            $0.runtimeParameters = runtimeParameters
+            $0.runtimeParametersSha256 = runtimeParameters?.fingerprint
+        }
     }
 
     func endFeedbackRun(reason: String) {
         guard feedbackRunID != nil else { return }
+        let reason = reason == "finished" ? (feedbackBudgetStopReason ?? reason) : reason
+        if var budget = currentGoal?.continuationBudget, budget.activeElapsedSeconds != nil {
+            budget.activeElapsedSeconds = budget.elapsed(at: Date())
+            budget.segmentStartedAt = nil
+            currentGoal?.continuationBudget = budget
+        }
+        if let runID = feedbackRunID, let turnID = feedbackTurnID {
+            let calls = toolCalls.filter { feedbackRecordedTools.contains($0.id) && !feedbackHistoricalToolIDs.contains($0.id) }
+            feedbackReview = AgentFeedbackReview(id: runID, turnID: turnID,
+                provider: feedbackProvider, model: feedbackModel,
+                parameterFingerprint: runtimeParameters?.fingerprint,
+                toolSuccesses: calls.filter { $0.status == .succeeded }.count,
+                toolFailures: calls.filter { $0.status == .failed }.count, stopReason: reason)
+        }
         recordFeedback("run_finished") {
             $0.stopReason = reason
             // Native completion is not an independently rerun verifier result.
@@ -34,6 +56,32 @@ extension AgentRuntime {
         feedbackPreviousTurnID = feedbackTurnID
         feedbackRunID = nil
         feedbackTurnID = nil
+    }
+
+    func recordHumanDisposition(_ disposition: AgentFeedbackReview.Disposition) {
+        guard var review = feedbackReview, review.disposition == nil else { return }
+        review.disposition = disposition
+        feedbackAssessmentTask?.cancel()
+        feedbackAssessmentTask = nil
+        feedbackReview = review
+        recordReviewFeedback(review, signal: "human_disposition", source: "human", judgment: disposition.rawValue)
+    }
+
+    func recordReviewFeedback(_ review: AgentFeedbackReview, signal: String, source: String, judgment: String) {
+        recordFeedback(signal) {
+            $0.runID = review.id
+            $0.turnID = review.turnID
+            $0.provider = review.provider
+            $0.model = review.model
+            $0.runtimeParametersSha256 = review.parameterFingerprint
+            $0.judgment = judgment
+            $0.judgmentSource = source
+            $0.confidence = source == "model" ? review.assessment?.confidence : nil
+            $0.reasonCode = source == "model" ? review.assessment?.reasonCode : nil
+            $0.assessmentProvider = source == "model" ? review.assessmentProvider : nil
+            $0.assessmentModel = source == "model" ? review.assessmentModel : nil
+            $0.assessmentPromptSha256 = source == "model" ? AgentFeedbackAssessment.promptFingerprint : nil
+        }
     }
 
     func recordFeedbackToolResults() {

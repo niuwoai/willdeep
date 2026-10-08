@@ -6,6 +6,40 @@ import Testing
 @Suite("RSI 本机反馈", .serialized)
 @MainActor
 struct AgentFeedbackLedgerTests {
+    @Test("模型辅助不能冒充人工通过，结论关联原运行和参数")
+    func separateJudgments() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let runtime = AgentRuntime(session: AgentSession())
+        runtime.feedbackLedger = AgentFeedbackLedger(directory: directory)
+        runtime.runtimeParameters = AgentRuntimeParameters()
+        let turn = UUID()
+        runtime.beginFeedbackRun(turnID: turn, provider: "run-provider", model: "run-model")
+        runtime.endFeedbackRun(reason: "finished")
+        var review = try #require(runtime.feedbackReview)
+        review.assessment = AgentFeedbackAssessment(schema: AgentFeedbackAssessment.schemaID,
+            judgment: "unknown", confidence: 70, reasonCode: "unverified")
+        review.assessmentProvider = "judge-provider"
+        review.assessmentModel = "judge-model"
+        runtime.feedbackReview = review
+        runtime.recordReviewFeedback(review, signal: "model_assessment", source: "model", judgment: "unknown")
+        #expect(runtime.feedbackReview?.disposition == nil)
+        runtime.recordHumanDisposition(.needsChanges)
+        runtime.recordHumanDisposition(.accepted)
+        runtime.feedbackLedger.flush()
+        let events = try rows(directory)
+        let judgments = events.filter { $0["judgment_source"] != nil }
+        #expect(judgments.count == 2)
+        #expect(judgments[0]["assessment_model"] as? String == "judge-model")
+        #expect(judgments[0]["provider"] as? String == "run-provider")
+        #expect(judgments[1]["judgment"] as? String == "needs_changes")
+        #expect(judgments[1]["assessment_model"] == nil)
+        #expect(judgments.allSatisfy { $0["run_id"] as? String == review.id.uuidString && $0["turn_id"] as? String == turn.uuidString })
+        #expect(judgments.allSatisfy { $0["runtime_parameters_sha256"] as? String == AgentRuntimeParameters().fingerprint })
+        #expect(AgentFeedbackAssessment.parse("{\"schema\":\"willdeep.feedback-assessment.v1\",\"judgment\":\"accepted\",\"confidence\":100,\"reason_code\":\"unverified\"}") == nil)
+        runtime.beginFeedbackRun(turnID: UUID(), provider: "new", model: "new")
+        #expect(runtime.feedbackReview == nil)
+    }
     private func rows(_ directory: URL) throws -> [[String: Any]] {
         try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             .flatMap { url in

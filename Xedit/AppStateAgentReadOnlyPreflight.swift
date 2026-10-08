@@ -44,7 +44,7 @@ extension AppState {
         configuration: AgentConfiguration,
         userMessageID: UUID
     ) async -> AgentCodingTaskPlan? {
-        guard Self.readOnlyPreflightEnabled() else { return nil }
+        guard runtime.runtimeParameters.map({ $0.autoDispatchReadOnly }) ?? Self.readOnlyPreflightEnabled() else { return nil }
         // `/no-subagent` means "do all of it yourself this turn". Dispatching
         // a worker anyway would be the one thing the user explicitly refused.
         guard runtime.currentTurnDelegationPolicy != .forbidden else { return nil }

@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-10-08 | Current version: v1.414.0-rc1
+> Last updated: 2026-10-08 | Current version: v1.415.0-rc1
+
+跨端运行参数与轻量反馈（1.415.0-rc1）：Mac 与 Rust 读取同一无凭据 JSON，严格校验并记录本轮参数指纹；输入区可查看、复制和导出配置。每轮结束提供一键人工反馈和按需模型异常分流，模型与人工结论分别归档。契约、预算边界与两端执行差异见 [RSI 运行参数 v1](docs/RSI_RUNTIME_PARAMETERS_V1.md)。
 
 RSI 本机反馈与确认快捷键（1.414.0-rc1）：输入建议打字后删空可恢复；采集建议采用、发送结局、运行和工具结果，默认不存正文。确认卡片支持 Y / N，允许长期授权时支持 A；提问选项支持 1–9 选择后 Y 提交。编辑正文与输入法组字不触发。当前实现与数据边界见 [RSI 同步说明](docs/RSI_MAC_SYNC_2026_10_08.md)。
 

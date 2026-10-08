@@ -114,12 +114,18 @@ final class AgentRuntime: ObservableObject, Identifiable {
     var inputSuggestionTask: Task<Void, Never>?
     var inputSuggestionEpoch = UUID()
     var feedbackLedger = AgentFeedbackLedger.shared
+    @Published var runtimeParameters: AgentRuntimeParameters?
+    var runtimeTokenBudget: AgentRuntimeTokenBudget?
+    @Published var feedbackReview: AgentFeedbackReview?
+    var feedbackAssessmentTask: Task<Void, Never>?
+    var feedbackBudgetStopReason: String?
     var feedbackRunID: UUID?
     var feedbackTurnID: UUID?
     var feedbackPreviousTurnID: UUID?
     var feedbackProvider: String?
     var feedbackModel: String?
     var feedbackRecordedTools: Set<UUID> = []
+    var feedbackHistoricalToolIDs: Set<UUID> = []
     var feedbackSuggestionID: UUID?
     var feedbackSuggestionText: String?
     var feedbackSuggestionShownAt: Date?
@@ -654,6 +660,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
         // A verifier that died with the previous process leaves `.verifying`
         // behind; put that candidate back into the verification queue.
         self.currentGoal = session.currentGoal.map { AgentGoalVerificationRelaunchPolicy.normalizedForRestore($0) }
+        if currentGoal?.continuationBudget?.activeElapsedSeconds != nil {
+            // The previous process is not executing now. Keep settled spend;
+            // an old active stamp must never bill time spent outside the app.
+            currentGoal?.continuationBudget?.segmentStartedAt = nil
+        }
         self.goalRoadmap = session.goalRoadmap
         self.goalTurnRecoveryCheckpoint = session.goalTurnRecoveryCheckpoint
         let restoredGoalPlanningState = session.goalPlanningState?.normalizedForRestore(

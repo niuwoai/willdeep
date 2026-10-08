@@ -84,6 +84,9 @@ struct AgentGoalMainLoopTests {
         let session = URLSession(configuration: configuration)
         app.agentLoopInferenceEnvironment = (.init(providerID: "openai", baseURL: "https://goal-loop.invalid/v1",
                                                   model: "gpt-4.1", apiKey: "test-placeholder"), session)
+        var parameters = AgentRuntimeParameters()
+        parameters.maxTurns = 256
+        app.agentLoopRuntimeParametersOverride = parameters
         return .init(app: app, runtime: runtime, root: root, defaults: defaults, suite: suite, token: token, session: session)
     }
 
@@ -104,9 +107,37 @@ struct AgentGoalMainLoopTests {
             + "\n\ndata: [DONE]\n\n").utf8)
     }
 
-    @Test("256 次真实文件工具后自动执行第 257 次新读取，无需用户发送继续")
-    func toolRoundBoundaryAutomaticallyDispatchesNextTurn() async throws {
+    @Test("有限 token 预算耗尽或用量未知时，真实循环不执行响应提出的写工具", arguments: [false, true])
+    func boundedUsageStopsBeforeProposedTool(reportsUsage: Bool) async throws {
         let f = try fixture(); defer { f.cleanup() }
+        f.runtime.interactionMode = .normal
+        f.runtime.currentGoal = nil
+        f.runtime.currentPlan = nil
+        f.app.agentLoopRuntimeParametersOverride?.tokenBudget = 1000
+        f.app.agentLoopRuntimeParametersOverride?.inputSuggestions = false
+        let destination = f.root.appendingPathComponent("must-not-exist.txt")
+        var requests = 0
+        GoalLoopURLProtocol.install(f.token) { _ in
+            requests += 1
+            guard requests == 1 else { throw LoopFailure.unexpectedRequest }
+            return try Self.toolResponse(1, promptTokens: reportsUsage ? 1000 : nil,
+                toolName: "write_file", customArguments: ["path": destination.path, "content": "blocked"])
+        }
+        f.start()
+        try await f.waitForIdle()
+        #expect(requests == 1)
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+        #expect(f.runtime.toolCalls.isEmpty)
+        #expect(f.runtime.pendingToolDecisions.isEmpty)
+        #expect(f.runtime.session.automaticWakeSuppressedAfterUserStop)
+        #expect(f.runtime.feedbackBudgetStopReason == (reportsUsage ? "token_budget" : "unknown_usage"))
+        #expect(f.runtime.queuedMessages.isEmpty)
+    }
+
+    @Test("参数限定的工具段结束后自动执行一次新读取，无需用户发送继续", arguments: [3, 256])
+    func toolRoundBoundaryAutomaticallyDispatchesNextTurn(limit: Int) async throws {
+        let f = try fixture(recordCount: limit + 1); defer { f.cleanup() }
+        f.app.agentLoopRuntimeParametersOverride?.maxTurns = limit
         let trace = Trace()
         var requests = 0
         var reachedContinuation = false
@@ -114,8 +145,8 @@ struct AgentGoalMainLoopTests {
         GoalLoopURLProtocol.install(f.token) { _ in
             requests += 1
             if requests == 1 { firstTurn = f.runtime.activeTurnID }
-            if requests <= 256 { return try Self.toolResponse(requests) }
-            guard requests <= 258 else { throw LoopFailure.unexpectedRequest }
+            if requests <= limit { return try Self.toolResponse(requests) }
+            guard requests <= limit + 2 else { throw LoopFailure.unexpectedRequest }
             reachedContinuation = true
             trace.check(f.runtime.activeTurnID != firstTurn, "Continuation reused the first turn ID")
             trace.check(f.runtime.currentGoal?.continuationBudget?.continuationsUsed == 1, "Continuation budget must advance once")
@@ -133,7 +164,7 @@ struct AgentGoalMainLoopTests {
             }
             trace.check(f.runtime.messages.contains { $0.source == .hostInstruction && $0.content.contains("bounded tool-call segment ended") }, "Missing host continuation notice")
             trace.check(f.runtime.messages.filter(\.isOperatorInput).count == 1, "Continuation became operator input")
-            if requests == 257 { return try Self.toolResponse(257) }
+            if requests == limit + 1 { return try Self.toolResponse(limit + 1) }
             f.app.stopAgentResponse(for: f.runtime)
             throw CancellationError()
         }
@@ -141,7 +172,7 @@ struct AgentGoalMainLoopTests {
         try await f.waitForIdle()
         #expect(trace.failures.isEmpty, "\(trace.failures.joined(separator: "\n"))")
         #expect(reachedContinuation)
-        #expect(requests == 258)
+        #expect(requests == limit + 2)
         #expect(f.runtime.pendingToolDecisions.isEmpty)
         #expect(f.runtime.queuedMessages.isEmpty)
         print("goal_main_loop_trace requests=\(requests) succeeded_tools=\(f.runtime.toolCalls.filter { $0.status == .succeeded }.count) operator_inputs=1")
@@ -154,6 +185,7 @@ struct AgentGoalMainLoopTests {
         var requests = 0
         var compressions = 0
         var budgetStart: Date?
+        var elapsedBeforeCompaction: TimeInterval = 0
         f.runtime.contextRunwayResumeCount = AgentContextRunwayPolicy.maximumAutomaticResumes
         f.app.contextCompressionSummaryOperation = { segments, _ in
             compressions += 1
@@ -163,6 +195,9 @@ struct AgentGoalMainLoopTests {
         GoalLoopURLProtocol.install(f.token) { _ in
             requests += 1
             if requests == 1 { budgetStart = f.runtime.currentGoal?.continuationBudget?.segmentStartedAt }
+            let elapsed = f.runtime.currentGoal?.continuationBudget?.elapsed(at: Date()) ?? 0
+            trace.check(elapsed >= elapsedBeforeCompaction, "Compaction reset accumulated execution time")
+            elapsedBeforeCompaction = elapsed
             if requests <= 8 {
                 if requests.isMultiple(of: 2) {
                     let chunk: [String: Any] = ["choices": [["delta": ["content":
@@ -177,7 +212,6 @@ struct AgentGoalMainLoopTests {
             guard requests <= 11 else { throw LoopFailure.unexpectedRequest }
             trace.check(compressions == 4, "Expected four real compactions")
             trace.check(f.runtime.currentGoal?.continuationBudget?.continuationsUsed == 4, "Compactions lost continuation count")
-            trace.check(f.runtime.currentGoal?.continuationBudget?.segmentStartedAt == budgetStart, "Compaction reset budget start")
             trace.check(f.runtime.contextCheckpoint?.userInputs.first?.text == "Inspect numbered records.", "Checkpoint lost original user constraint")
             trace.check(f.runtime.currentGoal?.checklist.first?.done == false, "Compaction marked unverified Goal done")
             if requests == 9 {
@@ -309,6 +343,10 @@ struct AgentGoalMainLoopTests {
         try await f.waitForIdle()
         #expect(requests == 0)
         #expect(try ledger.summary().attempts == 0)
+        #expect(try ledger.admissionPolicy().tokenLimit == 1)
+        let parameters = try #require(f.runtime.runtimeParameters)
+        try parameters.validate()
+        #expect(try AgentRuntimeParameters.decode(Data(parameters.canonical.utf8)) == parameters)
         #expect(f.runtime.currentGoal?.continuationBudget?.modelAdmissionPaused == true)
         #expect(f.app.dispatchContinuationIsSuspended(f.runtime))
         #expect(!f.app.shouldAutoCompressNow(for: f.runtime))
@@ -355,7 +393,8 @@ struct AgentGoalMainLoopTests {
         #expect(!f.runtime.isResponding)
         #expect(requests == 0)
         #expect(try ledger.summary().attempts == 0)
-        #expect(f.runtime.currentGoal?.continuationBudget?.segmentStartedAt != nil)
+        #expect(f.runtime.currentGoal?.continuationBudget?.activeElapsedSeconds != nil)
+        #expect(f.runtime.currentGoal?.continuationBudget?.segmentStartedAt == nil)
         #expect(f.runtime.currentGoal?.continuationBudget?.modelAdmissionPaused == true)
         #expect(f.runtime.messages.filter { $0.origin == .hostGenerated }.count == 1)
         #expect(f.runtime.toolCalls.isEmpty)

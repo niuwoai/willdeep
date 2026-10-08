@@ -101,6 +101,11 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if let runtime = appState.activeRuntime {
+                    AgentFeedbackReviewView(runtime: runtime)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 ComposerCard()
                 // Keep the card tied to the chat column instead of its
                 // bottom control row's intrinsic width. The control row
@@ -1111,7 +1116,7 @@ private struct ComposerCard: View {
                     onSkillCancel: { closeSkillMenu() },
                     onSkillQueryChange: { handleSkillQueryChange($0) },
                     coordinatorRef: coordinatorRef,
-                    inputSuggestion: appState.agentInputSuggestionsEnabled
+                    inputSuggestion: (appState.activeRuntime?.runtimeParameters?.inputSuggestions ?? appState.agentInputSuggestionsEnabled)
                         ? appState.activeRuntime?.inputSuggestion
                         : nil,
                     onDismissInputSuggestion: { appState.activeRuntime?.dismissInputSuggestion() },
