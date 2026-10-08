@@ -1114,7 +1114,8 @@ private struct ComposerCard: View {
                     inputSuggestion: appState.agentInputSuggestionsEnabled
                         ? appState.activeRuntime?.inputSuggestion
                         : nil,
-                    onDismissInputSuggestion: { appState.activeRuntime?.clearInputSuggestion() },
+                    onDismissInputSuggestion: { appState.activeRuntime?.dismissInputSuggestion() },
+                    onAcceptInputSuggestion: { appState.activeRuntime?.acceptInputSuggestion() },
                     slashCommandTokenRanges: { text in
                         guard text.contains("/") else { return [] }
                         return SlashCommand.recognizedTokens(

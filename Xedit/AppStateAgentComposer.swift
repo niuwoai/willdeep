@@ -169,6 +169,16 @@ extension AppState {
             runtime.activeExperts.formUnion(AgentDesignToCode.webExperts)
         }
 
+        runtime.settleInputSuggestion(sent: userText)
+        if runtime.messages.contains(where: { $0.isOperatorInput }) {
+            runtime.recordFeedback("user_followup") {
+                $0.prevTurnID = runtime.isResponding ? runtime.feedbackTurnID : runtime.feedbackPreviousTurnID
+                $0.queuedBehind = runtime.isResponding
+                $0.followupHint = AgentFeedbackClassification.hint(userText)
+                $0.textHash = AgentFeedbackEvent.hash(userText)
+                $0.textLen = userText.unicodeScalars.count
+            }
+        }
         runtime.input = ""
         runtime.pendingImages = []
         runtime.pendingTextAttachments = []

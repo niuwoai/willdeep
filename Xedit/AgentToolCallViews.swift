@@ -31,7 +31,7 @@ struct AgentToolCallCard: View {
     @State private var commandCopied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isInteractive ? 6 : 3) {
+        VStack(alignment: .leading, spacing: isAuthorizationNotice ? 0 : (isInteractive ? 6 : 3)) {
             if !isAttentionNotice {
                 HStack(spacing: 6) {
                     Image(systemName: iconName)
@@ -200,6 +200,17 @@ struct AgentToolCallCard: View {
             } else if call.toolName == "terminal_create_shortcut" {
                 terminalShortcutProtectedInputsBody
             }
+            if isAttentionNotice {
+                Text(call.status == .awaitingUserAnswer
+                     ? L10n.ToolCard.questionKeyboardHint
+                     : (alwaysAllowSignature != nil && call.status == .pendingApproval
+                        ? L10n.ToolCard.approvalAlwaysKeyboardHint
+                        : L10n.ToolCard.approvalKeyboardHint))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+            }
         }
         .padding(.horizontal, isAttentionNotice ? 0 : 7)
         .padding(.vertical, isAttentionNotice ? 0 : (isInteractive ? 7 : 4))
@@ -221,6 +232,39 @@ struct AgentToolCallCard: View {
             )
                 .stroke(borderColor, lineWidth: 1)
         )
+        .background(AgentConfirmationKeyboard(handler: handleConfirmationKey))
+    }
+
+    private func handleConfirmationKey(_ text: String) -> Bool {
+        guard isAttentionNotice, let runtime = appState.activeRuntime,
+              runtime.toolCalls.first(where: {
+                  $0.status.isBlockingForUserDecision && !AgentSerialToolApprovalQueue.contains($0)
+              })?.id == call.id,
+              runtime.pendingToolDecisions[call.id] == nil else { return false }
+        let isQuestion = call.status == .awaitingUserAnswer
+        let options = AgentInjectionDefense.sanitizeAskUserOptions(call.arguments["options"]?.stringArrayValue() ?? [])
+        let allowsAlways = call.status == .pendingApproval && alwaysAllowSignature != nil
+        guard let key = AgentConfirmationKey.parse(text, optionCount: options.count,
+                                                   isQuestion: isQuestion, allowsAlways: allowsAlways) else { return false }
+        switch key {
+        case .option(let index):
+            let option = options[index]
+            if call.arguments["multi_select"]?.boolValue() == true {
+                if selectedOptions.contains(option) { selectedOptions.remove(option) }
+                else { selectedOptions.insert(option) }
+            } else { selectedOptions = [option] }
+        case .allow:
+            if isQuestion {
+                guard canSubmitAskUser(isMultiSelect: call.arguments["multi_select"]?.boolValue() == true) else { return false }
+                submitAnswer(options: options, isMultiSelect: call.arguments["multi_select"]?.boolValue() == true)
+            } else { approveAuthorizationNotice() }
+        case .deny:
+            appState.denyAgentToolCall(id: call.id)
+            resetAskUserInputs()
+        case .alwaysAllow:
+            appState.alwaysAllowAgentToolCall(id: call.id)
+        }
+        return true
     }
 
     private var approvalDescriptor: AgentApprovalNoticeDescriptor {
@@ -1488,11 +1532,12 @@ struct AgentToolCallCard: View {
     private func singleSelectChoices(_ options: [String]) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         return VStack(alignment: .leading, spacing: 6) {
-            ForEach(options, id: \.self) { option in
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                 Button {
                     selectedOptions = [option]
                 } label: {
                     HStack(spacing: 8) {
+                        Text(String(index + 1)).monospacedDigit().foregroundStyle(.secondary)
                         Image(systemName: selectedOptions.contains(option) ? "circle.inset.filled" : "circle")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(selectedOptions.contains(option) ? palette.primaryText : palette.secondaryText)
@@ -1526,7 +1571,7 @@ struct AgentToolCallCard: View {
     private func multiSelectChoices(_ options: [String]) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         return VStack(alignment: .leading, spacing: 6) {
-            ForEach(options, id: \.self) { option in
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                 Button {
                     if selectedOptions.contains(option) {
                         selectedOptions.remove(option)
@@ -1535,6 +1580,7 @@ struct AgentToolCallCard: View {
                     }
                 } label: {
                     HStack(spacing: 8) {
+                        Text(String(index + 1)).monospacedDigit().foregroundStyle(.secondary)
                         Image(systemName: selectedOptions.contains(option) ? "checkmark.square.fill" : "square")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(selectedOptions.contains(option) ? palette.primaryText : palette.secondaryText)

@@ -139,9 +139,10 @@ struct ComposerTextEditor: NSViewRepresentable {
     /// replacement helper). Filled in inside `makeCoordinator`.
     let coordinatorRef: ComposerCoordinatorRef
     /// 回合结束后预测的用户下一句。输入框为空时替代占位文字以灰字显示，
-    /// Tab 采用、Esc 或开始打字即放弃。nil = 不显示。
+    /// Tab 采用、Esc 放弃；打字隐藏，删空恢复。nil = 不显示。
     var inputSuggestion: String? = nil
     var onDismissInputSuggestion: (() -> Void)? = nil
+    var onAcceptInputSuggestion: (() -> Void)? = nil
     /// 缓冲区里被认成斜杠命令的词（UTF-16 范围）。这些词高亮显示，回删时
     /// 整个词一起删。nil = 不识别。
     var slashCommandTokenRanges: ((String) -> [NSRange])? = nil
@@ -207,6 +208,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.placeholder = placeholder
         textView.inputSuggestion = inputSuggestion
         context.coordinator.onDismissInputSuggestion = onDismissInputSuggestion
+        context.coordinator.onAcceptInputSuggestion = onAcceptInputSuggestion
         textView.slashCommandTokenRanges = slashCommandTokenRanges
         textView.string = text
         textView.onDropAttachments = onDropAttachments
@@ -236,6 +238,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.placeholder = placeholder
         textView.inputSuggestion = inputSuggestion
         context.coordinator.onDismissInputSuggestion = onDismissInputSuggestion
+        context.coordinator.onAcceptInputSuggestion = onAcceptInputSuggestion
         textView.slashCommandTokenRanges = slashCommandTokenRanges
         textView.onDropAttachments = onDropAttachments
         // Applied before the text-sync dance below: font is independent of the
@@ -308,6 +311,7 @@ struct ComposerTextEditor: NSViewRepresentable {
         let onSkillCancel: () -> Void
         let onSkillQueryChange: (String?) -> Void
         var onDismissInputSuggestion: (() -> Void)?
+        var onAcceptInputSuggestion: (() -> Void)?
 
         // History cursor state. `historyIndex` counts back from the most
         // recent user message: 0 = newest, 1 = next-newest, etc. nil
@@ -414,10 +418,7 @@ struct ComposerTextEditor: NSViewRepresentable {
             onSlashQueryChange(currentSlashQuery(in: textView).map { "/" + $0 } ?? "")
             updateAtMenuVisibility(for: textView)
             updateSkillMenuVisibility(for: textView)
-            // 用户开始自己打字 = 不采用预测的下一句。
-            if !newValue.isEmpty, (textView as? ComposerNSTextView)?.inputSuggestion != nil {
-                onDismissInputSuggestion?()
-            }
+            // 保留已展示建议；非空缓冲区只隐藏，删空后仍可 Tab 采用。
             textView.needsDisplay = true
         }
 
@@ -511,7 +512,7 @@ struct ComposerTextEditor: NSViewRepresentable {
                 switch commandSelector {
                 case #selector(NSResponder.insertTab(_:)):
                     _ = replaceComposerText(with: suggestion)
-                    onDismissInputSuggestion?()
+                    onAcceptInputSuggestion?()
                     return true
                 case #selector(NSResponder.cancelOperation(_:)):
                     onDismissInputSuggestion?()
@@ -807,7 +808,7 @@ struct ComposerTextEditor: NSViewRepresentable {
     static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {}
 }
 
-fileprivate final class ComposerNSTextView: NSTextView {
+final class ComposerNSTextView: NSTextView {
     fileprivate weak var coordinator: ComposerTextEditor.Coordinator?
     fileprivate var placeholder: String = "" {
         didSet {
@@ -816,7 +817,7 @@ fileprivate final class ComposerNSTextView: NSTextView {
             }
         }
     }
-    fileprivate var inputSuggestion: String? {
+    var inputSuggestion: String? {
         didSet {
             if inputSuggestion != oldValue {
                 needsDisplay = true
@@ -838,7 +839,7 @@ fileprivate final class ComposerNSTextView: NSTextView {
     }
 
     /// 此刻真正显示出来的建议：输入框为空、不在输入法组字中才算。
-    fileprivate var visibleInputSuggestion: String? {
+    var visibleInputSuggestion: String? {
         guard string.isEmpty, !hasMarkedText(),
               let inputSuggestion, !inputSuggestion.isEmpty else { return nil }
         return inputSuggestion

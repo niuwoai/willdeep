@@ -1681,6 +1681,18 @@ extension AppState {
             return
         }
 
+        runtime.recordFeedback("approval_resolved") {
+            $0.tool = runtime.toolCalls[index].toolName
+            switch decision {
+            case .approved: $0.decision = "allow"
+            case .denied: $0.decision = "deny"
+            case .answered(let text):
+                $0.decision = "answered"
+                $0.textHash = AgentFeedbackEvent.hash(text)
+                $0.textLen = text.unicodeScalars.count
+            }
+        }
+
         // The safety judge consumes recent human decisions as bounded
         // few-shot context. Do not leave a fresh approval or rejection hidden
         // behind the normal 30-minute cache: the next command in this session

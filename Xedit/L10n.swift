@@ -1601,6 +1601,10 @@ nonisolated enum L10n {
             return String(format: template, a1)
         }
         static let deny = String(localized: "tool-card.deny", defaultValue: "Deny")
+        static let approvalKeyboardHint = String(localized: "tool-card.approval.keyboard", defaultValue: "Y: allow · N: deny")
+        static let goalCommandSubtitle = String(localized: "composer.goal-command", defaultValue: "Switch this chat to Goal mode")
+        static let approvalAlwaysKeyboardHint = String(localized: "tool-card.approval.keyboard-always", defaultValue: "Y: allow once · N: deny · A: always allow")
+        static let questionKeyboardHint = String(localized: "tool-card.question.keyboard", defaultValue: "1–9: select options · Y: send · N: skip")
         static let confirmRun = String(localized: "tool-card.confirm-run", defaultValue: "Confirm and Run")
         static let destructiveWarning = String(localized: "tool-card.destructive-warning", defaultValue: "This command is destructive. Confirm before it runs.")
         static let command = String(localized: "tool-card.command", defaultValue: "Command")

@@ -102,6 +102,10 @@ struct SlashCommand: Identifiable {
 
     static func builtIn(state: AppState) -> [SlashCommand] {
         let core: [SlashCommand] = [
+            SlashCommand(id: "goal", title: "/goal", subtitle: L10n.ToolCard.goalCommandSubtitle,
+                         symbol: "target") { _ in
+                state.setAgentInteractionMode(.goal)
+            },
             SlashCommand(id: "no-sandbox", title: "/no-sandbox", subtitle: L10n.SessionSandbox.disable,
                          symbol: "shield.slash", argumentMode: .optional(placeholder: L10n.SessionSandbox.prompt)) { args in
                 state.setLocalSandboxDisabled(true, text: args)

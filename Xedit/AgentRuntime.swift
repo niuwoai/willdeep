@@ -85,7 +85,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// collected into one review batch. Patch decision controls stay disabled
     /// until the tool loop seals the batch at a dependency boundary.
     @Published var collectingPatchReviewMessageIDs: Set<AgentMessage.ID> = []
-    @Published var toolCalls: [AgentToolCall] = []
+    @Published var toolCalls: [AgentToolCall] = [] {
+        didSet { recordFeedbackToolResults() }
+    }
     /// A background Worker the user pulled into the foreground: its live
     /// card stays above the composer until closed, independent of whether
     /// the parent turn is still responding. View state only — the run keeps
@@ -108,10 +110,27 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// 回合结束后预测的用户下一句，输入框为空时以灰字显示，Tab 采用。
     /// 只活在内存里，不落盘、不跨重启。
     @Published var inputSuggestion: String?
-    /// 正在进行的预测请求；新一轮开始或用户开始打字时取消。
+    /// 正在进行的预测请求；新一轮或明确放弃时取消。
     var inputSuggestionTask: Task<Void, Never>?
+    var inputSuggestionEpoch = UUID()
+    var feedbackLedger = AgentFeedbackLedger.shared
+    var feedbackRunID: UUID?
+    var feedbackTurnID: UUID?
+    var feedbackPreviousTurnID: UUID?
+    var feedbackProvider: String?
+    var feedbackModel: String?
+    var feedbackRecordedTools: Set<UUID> = []
+    var feedbackSuggestionID: UUID?
+    var feedbackSuggestionText: String?
+    var feedbackSuggestionShownAt: Date?
+    var feedbackSuggestionAccepted = false
+    var feedbackSuggestionProvider: String?
+    var feedbackSuggestionModel: String?
 
-    func clearInputSuggestion() {
+    func clearInputSuggestion(outcome: String = "suggestion_superseded") {
+        recordSuggestionFeedback(outcome)
+        resetSuggestionFeedback()
+        inputSuggestionEpoch = UUID()
         inputSuggestionTask?.cancel()
         inputSuggestionTask = nil
         if inputSuggestion != nil {
@@ -138,6 +157,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
     @Published var isResponding: Bool = false {
         didSet {
+            if !isResponding, oldValue {
+                endFeedbackRun(reason: userStoppedTurnID != nil ? "cancelled" : (lastTurnFailure == nil ? "finished" : "error"))
+            }
             // 新一轮开始，上一轮末尾预测的「下一句」就过期了。
             guard isResponding, !oldValue else { return }
             clearInputSuggestion()
@@ -578,6 +600,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
     var isPlanGateActive: Bool {
         guard interactionMode == .goal else { return false }
         guard let plan = currentPlan else { return true }
+        // A finished ordinary plan can survive switching this session to
+        // Goal mode. Without a Goal or planning task there is nothing that
+        // could release the gate; allow the explicit follow-up through the
+        // ordinary approval boundary instead of deadlocking all writes.
+        if plan.status == .done, currentGoal == nil, goalPlanningState == nil {
+            return false
+        }
         let hasIncompleteGoalChecklist = currentGoal.map {
             !$0.checklist.isEmpty && $0.checklist.contains(where: { !$0.done })
         } ?? false

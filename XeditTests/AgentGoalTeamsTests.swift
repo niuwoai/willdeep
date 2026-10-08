@@ -51,6 +51,40 @@ struct AgentGoalTeamsTests {
         return (appState, runtime)
     }
 
+    @Test("没有 Goal 和规划任务的已完成旧计划不能永久锁住显式命令")
+    func orphanCompletedPlanDoesNotDeadlockCommands() {
+        let runtime = AgentRuntime(session: AgentSession(
+            interactionMode: .goal,
+            currentPlan: AgentPlan(status: .done, summary: "old work", stepTexts: ["done"])
+        ))
+        #expect(runtime.currentGoal == nil)
+        #expect(runtime.goalPlanningState == nil)
+        #expect(!runtime.isPlanGateActive)
+        #expect(!AppState.goalPlanningGateBlocks(toolName: "run_command", arguments: [:], risk: .write, isActive: runtime.isPlanGateActive))
+        // A new Goal with no validated plan still needs evidence planning.
+        runtime.currentGoal = AgentGoal(statement: "new work", checklist: [.init(text: "verified")])
+        #expect(runtime.isPlanGateActive)
+        runtime.currentGoal = nil
+        runtime.currentPlan = nil
+        #expect(runtime.isPlanGateActive)
+    }
+
+    @Test("goal 斜杠命令就地切模式，不发送模型请求或新建会话")
+    func goalSlashSwitchesLocally() throws {
+        let (appState, runtime) = makeAppRuntime(goal: nil, isResponding: false)
+        runtime.rebindWorkspace(to: FileManager.default.temporaryDirectory.path)
+        runtime.interactionMode = .normal
+        let previousMessages = runtime.messages
+        let previousID = runtime.id
+        let command = try #require(SlashCommand.builtIn(state: appState).first(where: { $0.id == "goal" }))
+        #expect(command.argumentMode == .none)
+        command.action("")
+        #expect(runtime.interactionMode == .goal)
+        #expect(appState.activeRuntime?.id == previousID)
+        #expect(runtime.messages == previousMessages)
+        #expect(!runtime.isResponding)
+    }
+
     private func validMemberReport(_ conclusion: String = "结论") -> String {
         let payload = AgentGoalPlanningMemberPayload(
             conclusion: conclusion,

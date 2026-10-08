@@ -62,6 +62,7 @@ extension AppState {
             return
         }
         // This turn just went live (isResponding was set true by the caller).
+        runtime.beginFeedbackRun(turnID: turnID, provider: configuration.providerID, model: configuration.model)
         // Refresh the same-checkout collision hint so the foreground composer
         // reflects a background session now working in its directory.
         refreshAgentWorkspaceCollision()

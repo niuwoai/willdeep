@@ -40,6 +40,9 @@ extension AppState {
         guard !configurations.isEmpty else { return }
 
         let runtimeID = runtime.id
+        let epoch = runtime.inputSuggestionEpoch
+        let startedAt = Date()
+        runtime.recordFeedback("suggestion_requested")
         runtime.inputSuggestionTask = Task { [weak self, weak runtime] in
             let result = await AgentInputSuggestion.request(
                 configurations: configurations,
@@ -48,14 +51,22 @@ extension AppState {
             await MainActor.run {
                 guard let self else { return }
                 result.records.forEach { self.recordAuxiliaryModelRequest($0, runtimeID: runtimeID) }
+                if let runtime {
+                    runtime.recordFeedback(Task.isCancelled ? "suggestion_expired" : (result.suggestion == nil ? (result.records.contains(where: \.succeeded) ? "suggestion_none" : "suggestion_failed") : "suggestion_generated")) {
+                        $0.elapsedMS = Int(Date().timeIntervalSince(startedAt) * 1000)
+                        $0.provider = result.records.last?.providerID
+                        $0.model = result.records.last?.modelID
+                    }
+                }
                 guard !Task.isCancelled,
                       let runtime,
+                      runtime.inputSuggestionEpoch == epoch,
                       let suggestion = result.suggestion,
                       self.agentInputSuggestionsEnabled,
                       !runtime.isResponding,
                       runtime.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       runtime.messages.last?.id == lastMessageID else { return }
-                runtime.inputSuggestion = suggestion
+                runtime.installInputSuggestion(suggestion, provider: result.records.last?.providerID, model: result.records.last?.modelID)
                 runtime.inputSuggestionTask = nil
             }
         }
