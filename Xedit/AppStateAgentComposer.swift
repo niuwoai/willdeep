@@ -151,6 +151,7 @@ extension AppState {
         // starts a real turn, remove its synthetic cards before any normal
         // activity accounting or approval routing runs.
         runtime.clearLocalPanelPreview()
+        runtime.dismissFeedbackReviewForNewInput()
 
         let prompt = composeAttachedPrompt(
             userText: userText,

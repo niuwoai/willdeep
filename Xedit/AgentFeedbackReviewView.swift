@@ -72,37 +72,20 @@ struct AgentFeedbackReviewCard: View {
 
     private func feedbackContent(_ review: AgentFeedbackReview) -> some View {
         VStack(alignment: .leading, spacing: FeedbackDesign.sectionSpacing) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: FeedbackDesign.headerSpacing) {
-                    feedbackHeading(review)
-                    Spacer(minLength: 0)
-                    Divider().frame(height: FeedbackDesign.actionDividerHeight)
-                    feedbackActions(review)
-                }
-                VStack(alignment: .leading, spacing: FeedbackDesign.actionSpacing) {
-                    feedbackHeading(review)
-                    feedbackActions(review)
-                }
+            AgentFeedbackFlowLayout(spacing: FeedbackDesign.headerSpacing, trailingLastItem: true) {
+                feedbackHeading(review)
+                feedbackActions(review)
             }
             assessmentStatus(review)
         }
     }
 
     private func feedbackActions(_ review: AgentFeedbackReview) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: FeedbackDesign.actionSpacing) {
-                dispositionButtons
-                skipButton
-                Divider().frame(height: FeedbackDesign.buttonDividerHeight)
-                assessmentButton(review)
-            }
-            VStack(alignment: .leading, spacing: FeedbackDesign.actionSpacing) {
-                HStack(spacing: FeedbackDesign.actionSpacing) {
-                    dispositionButtons
-                    skipButton
-                }
-                assessmentButton(review)
-            }
+        AgentFeedbackFlowLayout(spacing: FeedbackDesign.actionSpacing) {
+            acceptButton
+            needsChangesButton
+            skipButton
+            assessmentButton(review)
         }
     }
 
@@ -111,23 +94,11 @@ struct AgentFeedbackReviewCard: View {
             Text(L10n.RSI.feedbackTitle)
                 .font(.system(size: FeedbackDesign.titleSize, weight: .semibold))
                 .foregroundStyle(.primary)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: FeedbackDesign.labelSpacing) {
-                    toolBadges(review)
-                    evidenceBadge(L10n.RSI.unverified, symbol: "info.circle")
-                }
-                VStack(alignment: .leading, spacing: FeedbackDesign.labelSpacing) {
-                    toolBadges(review)
-                    evidenceBadge(L10n.RSI.unverified, symbol: "info.circle")
-                }
+            AgentFeedbackFlowLayout(spacing: FeedbackDesign.labelSpacing) {
+                evidenceBadge(L10n.RSI.successes(review.toolSuccesses), symbol: "checkmark.circle")
+                evidenceBadge(L10n.RSI.failures(review.toolFailures), symbol: "xmark.circle")
+                evidenceBadge(L10n.RSI.unverified, symbol: "info.circle")
             }
-        }
-    }
-
-    private func toolBadges(_ review: AgentFeedbackReview) -> some View {
-        HStack(spacing: FeedbackDesign.labelSpacing) {
-            evidenceBadge(L10n.RSI.successes(review.toolSuccesses), symbol: "checkmark.circle")
-            evidenceBadge(L10n.RSI.failures(review.toolFailures), symbol: "xmark.circle")
         }
     }
 
@@ -140,19 +111,6 @@ struct AgentFeedbackReviewCard: View {
             .background(Color.primary.opacity(FeedbackDesign.buttonBackgroundOpacity),
                         in: RoundedRectangle(cornerRadius: FeedbackDesign.codeRadius))
             .fixedSize()
-    }
-
-    private var dispositionButtons: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: FeedbackDesign.actionSpacing) {
-                acceptButton
-                needsChangesButton
-            }
-            VStack(alignment: .leading, spacing: FeedbackDesign.actionSpacing) {
-                acceptButton
-                needsChangesButton
-            }
-        }
     }
 
     private var acceptButton: some View {
@@ -294,8 +252,6 @@ private enum FeedbackDesign {
     static let cardRadius: CGFloat = 8
     static let railWidth: CGFloat = 3
     static let railOpacity = 0.35
-    static let actionDividerHeight: CGFloat = 44
-    static let buttonDividerHeight: CGFloat = 24
     static let badgeHorizontalInset: CGFloat = 7
     static let badgeVerticalInset: CGFloat = 5
     static let sectionSpacing: CGFloat = 12

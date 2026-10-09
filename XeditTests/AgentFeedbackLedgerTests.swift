@@ -6,6 +6,45 @@ import Testing
 @Suite("RSI 本机反馈", .serialized)
 @MainActor
 struct AgentFeedbackLedgerTests {
+    @Test("新输入收起旧卡片，取消模型审阅但不伪造人工评分")
+    func followupDismissesReviewWithoutJudgment() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let runtime = AgentRuntime(session: AgentSession())
+        runtime.feedbackLedger = AgentFeedbackLedger(directory: directory)
+        runtime.beginFeedbackRun(turnID: UUID(), provider: "fixture", model: "model")
+        runtime.endFeedbackRun(reason: "finished")
+        #expect(runtime.feedbackReview != nil)
+        let assessment = Task<Void, Never> {}
+        runtime.feedbackAssessmentTask = assessment
+        runtime.dismissFeedbackReviewForNewInput()
+        #expect(runtime.feedbackReview == nil)
+        #expect(runtime.feedbackAssessmentTask == nil)
+        #expect(assessment.isCancelled)
+        runtime.feedbackLedger.flush()
+        #expect(try rows(directory).allSatisfy { $0["judgment_source"] == nil })
+    }
+
+    @Test("排队的新输入不能让旧回合结束时复活卡片，新回合仍可反馈")
+    func queuedFollowupRetiresOnlyPreviousTurn() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let runtime = AgentRuntime(session: AgentSession())
+        runtime.feedbackLedger = AgentFeedbackLedger(directory: directory)
+        let previousTurn = UUID()
+        runtime.beginFeedbackRun(turnID: previousTurn, provider: "fixture", model: "model")
+        runtime.dismissFeedbackReviewForNewInput()
+        runtime.endFeedbackRun(reason: "finished")
+        #expect(runtime.feedbackReview == nil)
+        #expect(runtime.feedbackPreviousTurnID == previousTurn)
+        let nextTurn = UUID()
+        runtime.beginFeedbackRun(turnID: nextTurn, provider: "fixture", model: "model")
+        runtime.endFeedbackRun(reason: "finished")
+        #expect(runtime.feedbackReview?.turnID == nextTurn)
+        runtime.feedbackLedger.flush()
+        #expect(try rows(directory).filter { $0["signal"] as? String == "run_finished" }.count == 2)
+    }
+
     @Test("模型辅助不能冒充人工通过，结论关联原运行和参数")
     func separateJudgments() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

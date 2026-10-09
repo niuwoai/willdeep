@@ -1,6 +1,15 @@
 import Foundation
 
 extension AgentRuntime {
+    /// Retire the previous card without inventing a human rating. Remember an
+    /// in-flight turn too, so queued input cannot resurrect its card at finish.
+    func dismissFeedbackReviewForNewInput() {
+        feedbackAssessmentTask?.cancel()
+        feedbackAssessmentTask = nil
+        if feedbackReview != nil { feedbackReview = nil }
+        feedbackReviewSupersededTurnID = feedbackTurnID
+    }
+
     func recordFeedback(_ signal: String, configure: (inout AgentFeedbackEvent) -> Void = { _ in }) {
         var event = AgentFeedbackEvent(sessionID: id, signal: signal)
         event.runID = feedbackRunID
@@ -14,9 +23,8 @@ extension AgentRuntime {
     func beginFeedbackRun(turnID: UUID, provider: String, model: String) {
         guard feedbackTurnID != turnID else { return }
         if feedbackRunID != nil { endFeedbackRun(reason: "replaced") }
-        feedbackAssessmentTask?.cancel()
-        feedbackAssessmentTask = nil
-        feedbackReview = nil
+        dismissFeedbackReviewForNewInput()
+        feedbackReviewSupersededTurnID = nil
         feedbackBudgetStopReason = nil
         feedbackRunID = UUID()
         feedbackTurnID = turnID
@@ -40,7 +48,8 @@ extension AgentRuntime {
             budget.segmentStartedAt = nil
             currentGoal?.continuationBudget = budget
         }
-        if let runID = feedbackRunID, let turnID = feedbackTurnID {
+        if let runID = feedbackRunID, let turnID = feedbackTurnID,
+           turnID != feedbackReviewSupersededTurnID {
             let calls = toolCalls.filter { feedbackRecordedTools.contains($0.id) && !feedbackHistoricalToolIDs.contains($0.id) }
             feedbackReview = AgentFeedbackReview(id: runID, turnID: turnID,
                 provider: feedbackProvider, model: feedbackModel,

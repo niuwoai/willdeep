@@ -117,6 +117,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var runtimeParameters: AgentRuntimeParameters?
     var runtimeTokenBudget: AgentRuntimeTokenBudget?
     @Published var feedbackReview: AgentFeedbackReview?
+    var feedbackReviewSupersededTurnID: UUID?
     var feedbackAssessmentTask: Task<Void, Never>?
     var feedbackBudgetStopReason: String?
     var feedbackRunID: UUID?
