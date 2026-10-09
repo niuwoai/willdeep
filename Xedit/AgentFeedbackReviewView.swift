@@ -209,17 +209,48 @@ struct AgentFeedbackReviewCard: View {
             .frame(height: FeedbackDesign.configurationHeight)
             .background(Color.primary.opacity(FeedbackDesign.codeBackgroundOpacity), in: RoundedRectangle(cornerRadius: FeedbackDesign.codeRadius))
             HStack(spacing: FeedbackDesign.actionSpacing) {
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(parameters.canonical, forType: .string)
-                } label: {
-                    Label(L10n.RSI.copyConfiguration, systemImage: "doc.on.doc")
-                }
+                AgentConfigurationCopyButton(text: parameters.canonical)
                 Button { onExport(parameters) } label: {
                     Label(L10n.RSI.exportConfiguration, systemImage: "square.and.arrow.up")
                 }
             }
             .buttonStyle(AgentFeedbackButtonStyle())
+        }
+    }
+}
+
+private struct AgentConfigurationCopyButton: View {
+    let text: String
+    @State private var copySucceeded: Bool?
+    @State private var attemptID = UUID()
+    private static let feedbackDuration: Duration = .seconds(2)
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            copySucceeded = NSPasteboard.general.setString(text, forType: .string)
+            attemptID = UUID()
+        } label: {
+            Label(title, systemImage: copySucceeded == true ? "checkmark" : copySucceeded == false ? "exclamationmark.circle" : "doc.on.doc")
+        }
+        .accessibilityIdentifier("agent.rsi.copy-configuration")
+        .task(id: attemptID) {
+            guard copySucceeded == true else { return }
+            do { try await Task.sleep(for: Self.feedbackDuration) }
+            catch { return }
+            copySucceeded = nil
+        }
+        .onChange(of: text) { _ in
+            copySucceeded = nil
+            attemptID = UUID()
+        }
+    }
+
+    private var title: String {
+        switch copySucceeded {
+        case true: L10n.RSI.configurationCopied
+        case false: L10n.RSI.configurationCopyFailed
+        case nil: L10n.RSI.copyConfiguration
         }
     }
 }

@@ -23,6 +23,8 @@ extension L10n {
         static let assessmentFailed = String(localized: "rsi.feedback.assessment-failed", defaultValue: "Model review was unavailable. You can still give feedback.")
         static let runtimeConfiguration = String(localized: "rsi.runtime.configuration", defaultValue: "Runtime configuration")
         static let copyConfiguration = String(localized: "rsi.runtime.copy", defaultValue: "Copy configuration")
+        static let configurationCopied = String(localized: "rsi.runtime.copied", defaultValue: "Copied")
+        static let configurationCopyFailed = String(localized: "rsi.runtime.copy-failed", defaultValue: "Copy failed, try again")
         static let exportConfiguration = String(localized: "rsi.runtime.export", defaultValue: "Export configuration")
         static let exportFailed = String(localized: "rsi.runtime.export-failed", defaultValue: "Could not export the runtime configuration.")
         static func evidence(successes: Int, failures: Int) -> String {
