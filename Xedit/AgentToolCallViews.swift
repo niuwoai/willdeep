@@ -200,17 +200,6 @@ struct AgentToolCallCard: View {
             } else if call.toolName == "terminal_create_shortcut" {
                 terminalShortcutProtectedInputsBody
             }
-            if isAttentionNotice {
-                Text(call.status == .awaitingUserAnswer
-                     ? L10n.ToolCard.questionKeyboardHint
-                     : (alwaysAllowSignature != nil && call.status == .pendingApproval
-                        ? L10n.ToolCard.approvalAlwaysKeyboardHint
-                        : L10n.ToolCard.approvalKeyboardHint))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
-            }
         }
         .padding(.horizontal, isAttentionNotice ? 0 : 7)
         .padding(.vertical, isAttentionNotice ? 0 : (isInteractive ? 7 : 4))
@@ -740,7 +729,7 @@ struct AgentToolCallCard: View {
                     Button {
                         appState.denyAgentToolCall(id: call.id)
                     } label: {
-                        approvalActionLabel(descriptor.declineTitle, systemImage: "xmark")
+                        approvalActionLabel(descriptor.declineTitle, systemImage: "xmark", shortcut: .deny)
                     }
                     .buttonStyle(
                         AgentApprovalSecondaryButtonStyle(
@@ -759,8 +748,15 @@ struct AgentToolCallCard: View {
                     goalAuthorizationButton
                 }
                 if alwaysAllowSignature != nil {
-                    Button("以后允许同类操作") {
+                    Button {
                         appState.alwaysAllowAgentToolCall(id: call.id)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(L10n.ToolCard.alwaysAllow)
+                            Text(AgentConfirmationKey.alwaysAllow.displayLabel)
+                                .monospaced()
+                                .opacity(0.75)
+                        }
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 10, weight: .medium))
@@ -777,7 +773,7 @@ struct AgentToolCallCard: View {
         Button {
             approveAuthorizationNotice()
         } label: {
-            approvalActionLabel(descriptor.approveTitle, systemImage: "arrow.right")
+            approvalActionLabel(descriptor.approveTitle, systemImage: "arrow.right", shortcut: .allow)
         }
         .buttonStyle(
             AgentApprovalPrimaryButtonStyle(
@@ -1112,9 +1108,16 @@ struct AgentToolCallCard: View {
 
     private func approvalActionLabel(
         _ title: String,
-        systemImage: String
+        systemImage: String,
+        shortcut: AgentConfirmationKey,
+        shortcutFirst: Bool = false
     ) -> some View {
-        Label(title, systemImage: systemImage)
+        AgentDecisionActionLabel(
+            title: title,
+            systemImage: systemImage,
+            shortcut: shortcut.displayLabel,
+            shortcutFirst: shortcutFirst
+        )
             .font(.system(size: 13, weight: .semibold))
             .lineLimit(1)
             .frame(
@@ -1341,7 +1344,7 @@ struct AgentToolCallCard: View {
                     appState.denyAgentToolCall(id: call.id)
                     resetAskUserInputs()
                 } label: {
-                    approvalActionLabel(L10n.ToolCard.askUserSkip, systemImage: "xmark")
+                    approvalActionLabel(L10n.ToolCard.askUserSkip, systemImage: "xmark", shortcut: .deny, shortcutFirst: true)
                 }
                 .buttonStyle(
                     AgentApprovalSecondaryButtonStyle(
@@ -1355,7 +1358,7 @@ struct AgentToolCallCard: View {
                 Button {
                     submitAnswer(options: options, isMultiSelect: isMultiSelect)
                 } label: {
-                    approvalActionLabel(L10n.ToolCard.askUserSend, systemImage: "arrow.right")
+                    approvalActionLabel(L10n.ToolCard.askUserSend, systemImage: "arrow.right", shortcut: .allow, shortcutFirst: true)
                 }
                 .buttonStyle(
                     AgentApprovalPrimaryButtonStyle(

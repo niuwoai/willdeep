@@ -4,6 +4,15 @@ import SwiftUI
 nonisolated enum AgentConfirmationKey: Equatable {
     case allow, deny, alwaysAllow, option(Int)
 
+    var displayLabel: String {
+        switch self {
+        case .allow: "Y"
+        case .deny: "N"
+        case .alwaysAllow: "A"
+        case .option(let index): String(index + 1)
+        }
+    }
+
     static func parse(_ text: String, optionCount: Int, isQuestion: Bool, allowsAlways: Bool) -> Self? {
         if isQuestion, let number = Int(text), (1...9).contains(number), number <= optionCount {
             return .option(number - 1)

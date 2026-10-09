@@ -75,17 +75,18 @@ final class AgentChatSelectionPluginMenuPayload: NSObject {
     }
 }
 
-/// 选区气泡里的一项：内置「添加到任务」，或插件经 `menus["chat.selection"]` 贡献的动作。
+/// 选区气泡里的一项：内置「添加到任务」「复制」，或插件贡献的动作。
 struct AgentChatSelectionActionItem {
     let title: String
     /// 插件项带上来源；内置项为 nil。
     let plugin: (pluginID: AgentPluginID, commandID: AgentPluginCommandID)?
+    var isCopy = false
 }
 
 /// 气泡与右键菜单共用的条目来源。两个入口列出来的动作必须一模一样，
 /// 所以只有这一处在拼装。
 enum AgentChatSelectionActionCatalog {
-    /// 内置「添加到任务」打头，后面接插件贡献的项。
+    /// 内置「添加到任务」「复制」打头，后面接插件贡献的项。
     static func items() -> [AgentChatSelectionActionItem] {
         let builtIn = AgentChatSelectionActionItem(title: L10n.AgentSelection.addToTask, plugin: nil)
         let pluginItems = AgentPluginRegistry.shared
@@ -99,7 +100,8 @@ enum AgentChatSelectionActionCatalog {
                     plugin: (resolved.pluginID, resolved.command.id)
                 )
             }
-        return [builtIn] + pluginItems
+        let copy = AgentChatSelectionActionItem(title: L10n.AgentSelection.copy, plugin: nil, isCopy: true)
+        return [builtIn, copy] + pluginItems
     }
 
     /// 把同一批条目摆进右键菜单。内置项的 representedObject 是选中的原文，
@@ -111,13 +113,17 @@ enum AgentChatSelectionActionCatalog {
         builtInAction: Selector,
         pluginAction: Selector
     ) {
+        // 使用选区快照替代原生复制项，避免右键菜单出现两个「复制」。
+        for existingItem in menu.items where existingItem.action == #selector(NSText.copy(_:)) {
+            menu.removeItem(existingItem)
+        }
         for item in items() {
             let menuItem = NSMenuItem(
                 title: item.title,
-                action: item.plugin == nil ? builtInAction : pluginAction,
+                action: item.isCopy ? #selector(AgentChatSelectionCopyAction.copySelection(_:)) : item.plugin == nil ? builtInAction : pluginAction,
                 keyEquivalent: ""
             )
-            menuItem.target = target
+            menuItem.target = item.isCopy ? AgentChatSelectionCopyAction.shared : target
             if let plugin = item.plugin {
                 menuItem.representedObject = AgentChatSelectionPluginMenuPayload(
                     text: selectedText,
@@ -130,6 +136,24 @@ enum AgentChatSelectionActionCatalog {
             menuItem.isEnabled = true
             menu.addItem(menuItem)
         }
+    }
+}
+
+/// 复制气泡出场时的选区快照，避免点击菜单后的焦点变化丢失原文。
+final class AgentChatSelectionCopyAction: NSObject {
+    static let shared = AgentChatSelectionCopyAction()
+
+    static func write(_ text: String, to pasteboard: NSPasteboard = .general) -> Bool {
+        let plain = AgentCopyTextSanitizer.restoringMarkdownListMarkers(
+            AgentCopyTextSanitizer.sanitize(text)
+        )
+        pasteboard.clearContents()
+        return pasteboard.setString(plain, forType: .string)
+    }
+
+    @objc func copySelection(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String else { return }
+        if !Self.write(text) { NSSound.beep() }
     }
 }
 
@@ -539,6 +563,15 @@ final class AgentChatSelectionActionPresenter {
         let actionView = AgentChatSelectionActionView(items: AgentChatSelectionActionCatalog.items())
         actionView.onSelect = { [weak self] item in
             guard let self, let selectedText = self.selectedText else { return }
+            if item.isCopy {
+                let succeeded = AgentChatSelectionCopyAction.write(selectedText)
+                self.showResult(
+                    title: succeeded ? L10n.MessageFooter.copied : L10n.RSI.configurationCopyFailed,
+                    succeeded: succeeded,
+                    revision: self.revision
+                )
+                return
+            }
             guard let plugin = item.plugin else {
                 self.dismiss()
                 self.onAddSelectionToTask?(selectedText)

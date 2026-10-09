@@ -177,6 +177,7 @@ nonisolated enum L10n {
     }
 
     enum AgentSelection {
+        static let copy = String(localized: "Copy", defaultValue: "Copy")
         static let addToConversation = String(localized: "agent-selection.add-to-conversation", defaultValue: "Add to Conversation")
         static let addToTask = String(localized: "agent-selection.add-to-task", defaultValue: "Add to Task")
         static let askInSidebar = String(localized: "agent-selection.ask-in-sidebar", defaultValue: "Ask in Side Agent")

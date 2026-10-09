@@ -1185,9 +1185,12 @@ struct AgentChatHistoryRendererGoalTests {
         #expect(items.first?.title == L10n.AgentSelection.addToTask)
         #expect(items.first?.plugin == nil)
         // 插件项只能接在后面，不能插到内置项前面。
-        #expect(items.dropFirst().allSatisfy { $0.plugin != nil })
+        #expect(items[1].title == L10n.AgentSelection.copy)
+        #expect(items[1].isCopy)
+        #expect(items.dropFirst(2).allSatisfy { $0.plugin != nil })
 
         let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: L10n.AgentSelection.copy, action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
         AgentChatSelectionActionCatalog.appendMenuItems(
             to: menu,
             selectedText: "选中的原文",
@@ -1198,6 +1201,18 @@ struct AgentChatHistoryRendererGoalTests {
         #expect(menu.items.map(\.title) == items.map(\.title))
         #expect(menu.items.first?.representedObject as? String == "选中的原文")
         #expect(menu.items.first?.action == Selector(("builtInActionForTesting:")))
+        #expect(menu.items[1].representedObject as? String == "选中的原文")
+        #expect(menu.items[1].action != menu.items.first?.action)
+    }
+
+    @Test("selection copy preserves multiline snapshot without touching the general clipboard")
+    @MainActor
+    func selectionCopyWritesSnapshot() {
+        let pasteboard = NSPasteboard(name: .init("selection-copy-test-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        let snapshot = "harbor.vibapp.net:30083/tokenhub/tokenhub:0.258.0-rc2\n第二行"
+        #expect(AgentChatSelectionCopyAction.write(snapshot, to: pasteboard))
+        #expect(pasteboard.string(forType: .string) == snapshot)
     }
 
     @Test("worker speech hosts its bubble on the window, the transcript keeps it inline")
@@ -1308,6 +1323,7 @@ struct AgentChatHistoryRendererGoalTests {
 
         let view = AgentChatSelectionActionView(items: [
             AgentChatSelectionActionItem(title: "添加到任务", plugin: nil),
+            AgentChatSelectionActionItem(title: L10n.AgentSelection.copy, plugin: nil, isCopy: true),
             AgentChatSelectionActionItem(title: "收藏", plugin: nil),
             AgentChatSelectionActionItem(title: "一句话记待办", plugin: nil),
         ])
@@ -1317,7 +1333,7 @@ struct AgentChatHistoryRendererGoalTests {
         // 把 hover 打在中间那一项上：这张图要同时验分隔线和逐项高亮。
         let stack = try #require(view.subviews.compactMap { $0 as? NSStackView }.first)
         let buttons = stack.arrangedSubviews.compactMap { $0 as? NSButton }
-        #expect(buttons.count == 3)
+        #expect(buttons.count == 4)
         let hovered = try #require(buttons.dropFirst().first)
         let enter = try #require(
             NSEvent.enterExitEvent(
