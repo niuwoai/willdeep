@@ -247,6 +247,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// one chat is restored when returning to that chat without leaking
     /// into unrelated conversations.
     var sidePanelState: AgentSidePanelState
+    /// User-selected execution preference, independent of stale panel snapshots.
+    var prefersVisibleTerminal: Bool
     /// When the user pinned this session to the global pinned section.
     /// Nil = not pinned. We store the timestamp (not a bool) so pinned
     /// conversations across every workspace can be ordered
@@ -333,6 +335,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         documentTaskMode: AgentDocumentTaskMode = .automatic,
         redactSensitiveAttachmentContent: Bool = true,
         sidePanelState: AgentSidePanelState = .empty,
+        prefersVisibleTerminal: Bool = false,
         pinnedAt: Date? = nil,
         archivedAt: Date? = nil,
         titleIsUserSet: Bool = false,
@@ -390,6 +393,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.documentTaskMode = documentTaskMode
         self.redactSensitiveAttachmentContent = redactSensitiveAttachmentContent
         self.sidePanelState = sidePanelState
+        self.prefersVisibleTerminal = prefersVisibleTerminal
         self.pinnedAt = pinnedAt
         self.archivedAt = archivedAt
         self.titleIsUserSet = titleIsUserSet
@@ -511,6 +515,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
+        case prefersVisibleTerminal
         case prefersSubagents, sandboxEnabled
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
@@ -609,6 +614,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.documentTaskMode = try c.decodeIfPresent(AgentDocumentTaskMode.self, forKey: .documentTaskMode) ?? .automatic
         self.redactSensitiveAttachmentContent = try c.decodeIfPresent(Bool.self, forKey: .redactSensitiveAttachmentContent) ?? true
         self.sidePanelState = try c.decodeIfPresent(AgentSidePanelState.self, forKey: .sidePanelState) ?? .empty
+        self.prefersVisibleTerminal = try c.decodeIfPresent(Bool.self, forKey: .prefersVisibleTerminal) ?? false
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         self.titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false

@@ -85,6 +85,32 @@ struct AgentGoalTeamsTests {
         #expect(!runtime.isResponding)
     }
 
+    @Test("goal 命令保留已有正文且不自动发送", arguments: [
+        "/goal 修复登录问题",
+        "/goal\n修复登录问题\n保留第二行与 emoji 🧪",
+        "/goal\t修复登录问题",
+    ])
+    func goalSlashPreservesDraft(input: String) throws {
+        let (appState, runtime) = makeAppRuntime(goal: nil, isResponding: false)
+        runtime.rebindWorkspace(to: FileManager.default.temporaryDirectory.path)
+        runtime.interactionMode = .normal
+        let previousMessages = runtime.messages
+        let previousID = runtime.id
+        let invocation = try #require(SlashCommand.invocation(
+            in: input, commands: SlashCommand.builtIn(state: appState)
+        ))
+        // Match the palette/submit path: it consumes the input before the action.
+        appState.agentInput = ""
+        invocation.command.action(invocation.args)
+
+        let expectedDraft = String(input.dropFirst("/goal".count + 1))
+        #expect(runtime.input == expectedDraft)
+        #expect(runtime.interactionMode == .goal)
+        #expect(appState.activeRuntime?.id == previousID)
+        #expect(runtime.messages == previousMessages)
+        #expect(!runtime.isResponding)
+    }
+
     private func validMemberReport(_ conclusion: String = "结论") -> String {
         let payload = AgentGoalPlanningMemberPayload(
             conclusion: conclusion,

@@ -53,38 +53,21 @@ struct AgentToolApprovalNotifierTests {
         #expect(body?.contains("edit_file") == false)
     }
 
-    @Test("background job notifications only interrupt for unseen failures")
-    func backgroundJobNotificationPolicy() {
-        let noisyStatuses: [AgentBackgroundJob.Status] = [
+    @Test("job outcomes never interrupt agent recovery with a system banner", arguments: [false, true])
+    func backgroundJobNotificationPolicy(isAppActive: Bool) {
+        let statuses: [AgentBackgroundJob.Status] = [
             .running,
             .completed,
             .killed,
-        ]
-        for status in noisyStatuses {
-            #expect(
-                !AgentToolApprovalNotifier.shouldNotifyJobFinished(
-                    status: status,
-                    isAppActive: false
-                )
-            )
-        }
-
-        let actionableStatuses: [AgentBackgroundJob.Status] = [
             .failed,
             .timedOut,
             .launchFailed,
         ]
-        for status in actionableStatuses {
-            #expect(
-                AgentToolApprovalNotifier.shouldNotifyJobFinished(
-                    status: status,
-                    isAppActive: false
-                )
-            )
+        for status in statuses {
             #expect(
                 !AgentToolApprovalNotifier.shouldNotifyJobFinished(
                     status: status,
-                    isAppActive: true
+                    isAppActive: isAppActive
                 )
             )
         }

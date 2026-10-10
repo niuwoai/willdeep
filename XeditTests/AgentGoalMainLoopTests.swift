@@ -58,6 +58,21 @@ struct AgentGoalMainLoopTests {
 
     private enum LoopFailure: Error { case timeout, unexpectedRequest }
 
+    private static func requestJSON(_ request: URLRequest) throws -> [String: Any] {
+        var body = request.httpBody ?? Data()
+        if body.isEmpty, let stream = request.httpBodyStream {
+            stream.open(); defer { stream.close() }
+            var buffer = [UInt8](repeating: 0, count: 4_096)
+            while true {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                body.append(contentsOf: buffer.prefix(count))
+                guard body.count < 10_000_000 else { throw LoopFailure.unexpectedRequest }
+            }
+        }
+        return try JSONSerialization.jsonObject(with: body) as? [String: Any] ?? [:]
+    }
+
     func fixture(recordCount: Int = 257) throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("goal-main-loop-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -134,6 +149,105 @@ struct AgentGoalMainLoopTests {
         #expect(f.runtime.queuedMessages.isEmpty)
     }
 
+    @Test("普通主 Agent 跨越轮数检查点继续，且不重置本轮预算")
+    func ordinaryRootContinuesWithProgress() async throws {
+        let f = try fixture(recordCount: 12); defer { f.cleanup() }
+        f.runtime.interactionMode = .normal
+        f.runtime.currentGoal = nil
+        f.runtime.currentPlan = nil
+        f.app.agentLoopRuntimeParametersOverride?.maxTurns = 3
+        f.runtime.applyPanelExecutionPreference(from: [.terminal])
+        var requests = 0
+        var firstTurn: UUID?
+        let trace = Trace()
+        GoalLoopURLProtocol.install(f.token) { request in
+            requests += 1
+            if requests == 1 { firstTurn = f.runtime.activeTurnID }
+            let body = try Self.requestJSON(request)
+            let messages = body["messages"] as? [[String: Any]] ?? []
+            trace.check(messages.first?["content"] as? String != nil, "Missing system prompt")
+            trace.check((messages.first?["content"] as? String)?.contains(AgentPanelStateMention.visibleTerminalExecutionInstruction) == true,
+                        "Visible terminal preference disappeared across a root checkpoint")
+            trace.check(String(describing: body["tools"]).contains("terminal_send_command"), "Terminal tools are not loaded")
+            trace.check(f.runtime.activeTurnID == firstTurn, "Root continuation reset the turn")
+            if requests <= 10 { return try Self.toolResponse(requests) }
+            guard requests == 11 else { throw LoopFailure.unexpectedRequest }
+            return Data("data: {\"choices\":[{\"delta\":{\"content\":\"Finished reading ten records.\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n".utf8)
+        }
+        f.start()
+        try await f.waitForIdle()
+        #expect(requests == 11)
+        #expect(f.runtime.toolCalls.count == 10)
+        #expect(f.runtime.feedbackBudgetStopReason != "no_progress")
+        #expect(trace.failures.isEmpty)
+    }
+
+    @Test("普通主 Agent 重复同一成功读取会暂停，不能靠新工具 ID 空转")
+    func ordinaryRootPausesRepeatedReads() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        f.runtime.interactionMode = .normal
+        f.runtime.currentGoal = nil
+        f.runtime.currentPlan = nil
+        f.app.agentLoopRuntimeParametersOverride?.maxTurns = 3
+        var requests = 0
+        GoalLoopURLProtocol.install(f.token) { _ in
+            requests += 1
+            guard requests <= 6 else { throw LoopFailure.unexpectedRequest }
+            return try Self.toolResponse(requests, customArguments: [
+                "path": "records.txt", "offset": 1, "limit": 1,
+            ])
+        }
+        f.start()
+        try await f.waitForIdle()
+        #expect(requests == 6)
+        #expect(f.runtime.feedbackBudgetStopReason == "no_progress")
+        #expect(f.runtime.session.automaticWakeSuppressedAfterUserStop)
+        #expect(f.runtime.queuedMessages.isEmpty)
+    }
+
+    @Test("Goal 自动交接后不会把同一读取重新计为新进展")
+    func goalHandoffDoesNotForgetRepeatedResults() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        f.app.agentLoopRuntimeParametersOverride?.maxTurns = 3
+        var requests = 0
+        GoalLoopURLProtocol.install(f.token) { _ in
+            requests += 1
+            guard requests <= 6 else { throw LoopFailure.unexpectedRequest }
+            return try Self.toolResponse(requests, customArguments: [
+                "path": "records.txt", "offset": 1, "limit": 1,
+            ])
+        }
+        f.start()
+        try await f.waitForIdle()
+        #expect(requests == 6)
+        #expect(f.runtime.feedbackBudgetStopReason == "no_progress")
+        #expect(f.runtime.currentGoal?.continuationBudget?.continuationsUsed == 1)
+        #expect(f.runtime.session.automaticWakeSuppressedAfterUserStop)
+        #expect(f.runtime.queuedMessages.isEmpty)
+    }
+
+    @Test("主 Agent 按进展跨段不会重置累计 token 预算")
+    func ordinaryRootContinuationKeepsTokenSpend() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        f.runtime.interactionMode = .normal
+        f.runtime.currentGoal = nil
+        f.runtime.currentPlan = nil
+        f.app.agentLoopRuntimeParametersOverride?.maxTurns = 1
+        f.app.agentLoopRuntimeParametersOverride?.tokenBudget = 3_000
+        var requests = 0
+        GoalLoopURLProtocol.install(f.token) { _ in
+            requests += 1
+            guard requests <= 3 else { throw LoopFailure.unexpectedRequest }
+            return try Self.toolResponse(requests, promptTokens: 1_000)
+        }
+        f.start()
+        try await f.waitForIdle()
+        #expect(requests == 3)
+        #expect(f.runtime.toolCalls.count == 2)
+        #expect(f.runtime.feedbackBudgetStopReason == "token_budget")
+        #expect(f.runtime.session.automaticWakeSuppressedAfterUserStop)
+    }
+
     @Test("参数限定的工具段结束后自动执行一次新读取，无需用户发送继续", arguments: [3, 256])
     func toolRoundBoundaryAutomaticallyDispatchesNextTurn(limit: Int) async throws {
         let f = try fixture(recordCount: limit + 1); defer { f.cleanup() }
@@ -181,6 +295,7 @@ struct AgentGoalMainLoopTests {
     @Test("四次真实交接和压缩后自动继续工具执行，预算起点与原约束不丢失")
     func fourthCompactionAutomaticallyContinuesExecution() async throws {
         let f = try fixture(); defer { f.cleanup() }
+        f.runtime.applyPanelExecutionPreference(from: [.terminal])
         let trace = Trace()
         var requests = 0
         var compressions = 0
@@ -192,8 +307,12 @@ struct AgentGoalMainLoopTests {
             trace.check(!segments.isEmpty, "Compression received no history")
             return "Checked earlier records; continue only remaining records."
         }
-        GoalLoopURLProtocol.install(f.token) { _ in
+        GoalLoopURLProtocol.install(f.token) { request in
             requests += 1
+            let body = try Self.requestJSON(request)
+            let messages = body["messages"] as? [[String: Any]] ?? []
+            trace.check((messages.first?["content"] as? String)?.contains(AgentPanelStateMention.visibleTerminalExecutionInstruction) == true,
+                        "Visible terminal preference disappeared during Goal compaction and continuation")
             if requests == 1 { budgetStart = f.runtime.currentGoal?.continuationBudget?.segmentStartedAt }
             let elapsed = f.runtime.currentGoal?.continuationBudget?.elapsed(at: Date()) ?? 0
             trace.check(elapsed >= elapsedBeforeCompaction, "Compaction reset accumulated execution time")

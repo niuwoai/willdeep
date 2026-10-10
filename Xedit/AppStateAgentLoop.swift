@@ -79,7 +79,15 @@ extension AppState {
         runtime.beginFeedbackRun(turnID: turnID, provider: configuration.providerID, model: configuration.model)
         let tokenBudget = AgentRuntimeTokenBudget(limit: parameters.tokenBudget)
         runtime.runtimeTokenBudget = tokenBudget
-        defer { if runtime.activeTurnID == turnID || runtime.activeTurnID == nil { runtime.runtimeTokenBudget = nil } }
+        let mainLoopProgress = runtime.mainLoopProgress ?? AgentMainLoopProgress()
+        runtime.mainLoopProgress = mainLoopProgress
+        var retainProgressForGoalHandoff = false
+        defer {
+            if runtime.activeTurnID == turnID || runtime.activeTurnID == nil {
+                runtime.runtimeTokenBudget = nil
+                if !retainProgressForGoalHandoff { runtime.mainLoopProgress = nil }
+            }
+        }
         // Refresh the same-checkout collision hint so the foreground composer
         // reflects a background session now working in its directory.
         refreshAgentWorkspaceCollision()
@@ -289,11 +297,32 @@ extension AppState {
         var toolRoundsSinceLastPlanUpdate = 0
         var planUpdateCallsSeen = 0
 
-        for toolRound in 0..<parameters.maxTurns {
+        var toolRound = 0
+        while true {
+            defer { toolRound += 1 }
+            guard !Task.isCancelled, runtime.acceptsResponseEvents(for: turnID) else {
+                shouldResumePendingEventsAtTurnEnd = false
+                return
+            }
             if tokenBudget.isBlocked {
                 shouldResumePendingEventsAtTurnEnd = false
                 pauseForRuntimeBudget(runtime, reason: tokenBudget.hasUnknownUsage ? "unknown_usage" : "token_budget")
                 return
+            }
+            if runtime.currentGoal?.continuationBudget?.wrapUpDispatched == true {
+                if toolRound >= parameters.maxTurns { break }
+            } else {
+                let decision = mainLoopProgress.admitNextRound(
+                    completedRounds: toolRound, segmentLength: parameters.maxTurns,
+                    isGoalMode: runtime.interactionMode == .goal,
+                    hasActiveJobs: agentJobRegistry.hasProgressRelevantAliveJobs(forRuntime: runtime.id)
+                        || agentSubagentRegistry.activeCount(forParentRuntime: runtime.id) > 0)
+                if decision == .handoff { break }
+                if decision == .pause {
+                    shouldResumePendingEventsAtTurnEnd = false
+                    pauseForMainLoopStagnation(runtime)
+                    return
+                }
             }
             beginGoalExecutionBudgetIfNeeded(for: runtime)
             // The host kernel is the single prioritized interrupt queue. It
@@ -380,6 +409,7 @@ extension AppState {
             // a system message at the top of the next round.
             let finishedSubagents = agentSubagentRegistry.consumePendingReports(forParentRuntime: runtime.id)
             for finishedRun in finishedSubagents {
+                observeSubagentProgress(finishedRun, runtime: runtime)
                 guard !kernelResourceKeys.contains("worker:\(finishedRun.id.uuidString)"),
                       !agentRuntimeKernel.hasPendingEvent(
                           runtimeID: runtime.id,
@@ -618,10 +648,15 @@ extension AppState {
                 insertingBefore: assistantID,
                 allowRefresh: toolRound == 0
             )
-            let systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
+            var systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
                 to: promptComponents.systemPrompt,
                 configuration: configuration
             )
+            // Add after splitting the transient turn-context carrier: execution
+            // preference must be present in every request, even after compaction.
+            if runtime.prefersVisibleTerminal {
+                systemPrompt += "\n\n" + AgentPanelStateMention.visibleTerminalExecutionInstruction
+            }
             let cacheDiagnostics = AgentContextBuilder.cacheDiagnostics(
                 for: systemPrompt,
                 toolsEnabled: true,
@@ -2907,6 +2942,8 @@ extension AppState {
         if !continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .toolRoundLimit) {
             shouldResumePendingEventsAtTurnEnd = false
             pauseForRuntimeBudget(runtime, reason: "max_turns")
+        } else {
+            retainProgressForGoalHandoff = true
         }
     }
 

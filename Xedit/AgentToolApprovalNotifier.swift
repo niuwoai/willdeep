@@ -70,9 +70,9 @@ enum AgentToolApprovalNotifier {
         postNotificationWhenAuthorized(identifier: identifier, content: content)
     }
 
-    /// Background `run_command` job finished while the user wasn't
-    /// looking. Re-uses the same auth + delivery path as the approval
-    /// notifier — see header comment for rationale.
+    /// Job results reach the agent through its completion notice. A process
+    /// failure alone does not mean the user needs to intervene; interactive
+    /// states use notifyIfBackgrounded when attention is actually required.
     @MainActor
     static func notifyJobFinished(job: AgentBackgroundJob) {
         if let executor = job.executor {
@@ -121,18 +121,16 @@ enum AgentToolApprovalNotifier {
         postNotificationWhenAuthorized(identifier: identifier, content: content)
     }
 
-    /// System banners are reserved for actionable failures the user cannot
-    /// already see. Successful completions and explicit stops remain visible
-    /// in the job drawer/transcript without interrupting unrelated work.
+    /// All process outcomes remain in the job drawer/transcript and are
+    /// delivered to the agent. Tests, builds and other commands may fail as
+    /// part of normal recovery, even while the app is in the background.
+    /// Only explicit approval, confirmation or answer requests interrupt.
     static func shouldNotifyJobFinished(
         status: AgentBackgroundJob.Status,
         isAppActive: Bool
     ) -> Bool {
-        guard !isAppActive else { return false }
         switch status {
-        case .failed, .timedOut, .launchFailed:
-            return true
-        case .running, .completed, .killed:
+        case .running, .completed, .killed, .failed, .timedOut, .launchFailed:
             return false
         }
     }

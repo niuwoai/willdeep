@@ -1608,6 +1608,7 @@ extension AppState {
         runtime.pendingIncludeWorkspaceOverview = false
         runtime.executionAgent = message.executionAgent
         runtime.pendingDelegationPolicy = message.delegationPolicy
+        runtime.pendingPanelStateMentions = message.panelStateMentions
     }
 
     func sendQueuedAgentMessageNow(id: AgentQueuedMessage.ID) {

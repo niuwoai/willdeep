@@ -316,6 +316,7 @@ extension AppState {
     }
 
     func publishSubagentKernelEvent(_ run: AgentSubagentRun, runtime: AgentRuntime) {
+        observeSubagentProgress(run, runtime: runtime)
         let failed = run.status != .completed
         publishAgentKernelEvent(
             AgentKernelEvent(

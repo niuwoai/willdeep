@@ -950,6 +950,7 @@ enum AgentSettingsStore {
 }
 
 enum AgentCredentialStore {
+    nonisolated private static let testStateLock = NSRecursiveLock()
     nonisolated static let referencePrefix = "keychain://"
     nonisolated private static let releaseKeychainService = "com.willdeep.credentials"
     nonisolated private static let debugKeychainService = "com.willdeep.credentials.debug"
@@ -968,6 +969,8 @@ enum AgentCredentialStore {
     nonisolated(unsafe) private static var testSaveCounts: [String: Int] = [:]
 
     nonisolated private static var keychainService: String {
+        testStateLock.lock()
+        defer { testStateLock.unlock() }
         if let testKeychainServiceOverride {
             return testKeychainServiceOverride
         }
@@ -988,12 +991,16 @@ enum AgentCredentialStore {
 
     @discardableResult
     static func _setTestKeychainServiceOverride(_ service: String?) -> String {
+        testStateLock.lock()
+        defer { testStateLock.unlock() }
         testKeychainServiceOverride = service
         testKeychainStorage = service == nil ? nil : [:]
         return keychainService
     }
 
     static func _wipeTestKeychain() {
+        testStateLock.lock()
+        defer { testStateLock.unlock() }
         if testKeychainStorage != nil {
             testKeychainStorage?.removeAll()
             _resetTestAccessCounts()
@@ -1015,16 +1022,18 @@ enum AgentCredentialStore {
     }
 
     static func _resetTestAccessCounts() {
+        testStateLock.lock()
+        defer { testStateLock.unlock() }
         testLoadCounts.removeAll()
         testSaveCounts.removeAll()
     }
 
     static func _testLoadCount(account: String) -> Int {
-        testLoadCounts[account] ?? 0
+        testStateLock.withLock { testLoadCounts[account] ?? 0 }
     }
 
     static func _testSaveCount(account: String) -> Int {
-        testSaveCounts[account] ?? 0
+        testStateLock.withLock { testSaveCounts[account] ?? 0 }
     }
 
     nonisolated static func reference(account: String) -> String {
@@ -1049,22 +1058,23 @@ enum AgentCredentialStore {
     /// stores (they cannot fail).
     @discardableResult
     nonisolated static func saveReportingStatus(_ secret: String, account: String) -> OSStatus {
-        testSaveCounts[account, default: 0] += 1
+        testStateLock.withLock { testSaveCounts[account, default: 0] += 1 }
         let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             delete(account: account)
             return errSecSuccess
         }
 
-        if testKeychainStorage != nil {
-            testKeychainStorage?[account] = trimmed
-            return errSecSuccess
-        }
-
-        if isRunningUnderXCTest {
+        let handled = testStateLock.withLock {
+            if testKeychainStorage != nil {
+                testKeychainStorage?[account] = trimmed
+                return true
+            }
+            guard isRunningUnderXCTest else { return false }
             xctestKeychainStorage[account] = trimmed
-            return errSecSuccess
+            return true
         }
+        if handled { return errSecSuccess }
 
         return WillDeepKeychainStore.save(
             trimmed,
@@ -1074,14 +1084,12 @@ enum AgentCredentialStore {
     }
 
     nonisolated static func load(account: String) -> String {
-        testLoadCounts[account, default: 0] += 1
-        if let testKeychainStorage {
-            return testKeychainStorage[account] ?? ""
+        let cached: String? = testStateLock.withLock {
+            testLoadCounts[account, default: 0] += 1
+            if let testKeychainStorage { return testKeychainStorage[account] ?? "" }
+            return isRunningUnderXCTest ? (xctestKeychainStorage[account] ?? "") : nil
         }
-
-        if isRunningUnderXCTest {
-            return xctestKeychainStorage[account] ?? ""
-        }
+        if let cached { return cached }
 
         return WillDeepKeychainStore.load(
             service: keychainService,
@@ -1093,13 +1101,14 @@ enum AgentCredentialStore {
     /// used to discover protected Composer secrets created before the alias
     /// index existed, so upgrades do not make those entries invisible.
     nonisolated static func accounts(matchingPrefix prefix: String) -> [String] {
-        if let testKeychainStorage {
-            return testKeychainStorage.keys.filter { $0.hasPrefix(prefix) }.sorted()
-        }
-
-        if isRunningUnderXCTest {
+        let cached: [String]? = testStateLock.withLock {
+            if let testKeychainStorage {
+                return testKeychainStorage.keys.filter { $0.hasPrefix(prefix) }.sorted()
+            }
+            guard isRunningUnderXCTest else { return nil }
             return xctestKeychainStorage.keys.filter { $0.hasPrefix(prefix) }.sorted()
         }
+        if let cached { return cached }
 
         return WillDeepKeychainStore.accounts(
             service: keychainService,
@@ -1108,15 +1117,16 @@ enum AgentCredentialStore {
     }
 
     nonisolated static func delete(account: String) {
-        if testKeychainStorage != nil {
-            testKeychainStorage?.removeValue(forKey: account)
-            return
-        }
-
-        if isRunningUnderXCTest {
+        let handled = testStateLock.withLock {
+            if testKeychainStorage != nil {
+                testKeychainStorage?.removeValue(forKey: account)
+                return true
+            }
+            guard isRunningUnderXCTest else { return false }
             xctestKeychainStorage.removeValue(forKey: account)
-            return
+            return true
         }
+        if handled { return }
 
         WillDeepKeychainStore.delete(service: keychainService, account: account)
     }

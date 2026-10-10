@@ -76,12 +76,18 @@ extension AppState {
     /// runtime-kernel event) build a finished job's notice from: every
     /// finished job carries its scrubbed tail, log path and dropped bytes.
     func renderBackgroundJobCompletionNotice(for job: AgentBackgroundJob) -> String {
-        Self.backgroundJobCompletionNotice(
+        let notice = Self.backgroundJobCompletionNotice(
             for: job,
             recentOutput: backgroundJobNoticeTail(job),
             outputPath: agentJobRegistry.outputLogURL(id: job.id)?.path,
             omittedBytes: agentJobRegistry.outputLogDroppedBytes(id: job.id)
         )
+        runtime(for: job.runtimeID)?.mainLoopProgress?.observe(
+            toolName: "background_command", argumentsJSON: job.command,
+            payload: backgroundJobNoticeTail(job) ?? "exit \(job.exitCode ?? -1)",
+            succeeded: Self.backgroundNoticeStatus(for: job) == .completed,
+            observationID: "job-\(job.id)")
+        return notice
     }
 
     private func backgroundJobNoticeTail(_ job: AgentBackgroundJob) -> String? {

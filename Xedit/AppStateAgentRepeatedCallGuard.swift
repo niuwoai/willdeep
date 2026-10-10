@@ -12,6 +12,12 @@
 import Foundation
 
 extension AppState {
+    func observeSubagentProgress(_ run: AgentSubagentRun, runtime: AgentRuntime) {
+        runtime.mainLoopProgress?.observe(toolName: "worker_report", argumentsJSON: run.prompt,
+            payload: run.report, succeeded: run.status == .completed && !run.report.isEmpty,
+            observationID: "worker-\(run.id)")
+    }
+
     /// Observe one tool result and return the note to append to it (empty
     /// when there is nothing to say). Denied calls and host notices without a
     /// matching model call are not observations of the tool.
@@ -30,6 +36,18 @@ extension AppState {
         guard let call = runtime.messages.reversed().lazy.compactMap({ message in
             message.role == .assistant ? message.toolCalls.first { $0.externalID == toolCallID } : nil
         }).first else { return "" }
+
+        // A background launch returns a fresh handle every time, even when
+        // the underlying command keeps failing. Observe its actual receipt
+        // through renderBackgroundJobCompletionNotice instead.
+        let record = runtime.toolCalls.last(where: { $0.externalID == toolCallID })
+        let isBackgroundLaunch = outcomeStatus == .succeeded
+            && ((call.toolName == "run_command" && record?.result?.commandExitCode == nil)
+                || (call.toolName == "spawn_agent" && record?.subagentLiveActivity?.isBackground == true))
+        if !isBackgroundLaunch {
+            runtime.mainLoopProgress?.observe(toolName: call.toolName, argumentsJSON: call.argumentsJSON,
+                payload: payload, succeeded: outcomeStatus == .succeeded)
+        }
 
         let tracksGoal = runtime.interactionMode == .goal && runtime.currentGoal != nil
         var ledger = tracksGoal
@@ -53,6 +71,7 @@ extension AppState {
     func resetRepeatedCallGuardForDispatch(for runtime: AgentRuntime, source: AgentMessageSource?) {
         runtime.currentTurnRepeatedCallLedger = AgentRepeatedCallLedger()
         if source == .operatorInput {
+            runtime.mainLoopProgress = nil
             runtime.repeatedCallStallSinceLastContinuationDecision = false
             if runtime.currentGoal?.repeatedCallLedger != nil { runtime.currentGoal?.repeatedCallLedger = nil }
         }

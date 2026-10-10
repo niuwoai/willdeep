@@ -1,6 +1,16 @@
 import Foundation
 
 extension AppState {
+    func pauseForMainLoopStagnation(_ runtime: AgentRuntime) {
+        runtime.feedbackBudgetStopReason = "no_progress"
+        runtime.session.automaticWakeSuppressedAfterUserStop = true
+        runtime.errorSeverity = .notice
+        runtime.errorMessage = String(localized: "runtime-parameters.no-progress",
+            defaultValue: "Execution paused after repeated failures or no new tool results. Review the blocker before continuing.")
+        runtime.errorDetails = nil
+        runtime.recordFeedback("runtime_stalled") { $0.stopReason = "no_progress" }
+    }
+
     func runtimeParametersForNewTurn() throws -> AgentRuntimeParameters {
         let parameters = try agentLoopRuntimeParametersOverride ?? AgentRuntimeParameters.resolve()
         try parameters.validate()

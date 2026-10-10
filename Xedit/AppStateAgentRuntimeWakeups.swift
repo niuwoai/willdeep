@@ -20,6 +20,7 @@ extension AppState {
         // Re-stage the queued turn's delegation directive: dispatch reads it
         // off the runtime, and it was cleared when the previous turn started.
         runtime.pendingDelegationPolicy = next.delegationPolicy
+        runtime.applyPanelExecutionPreference(from: next.panelStateMentions)
         dispatchAgentMessageUsingSelectedExecutor(
             next.executionAgent,
             for: runtime,

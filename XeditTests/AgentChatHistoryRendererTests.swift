@@ -1212,8 +1212,8 @@ struct AgentChatHistoryRendererTests {
             location: summaryRange.location,
             length: NSMaxRange(commandRange) - summaryRange.location
         ))
-        #expect(!summaryLine.contains(" · "))
-        #expect(summaryLine.contains("\n"))
+        #expect(summaryLine.contains(" · "))
+        #expect(!summaryLine.contains("\n"))
         let summaryFont = try #require(collapsed.attribute(
             .font,
             at: summaryRange.location,
@@ -1229,7 +1229,7 @@ struct AgentChatHistoryRendererTests {
             at: summaryRange.location,
             effectiveRange: nil
         ) as? NSParagraphStyle)
-        #expect(summaryStyle.lineBreakMode == .byWordWrapping)
+        #expect(summaryStyle.lineBreakMode == .byTruncatingTail)
         #expect(summaryStyle.lineSpacing == AgentChatTypography.lineSpacing(
             fontSize: baseFontSize,
             lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
@@ -1290,8 +1290,8 @@ struct AgentChatHistoryRendererTests {
             location: readRange.location,
             length: NSMaxRange(commandRange) - readRange.location
         ))
-        #expect(!summaryLine.contains(" · "))
-        #expect(summaryLine.contains("\n"))
+        #expect(summaryLine.contains(" · "))
+        #expect(!summaryLine.contains("\n"))
 
         let bodyRange = collapsedText.range(of: "我先检查工程状态。")
         let bodyFont = try #require(collapsed.attribute(
@@ -1384,9 +1384,9 @@ struct AgentChatHistoryRendererTests {
         ) as? NSParagraphStyle)
         #expect(abs(firstActivityStyle.paragraphSpacingBefore - expectedBefore) < 0.001)
         #expect(abs(lastActivityStyle.paragraphSpacing - expectedAfter) < 0.001)
-        // 中间行不能带 margin,否则组内行距被一起撑开。
-        #expect(firstActivityStyle.paragraphSpacing < expectedAfter)
-        #expect(lastActivityStyle.paragraphSpacingBefore < expectedBefore)
+        // 所有分类共享一个段落,上下间距只应用一次。
+        #expect(firstActivityStyle == lastActivityStyle)
+        #expect(firstActivityStyle.lineBreakMode == .byTruncatingTail)
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(

@@ -103,7 +103,11 @@ struct SlashCommand: Identifiable {
     static func builtIn(state: AppState) -> [SlashCommand] {
         let core: [SlashCommand] = [
             SlashCommand(id: "goal", title: "/goal", subtitle: L10n.ToolCard.goalCommandSubtitle,
-                         symbol: "target") { _ in
+                         symbol: "target") { args in
+                // The composer consumes the command before invoking this
+                // action. Goal only changes the mode; retain the draft for
+                // the user to edit and send explicitly.
+                state.agentInput = args
                 state.setAgentInteractionMode(.goal)
             },
             SlashCommand(id: "no-sandbox", title: "/no-sandbox", subtitle: L10n.SessionSandbox.disable,
@@ -226,11 +230,11 @@ struct SlashCommand: Identifiable {
         }
     }
 
-    /// 从 composer 当前 input 切出 args 部分（第一个空格之后的内容）。
+    /// 从 composer 当前 input 切出 args 部分（第一个空白之后的内容）。
     /// workflow 命令用，core 命令忽略。
     static func argsForCommand(_ rawInput: String) -> String {
         let trimmed = rawInput.trimmingCharacters(in: .whitespaces)
-        guard let spaceIdx = trimmed.firstIndex(of: " ") else { return "" }
+        guard let spaceIdx = trimmed.firstIndex(where: { $0.isWhitespace }) else { return "" }
         return String(trimmed[trimmed.index(after: spaceIdx)...])
             .trimmingCharacters(in: .whitespaces)
     }

@@ -435,7 +435,7 @@ extension AgentChatHistoryRenderer {
     ) {
         let start = result.length
         let items = AgentCollapsedToolActivitySummary.items(for: group.calls)
-        let displayItems = items.isEmpty
+        let detailedItems = items.isEmpty
             ? [
                 AgentCollapsedToolActivitySummary.Item(
                     systemImage: "wrench.and.screwdriver",
@@ -443,6 +443,15 @@ extension AgentChatHistoryRenderer {
                 )
             ]
             : items
+        // Collapsed activity is one disclosure line, not a second checklist.
+        // Keep all categories in the text; narrow layouts truncate the tail
+        // and expansion still reveals each category and full tool details.
+        let displayItems = isExpanded ? detailedItems : [
+            AgentCollapsedToolActivitySummary.Item(
+                systemImage: detailedItems.count == 1 ? detailedItems[0].systemImage : "wrench.and.screwdriver",
+                text: detailedItems.map(\.text).joined(separator: " · ")
+            )
+        ]
 
         for (index, item) in displayItems.enumerated() {
             if index > 0 {
@@ -492,7 +501,7 @@ extension AgentChatHistoryRenderer {
         )
         result.addAttribute(
             .paragraphStyle,
-            value: toolGroupHeaderParagraphStyle(lineSpacing: lineSpacing),
+            value: toolGroupHeaderParagraphStyle(lineSpacing: lineSpacing, isExpanded: isExpanded),
             range: NSRange(location: start, length: result.length - start)
         )
 
@@ -500,7 +509,7 @@ extension AgentChatHistoryRenderer {
             applyToolGroupVerticalMargins(
                 to: result,
                 groupRange: NSRange(location: start, length: result.length - start),
-                baseStyle: toolGroupHeaderParagraphStyle(lineSpacing: lineSpacing),
+                baseStyle: toolGroupHeaderParagraphStyle(lineSpacing: lineSpacing, isExpanded: false),
                 bodyFontSize: bodyFont.pointSize
             )
             return
@@ -1208,16 +1217,14 @@ extension AgentChatHistoryRenderer {
         return style
     }
 
-    private static func toolGroupHeaderParagraphStyle(lineSpacing: CGFloat) -> NSParagraphStyle {
+    private static func toolGroupHeaderParagraphStyle(lineSpacing: CGFloat, isExpanded: Bool = true) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
         style.lineSpacing = lineSpacing
         style.paragraphSpacingBefore = 0
         style.paragraphSpacing = 3
-        style.lineBreakMode = .byWordWrapping
-        // Activity is a compact vertical checklist on the same content column
-        // as the answer. One semantic operation per row is far easier to scan
-        // than a single long, truncated sentence separated by middle dots.
+        style.lineBreakMode = isExpanded ? .byWordWrapping : .byTruncatingTail
+        // A collapsed group occupies one visual line at every content width.
         style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
         style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
         style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset

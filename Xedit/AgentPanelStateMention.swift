@@ -10,9 +10,8 @@ import Foundation
 
 /// 侧边栏面板此刻的状态，由用户在 composer 里主动附加给这一轮。
 ///
-/// 它只是**告知**：把事实摆给模型，用不用由模型自己判断。刻意不写任何
-/// 指令性文字——一写「请在该终端执行」，告知就变成了指定，而指定要动的是
-/// 工具集与派发路由，完全是另一个量级的东西（见设计文档 §0）。
+/// 快照只提供事实；@terminal 的执行偏好另存到会话，并逐轮注入，
+/// 不从主机名、页面内容等不可信数据中推导指令。
 ///
 /// 与 `AgentTerminalHostContext` 的分工：那个是**自动**注入，且刻意保守
 /// ——只在有远程或状态不确定的 tab 时才说，确信是本地的一律不提，理由是
@@ -23,6 +22,12 @@ nonisolated enum AgentPanelStateMention {
     /// 面板没开时写进 prompt 的事实（prompt 固定英文）。
     static let terminalNotOpenDetail = "no terminal tab is open"
     static let browserNoPageDetail = "no page is open"
+
+    static let visibleTerminalExecutionInstruction = """
+    === USER EXECUTION PREFERENCE: VISIBLE TERMINAL ===
+    The user selected @terminal for this conversation. Prefer running suitable shell commands in the visible side-panel terminal with terminal_send_command, so the user can follow execution. This preference remains active across tool rounds, context compression, automatic continuation and session restoration. Follow any newer explicit user instruction that changes the execution location.
+    Before sending, inspect terminal_snapshot, verify the intended host and shell_ready state, and use the currently active visible tab unless the user requested a specific tab. A saved host snapshot is not live evidence. Never send a command to the wrong host or inject it into a running task or interactive program. If no safe usable terminal is available, or the command requires another runtime or background execution, use the appropriate run_command path and briefly explain the reason. File edits still use the file-editing tools. Existing approval requirements remain in effect.
+    """
 
     /// 可被附加的面板。
     ///

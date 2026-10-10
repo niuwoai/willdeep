@@ -660,8 +660,8 @@ struct AgentChatHistoryRendererGoalTests {
             location: firstRange.location,
             length: NSMaxRange(lastRange) - firstRange.location
         ))
-        #expect(!summaryLine.contains(" · "))
-        #expect(summaryLine.components(separatedBy: "\n").count == expectedRows.count)
+        #expect(summaryLine.contains(" · "))
+        #expect(!summaryLine.contains("\n"))
         let summaryCharacterRange = NSRange(
             location: firstRange.location,
             length: NSMaxRange(lastRange) - firstRange.location
@@ -675,7 +675,7 @@ struct AgentChatHistoryRendererGoalTests {
             _, _, _, _, _ in
             summaryLineFragmentCount += 1
         }
-        #expect(summaryLineFragmentCount == expectedRows.count)
+        #expect(summaryLineFragmentCount == 1)
 
         let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)

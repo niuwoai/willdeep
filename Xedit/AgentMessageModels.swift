@@ -1283,6 +1283,7 @@ struct AgentQueuedMessage: Identifiable, Equatable {
     /// runtime was busy, so the directive has to ride along — otherwise it
     /// would silently degrade to `.automatic` on drain.
     var delegationPolicy: AgentDelegationPolicy
+    var panelStateMentions: Set<AgentPanelStateMention.PanelKind>
 
     init(
         id: UUID = UUID(),
@@ -1292,7 +1293,8 @@ struct AgentQueuedMessage: Identifiable, Equatable {
         attachedSkills: [AgentSkillEntry] = [],
         executionAgent: AgentExecutionAgent = .willDeep,
         source: AgentMessageSource = .operatorInput,
-        delegationPolicy: AgentDelegationPolicy = .automatic
+        delegationPolicy: AgentDelegationPolicy = .automatic,
+        panelStateMentions: Set<AgentPanelStateMention.PanelKind> = []
     ) {
         self.id = id
         self.text = text
@@ -1302,5 +1304,6 @@ struct AgentQueuedMessage: Identifiable, Equatable {
         self.executionAgent = executionAgent
         self.source = source
         self.delegationPolicy = delegationPolicy
+        self.panelStateMentions = panelStateMentions
     }
 }

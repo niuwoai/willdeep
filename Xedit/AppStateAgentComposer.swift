@@ -138,6 +138,7 @@ extension AppState {
         // 面板快照在**发送时刻**取，不是用户点选的时刻——中间他可能切了 tab
         // 或导航到了别的页面，摆给模型的必须是此刻的事实。
         let panelStateBlock = panelStateMentionBlock(for: runtime)
+        let panelStateMentions = runtime.pendingPanelStateMentions
         let executionAgent = runtime.executionAgent
         guard !userText.isEmpty
                 || !images.isEmpty
@@ -206,7 +207,8 @@ extension AppState {
                     textAttachments: textAttachments,
                     attachedSkills: skills,
                     executionAgent: executionAgent,
-                    delegationPolicy: queuedDelegationPolicy
+                    delegationPolicy: queuedDelegationPolicy,
+                    panelStateMentions: panelStateMentions
                 )
             )
             if closedDecision {
@@ -217,6 +219,7 @@ extension AppState {
             return
         }
 
+        runtime.applyPanelExecutionPreference(from: panelStateMentions)
         dispatchAgentMessageUsingSelectedExecutor(
             executionAgent,
             for: runtime,
