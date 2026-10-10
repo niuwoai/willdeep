@@ -728,9 +728,34 @@ nonisolated enum AgentSessionStore {
         }
     }
 
+    /// Background catalog loads can overlap a test changing its directory.
+    /// Retain the URL under the same lock used by the setter before returning
+    /// a snapshot; an unsynchronized Optional<URL> can release bridged NSURL
+    /// storage while a reader is using it.
+    nonisolated final class DirectoryOverrideState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storedURL: URL?
+
+        var value: URL? {
+            get {
+                lock.lock(); defer { lock.unlock() }
+                return storedURL
+            }
+            set {
+                lock.lock(); defer { lock.unlock() }
+                storedURL = newValue
+            }
+        }
+    }
+
+    private static let directoryOverrideState = DirectoryOverrideState()
+
     /// Test seam: when set, session JSON lives here instead of Application
     /// Support. Set it before the store is first touched in a test.
-    nonisolated(unsafe) static var directoryOverride: URL?
+    static var directoryOverride: URL? {
+        get { directoryOverrideState.value }
+        set { directoryOverrideState.value = newValue }
+    }
 
     /// The shipping location, never redirected. The rename guard asserts on
     /// this so it keeps checking the path users actually own.

@@ -18,7 +18,8 @@ extension AppState {
     }
 
     func applySharedGoalLimits(for runtime: AgentRuntime) {
-        guard var goal = runtime.currentGoal, var parameters = runtime.runtimeParameters else { return }
+        guard runtime.interactionMode == .goal,
+              var goal = runtime.currentGoal, var parameters = runtime.runtimeParameters else { return }
         var budget = goal.continuationBudget ?? .standard
         if budget.activeElapsedSeconds == nil {
             budget.activeElapsedSeconds = budget.elapsed(at: Date())

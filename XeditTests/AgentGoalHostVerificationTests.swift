@@ -132,9 +132,14 @@ struct AgentGoalHostVerificationTests {
     @Test("分析按真实文件证据验收，不强制代码测试，回执与用量可持久化")
     func analysisReceipt() async throws {
         let f = try fixture(); defer { try? f.cleanup() }
+        f.runtime.currentPlan = .init(status: .done, summary: "Verified analysis", stepTexts: ["Inspect evidence"])
         try readEvidence(f)
         installReviewer(f)
         #expect(await f.app.captureAndVerifyAgentGoalEvaluation(for: f.runtime))
+        f.app.prepareNextAgentGoalPlanningCycleIfNeeded(for: f.runtime)
+        #expect(f.runtime.interactionMode == .normal)
+        #expect(f.app.agentInteractionMode == .normal)
+        #expect(f.runtime.session.interactionMode == .normal)
         let goal = try #require(f.runtime.currentGoal)
         #expect(goal.checklist.first?.done == true)
         #expect(goal.verification?.evidence.first?.content == "verified source\n")

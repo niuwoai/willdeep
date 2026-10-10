@@ -1210,10 +1210,12 @@ struct AgentGoalTeamsTests {
         )
 
         #expect(runtime.goalPlanningState?.phase == .completed)
-        #expect(runtime.isPlanGateActive)
+        #expect(runtime.interactionMode == .normal)
+        #expect(!runtime.isPlanGateActive)
 
         // Guard the live-state path too: even before persistence normalization,
         // a stale executing phase must not reopen write tools.
+        runtime.interactionMode = .goal
         runtime.goalPlanningState?.phase = .executing
         #expect(runtime.isPlanGateActive)
     }

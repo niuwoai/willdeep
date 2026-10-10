@@ -715,6 +715,34 @@ final class AgentRuntime: ObservableObject, Identifiable {
             self.errorSeverity = .error
             self.errorRequiresSomeIMLogin = failure.requiresSomeIMLogin
         }
+        if returnToNormalModeAfterGoalCompletion() {
+            self.session.interactionMode = interactionMode
+            self.session.goalPlanningState = goalPlanningState
+            self.session.currentGoal = currentGoal
+            self.session.goalTurnRecoveryCheckpoint = nil
+        }
+    }
+
+    /// Completion retires the execution mode, while retaining the Goal and
+    /// its evidence for history. A phase boundary or unverified claim is not
+    /// completion of the whole Goal.
+    @discardableResult
+    func returnToNormalModeAfterGoalCompletion() -> Bool {
+        guard interactionMode == .goal,
+              currentPlan?.status == .done,
+              let goal = currentGoal,
+              !goal.checklist.isEmpty,
+              goal.checklist.allSatisfy(\.done),
+              goal.verification == nil || goal.verification?.phase == .verified,
+              goalRoadmap == nil || goalRoadmap?.isComplete == true else { return false }
+        if var state = goalPlanningState {
+            state.phase = .completed
+            goalPlanningState = state
+        }
+        currentGoal?.scheduledWake = nil
+        goalTurnRecoveryCheckpoint = nil
+        interactionMode = .normal
+        return true
     }
 
     private static func normalizingInterruptedWorkflow(_ message: AgentMessage) -> AgentMessage {

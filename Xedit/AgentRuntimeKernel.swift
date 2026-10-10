@@ -396,7 +396,11 @@ nonisolated enum AgentKernelEventStore {
         qos: .utility
     )
 
-    nonisolated(unsafe) static var directoryOverride: URL?
+    private static let directoryOverrideState = AgentSessionStore.DirectoryOverrideState()
+    static var directoryOverride: URL? {
+        get { directoryOverrideState.value }
+        set { directoryOverrideState.value = newValue }
+    }
     /// Accessed only on `writeQueue`. A later successful write for the same
     /// runtime clears its earlier failure, proving the latest snapshot is now
     /// durable enough for Relay acknowledgement.

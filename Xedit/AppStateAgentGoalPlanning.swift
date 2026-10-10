@@ -674,10 +674,7 @@ extension AppState {
               !goal.checklist.isEmpty else { return }
         if goal.checklist.allSatisfy(\.done) {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
-            if var state = runtime.goalPlanningState {
-                state.phase = .completed
-                runtime.goalPlanningState = state
-            }
+            runtime.returnToNormalModeAfterGoalCompletion()
             persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
             return
         }
