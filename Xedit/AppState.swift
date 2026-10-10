@@ -341,6 +341,14 @@ final class AppState: ObservableObject {
     /// workspace. Empty until the user creates one, which is why every
     /// pre-project session keeps its path-based group unchanged.
     @Published var agentProjects: [AgentProject] = AgentProjectStore.load()
+    @Published var projectAutoArchiveEnabled = true {
+        didSet {
+            sessionManagementDefaults.set(projectAutoArchiveEnabled, forKey: AgentProjectArchiving.enabledKey)
+            if projectAutoArchiveEnabled { archiveInactiveAgentProjects() }
+        }
+    }
+    @Published var projectArchivingSaveFailed = false
+    var projectArchivingCatalogUpdater: (AgentProject) -> [AgentProject]? = AgentProjectStore.updateArchiving
     /// A transient sidebar navigation intent emitted by chat title search.
     /// It is intentionally separate from activeAgentSessionID: selecting a
     /// project highlights its group without opening or changing a chat.
@@ -844,6 +852,7 @@ final class AppState: ObservableObject {
     ) {
         self.sessionManagementDefaults = sessionManagementDefaults
         self.sessionRetentionSettings = AgentSessionRetentionSettings.load(defaults: sessionManagementDefaults)
+        self.projectAutoArchiveEnabled = AgentProjectArchiving.isEnabled(defaults: sessionManagementDefaults)
         self.agentDispatchCoordinator = AgentDispatchCoordinator(store: dispatchStore)
         // One process, one event kernel. Several editor/settings/headless
         // AppState instances coexist and must never keep divergent snapshots
@@ -1188,6 +1197,7 @@ final class AppState: ObservableObject {
             // resolve a leaked `project:<uuid>` back to its folder.
             self.repairAgentSessionsAnchoredToProjectKeys()
             self.requestAutomaticSessionArchiving()
+            self.archiveInactiveAgentProjects()
 
             // Every dispatch-board synchronize before this point was refused
             // (see synchronizeDispatchBoard(): projecting from a partially
@@ -1330,6 +1340,7 @@ final class AppState: ObservableObject {
             Task { @MainActor [weak self] in
                 self?.reapStaleAgentSidePanelResources()
                 self?.requestAutomaticSessionArchiving()
+                self?.archiveInactiveAgentProjects()
             }
         }
         RunLoop.main.add(timer, forMode: .common)

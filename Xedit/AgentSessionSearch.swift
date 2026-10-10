@@ -95,7 +95,7 @@ nonisolated enum AgentSessionSearch {
         metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [AgentSessionSearchResult] {
         let projectResults = projects
-            .filter { matches($0.resolvedDisplayName, query: query) }
+            .filter { !$0.isArchived && matches($0.resolvedDisplayName, query: query) }
             .sorted { lhs, rhs in
                 if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
                 let nameOrder = lhs.resolvedDisplayName.localizedCaseInsensitiveCompare(rhs.resolvedDisplayName)
@@ -104,7 +104,7 @@ nonisolated enum AgentSessionSearch {
             }
             .map(AgentSessionSearchResult.project)
 
-        let sessionResults = sessions
+        let sessionResults = AgentProjectArchiving.visibleSessions(sessions, projects: projects)
             .filter {
                 hasConversation($0, isMetadataOnly: isMetadataOnly,
                                 metadataOnlyHasUserMessage: metadataOnlyHasUserMessage)

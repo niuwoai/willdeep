@@ -114,7 +114,7 @@ struct AgentSessionSearchView: View {
     private var results: [AgentSessionSearchResult] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
             return AgentSessionSearch.recentSessions(
-                appState.agentSessions,
+                AgentProjectArchiving.visibleSessions(appState.agentSessions, projects: appState.agentProjects),
                 isMetadataOnly: appState.agentSessionIsMetadataOnly,
                 metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
             )

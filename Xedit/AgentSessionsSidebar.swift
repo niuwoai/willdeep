@@ -354,7 +354,7 @@ struct AgentSessionsSidebar: View {
         // and the pinned section used to each run their own full
         // `visibleSessions` pass per body evaluation.
         let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
-            from: appState.agentSessions,
+            from: AgentProjectArchiving.visibleSessions(appState.agentSessions, projects: appState.agentProjects),
             activeID: appState.activeAgentSessionID,
             isMetadataOnly: appState.agentSessionIsMetadataOnly,
             metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
@@ -845,6 +845,10 @@ struct AgentSessionsSidebar: View {
                         Button(L10n.AgentProjectStrings.editProject) {
                             editingProject = AgentProjectEditorTarget(project: project, seedFolderPath: nil)
                         }
+                        Button(L10n.ProjectArchiving.archive) {
+                            appState.setAgentProjectArchived(id: project.id, archived: true)
+                        }
+                        .disabled(!appState.canArchiveAgentProject(project))
                     } else if let path = localWorkspacePath(for: workspace) {
                         Button(L10n.AgentProjectStrings.createProject) {
                             editingProject = AgentProjectEditorTarget(project: nil, seedFolderPath: path)
@@ -1337,7 +1341,7 @@ struct AgentSessionsSidebar: View {
             session.workspaceSidebarGroupKey
         }
         let remoteDescriptors = remoteRuntimeDescriptorsByID
-        let projects = appState.agentProjects
+        let projects = appState.activeAgentProjects
         // A named project remains a searchable sidebar destination even when
         // its final conversation was archived or removed. Otherwise title
         // search could truthfully find a project yet have nowhere to reveal.

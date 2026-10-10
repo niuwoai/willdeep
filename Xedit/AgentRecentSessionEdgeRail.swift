@@ -228,7 +228,7 @@ enum AgentRecentSessionEdgeRailLogic {
         isMetadataOnly: (AgentSession.ID) -> Bool = { _ in false },
         metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [Item] {
-        sessions
+        AgentProjectArchiving.visibleSessions(sessions, projects: projects)
             .filter { session in
                 !session.isArchived
                     && !hiddenWorkspaceKeys.contains(session.workspaceSidebarGroupKey)

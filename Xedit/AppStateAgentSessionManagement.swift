@@ -5,21 +5,25 @@ extension AppState {
         EditorAppStateRegistry.shared.appStatesForTerminationCheck.filter { $0 !== self }
     }
 
-    func sessionManagementProtectionReason(_ session: AgentSession, callerID: UUID? = nil) -> String? {
-        if let reason = localSessionManagementProtectionReason(session, callerID: callerID) { return reason }
+    func sessionManagementProtectionReason(_ session: AgentSession, callerID: UUID? = nil,
+                                          protectDedicatedWorkflows: Bool = true) -> String? {
+        if let reason = localSessionManagementProtectionReason(session, callerID: callerID,
+                                                               protectDedicatedWorkflows: protectDedicatedWorkflows) { return reason }
         for peer in sessionManagementPeers {
             if let other = peer.agentSessions.first(where: { $0.id == session.id }),
-               peer.localSessionManagementProtectionReason(other, callerID: callerID) != nil {
+               peer.localSessionManagementProtectionReason(other, callerID: callerID,
+                                                            protectDedicatedWorkflows: protectDedicatedWorkflows) != nil {
                 return "protected_in_another_window"
             }
         }
         return nil
     }
 
-    private func localSessionManagementProtectionReason(_ session: AgentSession, callerID: UUID?) -> String? {
+    private func localSessionManagementProtectionReason(_ session: AgentSession, callerID: UUID?,
+                                                       protectDedicatedWorkflows: Bool) -> String? {
         if session.id == callerID || session.id == activeAgentSessionID { return "active_session" }
         if session.isPinned { return "pinned" }
-        if session.presentationScope != .workspace { return "dedicated_workflow" }
+        if protectDedicatedWorkflows && session.presentationScope != .workspace { return "dedicated_workflow" }
         if session.lastTurnFailure != nil || session.goalTurnRecoveryCheckpoint != nil
             || session.currentGoal?.scheduledWake != nil { return "awaiting_attention" }
         if pendingDispatchQueue.contains(where: { $0.runtimeID == session.id }) { return "queued_dispatch" }
@@ -53,6 +57,7 @@ extension AppState {
                 let sessions = agentSessions.filter { $0.projectID == project.id && $0.presentationScope == .workspace }
                 return ["id": project.id.uuidString, "name": project.resolvedDisplayName,
                         "folder_paths": project.folderPaths, "session_count": sessions.count,
+                        "is_archived": project.isArchived,
                         "active_session_count": sessions.filter { !$0.isArchived }.count,
                         "archived_session_count": sessions.filter(\.isArchived).count]
             }

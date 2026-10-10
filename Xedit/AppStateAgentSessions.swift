@@ -2194,6 +2194,7 @@ extension AppState {
                 return false
             }
             agentSessionLoadFailure = nil
+            guard recordAgentProjectActivity(id: targetSession.projectID) else { return false }
             subscribeToActiveRuntime()
             return true
         }
@@ -2219,6 +2220,7 @@ extension AppState {
             return false
         }
         agentSessionLoadFailure = nil
+        guard recordAgentProjectActivity(id: targetSession.projectID) else { return false }
         // Projects that predate folder trust have no answer on record. The
         // first time the user actually enters one is when to ask; doing it on
         // the catalog load instead would greet a launch with a queue of

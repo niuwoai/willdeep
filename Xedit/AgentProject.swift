@@ -30,6 +30,10 @@ nonisolated struct AgentProject: Codable, Equatable, Identifiable, Sendable {
     /// Presentation priority in the sidebar. Optional storage keeps projects
     /// written by older versions backward-compatible when the key is absent.
     var pinnedAt: Date?
+    var archivedAt: Date?
+    /// Opening or restoring a project is activity without changing ownership
+    /// tie-breaking (`updatedAt`). Older catalogs omit both optional fields.
+    var lastActivityAt: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -39,6 +43,8 @@ nonisolated struct AgentProject: Codable, Equatable, Identifiable, Sendable {
         folderPaths: [String],
         repositoryIdentities: [String] = [],
         pinnedAt: Date? = nil,
+        archivedAt: Date? = nil,
+        lastActivityAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -47,6 +53,8 @@ nonisolated struct AgentProject: Codable, Equatable, Identifiable, Sendable {
         self.folderPaths = folderPaths.compactMap(AgentProject.normalizedPath)
         self.repositoryIdentities = repositoryIdentities
         self.pinnedAt = pinnedAt
+        self.archivedAt = archivedAt
+        self.lastActivityAt = lastActivityAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -58,6 +66,8 @@ nonisolated struct AgentProject: Codable, Equatable, Identifiable, Sendable {
     var isPinned: Bool {
         pinnedAt != nil
     }
+
+    var isArchived: Bool { archivedAt != nil }
 
     /// The name to show. An empty name would render as a blank sidebar
     /// group, so it falls back to the primary folder's own name.
@@ -275,6 +285,7 @@ nonisolated enum AgentDispatchProjectLeakRepair {
 /// test-sandbox redirect on `AgentSessionStore.directory` carries over.
 /// There are a handful of projects at most; no sharding needed.
 nonisolated enum AgentProjectStore {
+    private static let lock = NSRecursiveLock()
     static var fileURL: URL {
         AgentSessionStore.directory
             .deletingLastPathComponent()
@@ -282,6 +293,7 @@ nonisolated enum AgentProjectStore {
     }
 
     static func load() -> [AgentProject] {
+        lock.lock(); defer { lock.unlock() }
         guard let data = try? Data(contentsOf: fileURL) else { return [] }
         // Dates stay on the default numeric encoding, matching how sessions
         // are stored. ISO8601 drops sub-second precision, and `updatedAt` is
@@ -293,6 +305,7 @@ nonisolated enum AgentProjectStore {
 
     @discardableResult
     static func save(_ projects: [AgentProject]) -> Bool {
+        lock.lock(); defer { lock.unlock() }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
@@ -308,6 +321,34 @@ nonisolated enum AgentProjectStore {
     }
 
     static func removeAll() {
+        lock.lock(); defer { lock.unlock() }
         try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    static func updateArchiving(_ project: AgentProject) -> [AgentProject]? {
+        updateArchiving(project, at: fileURL)
+    }
+
+    /// Apply only the archive/activity markers to the latest catalog. An
+    /// older window must not undo another window's rename, folders, or new
+    /// project when it records a click or runs maintenance.
+    static func updateArchiving(_ project: AgentProject, at url: URL) -> [AgentProject]? {
+        lock.lock(); defer { lock.unlock() }
+        do {
+            var projects = try JSONDecoder().decode([AgentProject].self, from: Data(contentsOf: url))
+            guard let index = projects.firstIndex(where: { $0.id == project.id }) else { return nil }
+            if project.isArchived && !projects[index].isArchived {
+                guard projects[index].lastActivityAt == project.lastActivityAt,
+                      projects[index].updatedAt == project.updatedAt else { return nil }
+            }
+            projects[index].archivedAt = project.archivedAt
+            if !project.isArchived { projects[index].lastActivityAt = project.lastActivityAt }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(projects).write(to: url, options: .atomic)
+            return projects
+        } catch {
+            return nil
+        }
     }
 }

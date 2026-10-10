@@ -740,6 +740,7 @@ extension AppState {
     func setRootDirectory(_ url: URL) {
         activateSecurityScope(for: url)
         rootDirectory = url
+        recordAgentProjectActivity(id: AgentProjectResolver.project(for: url.path, in: agentProjects)?.id)
         selectedFolderURL = url
         // Security scope is active above, so the background verify scan can read
         // the project; the cache itself lives in Caches (outside the scope).

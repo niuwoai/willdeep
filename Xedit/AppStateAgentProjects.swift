@@ -20,6 +20,7 @@ extension AppState {
     /// hit on a single chat.
     func revealAgentProjectInSidebar(id: AgentProject.ID) {
         guard agentProjects.contains(where: { $0.id == id }) else { return }
+        guard recordAgentProjectActivity(id: id) else { return }
         agentPrimaryDestination = .conversation
         agentSidebarRevealRequest = AgentSidebarRevealRequest(target: .project(id))
     }
@@ -276,7 +277,8 @@ extension AppState {
     func ensureAgentProject(forFolderPath path: String) -> AgentProject? {
         guard let normalized = AgentProject.normalizedPath(path) else { return nil }
         if let existing = AgentProjectResolver.project(for: normalized, in: agentProjects) {
-            return existing
+            guard recordAgentProjectActivity(id: existing.id) else { return nil }
+            return agentProjects.first { $0.id == existing.id }
         }
         return createAgentProject(
             displayName: WorkspacePresentation.localDisplayName(path: normalized),
@@ -314,9 +316,12 @@ extension AppState {
             existing: projects
         ) {
             guard AgentProjectResolver.project(for: path, in: projects) == nil else { continue }
+            let legacySessions = agentSessions.filter { AgentProjectRemoval.sessionPath($0) == path }
             let project = AgentProject(
                 displayName: WorkspacePresentation.localDisplayName(path: path),
-                folderPaths: [path]
+                folderPaths: [path],
+                createdAt: legacySessions.map(\.createdAt).min() ?? Date(),
+                updatedAt: legacySessions.map(\.lastActivityAt).max() ?? Date()
             )
             projects.append(project)
             created.append(project)

@@ -408,6 +408,7 @@ struct EditorSettingsView: View {
             }
 
             AgentSessionRetentionSettingsSection()
+            AgentProjectArchivingSettingsSection()
 
             AgentGoalRunSettingsSection()
 
