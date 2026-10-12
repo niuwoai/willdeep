@@ -13,6 +13,32 @@ import Foundation
 
 @Suite(.serialized)
 struct SomeIMBrowserLoginStatusTests {
+    @Test("设置中的模型目录过滤废弃别名，包括兼容 models 回退")
+    func modelCatalogExcludesRetiredFamilies() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+        }
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
+            let body: String
+            if request.url?.path.hasSuffix("/models") == true {
+                body = #"{"data":[{"id":"someim-code-high"},{"id":"someim-coding-plan-low"},{"id":"someim-auto-flash"}]}"#
+            } else {
+                // An all-retired pricing catalog must fall through to /models.
+                body = #"{"items":[{"model":"someim-code-low"}]}"#
+            }
+            return (response, Data(body.utf8))
+        }
+        let models = try await SomeIMClient.fetchModels(settings: .init(baseURL: "https://some.im/v1"),
+            apiKey: "fixture", session: session)
+        #expect(models.map(\.model) == [SomeIMManagedModel.autoFlash])
+    }
+
     @Test("connected account portal opens the some.im customer page")
     func testCustomerPortalURL() {
         #expect(SomeIMClient.customerPortalURL.absoluteString == "https://some.im/customer")
@@ -576,102 +602,8 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(SomeIMIntegrationStore.loadAPIKey().isEmpty)
     }
 
-    @Test("coding plan subscription fetch detects active plan")
-    func testCodingPlanSubscriptionFetchDetectsActivePlan() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer {
-            session.invalidateAndCancel()
-            SomeIMBrowserLoginMockURLProtocol.handler = nil
-        }
 
-        SomeIMBrowserLoginMockURLProtocol.handler = { request in
-            #expect(request.url?.host == "some.im")
-            #expect(request.url?.path == "/api/v1/customer/plan/subscription")
-            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer session-plan")
-            let response = HTTPURLResponse(
-                url: request.url!,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
-            )!
-            let body = """
-            {
-              "code": 0,
-              "data": {
-                "subscription": {
-                  "plan_id": "plan-pro",
-                  "plan_name": "pro",
-                  "plan_display_name": "Coding Pro",
-                  "period_end": "2099-01-01T00:00:00Z",
-                  "status": "active"
-                }
-              }
-            }
-            """.data(using: .utf8)!
-            return (response, body)
-        }
 
-        let status = try await SomeIMClient.fetchCodingPlanStatus(
-            settings: SomeIMIntegrationSettings(baseURL: SomeIMRelayRegion.chinaBaseURL),
-            sessionToken: "session-plan",
-            session: session
-        )
-
-        #expect(status.isActiveNow)
-        #expect(status.planID == "plan-pro")
-        #expect(status.planName == "Coding Pro")
-        #expect(status.periodEnd != nil)
-    }
-
-    @Test("coding plan subscription fetch requires a customer session")
-    func testCodingPlanSubscriptionFetchRequiresCustomerSession() async {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-
-        await #expect(throws: URLError.self) {
-            _ = try await SomeIMClient.fetchCodingPlanStatus(
-                settings: SomeIMIntegrationSettings(baseURL: SomeIMRelayRegion.chinaBaseURL),
-                sessionToken: "",
-                session: session
-            )
-        }
-    }
-
-    @Test("coding plan subscription fetch treats null subscription as no plan")
-    func testCodingPlanSubscriptionFetchTreatsNullAsNoPlan() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer {
-            session.invalidateAndCancel()
-            SomeIMBrowserLoginMockURLProtocol.handler = nil
-        }
-
-        SomeIMBrowserLoginMockURLProtocol.handler = { request in
-            #expect(request.url?.path == "/api/v1/customer/plan/subscription")
-            let response = HTTPURLResponse(
-                url: request.url!,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
-            )!
-            let body = #"{"code":0,"data":{"subscription":null}}"#.data(using: .utf8)!
-            return (response, body)
-        }
-
-        let status = try await SomeIMClient.fetchCodingPlanStatus(
-            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
-            sessionToken: "session-none",
-            session: session
-        )
-
-        #expect(!status.isActiveNow)
-        #expect(status.planID == nil)
-    }
 
     @Test(
         "some.im relay route treats any China country probe as authoritative",

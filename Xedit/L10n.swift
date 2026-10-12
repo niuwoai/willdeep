@@ -117,6 +117,9 @@ nonisolated enum L10n {
 
     /// some.im "省心托管" managed-routing composer entries.
     enum AgentManagedRouting {
+        static let emptyOutput = String(localized: "agent-managed-routing.failure-empty", defaultValue: "Switched after empty output")
+        static let repetitionLoop = String(localized: "agent-managed-routing.failure-repetition", defaultValue: "Switched after repeated output")
+        static let generationFailure = String(localized: "agent-managed-routing.failure-generation", defaultValue: "Switched after generation failure")
         static let title = String(localized: "agent-managed-routing.title", defaultValue: "Managed")
         static let titleFlash = String(localized: "agent-managed-routing.title-flash", defaultValue: "Managed · Flash")
         static let titleHigh = String(localized: "agent-managed-routing.title-high", defaultValue: "Managed · Pro")

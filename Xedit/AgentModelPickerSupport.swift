@@ -39,7 +39,7 @@ enum AgentModelPickerPresentation {
         managedLabel: String,
         selectModelLabel: String
     ) -> String {
-        if managedActive { return managedLabel }
+        if managedActive { return currentModelLabel.isEmpty ? managedLabel : currentModelLabel }
         let prefix = providerDisplayName.map { "\($0) · " }
         let modelLabel: String
         if let prefix, currentModelLabel.hasPrefix(prefix) {
@@ -167,7 +167,7 @@ enum AgentModelPickerCatalog {
         var seen = Set<String>()
         return models.compactMap { raw in
             let model = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !model.isEmpty, seen.insert(normalized(model)).inserted else { return nil }
+            guard !model.isEmpty, !SomeIMManagedModel.isRetired(model), seen.insert(normalized(model)).inserted else { return nil }
             return model
         }
     }

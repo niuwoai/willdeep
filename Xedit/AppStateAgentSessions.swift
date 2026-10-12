@@ -330,43 +330,8 @@ extension AppState {
         agentConfiguration = configuration.normalized
     }
 
-    func startSomeIMCodingPlanRefreshTimer() {
-        someIMCodingPlanRefreshTimer?.invalidate()
-        let timer = Timer(timeInterval: 10 * 60, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak appState = self] in
-                appState?.refreshSomeIMCodingPlanStatus(force: false)
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        someIMCodingPlanRefreshTimer = timer
-    }
 
-    func refreshSomeIMCodingPlanStatus(force: Bool) {
-        if !force, !someIMCodingPlanStatus.isStale {
-            return
-        }
-        someIMCodingPlanRefreshTask?.cancel()
-        someIMCodingPlanRefreshTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            _ = await self.refreshedSomeIMCodingPlanStatusIfNeeded(force: force)
-        }
-    }
 
-    func refreshedSomeIMCodingPlanStatusIfNeeded(force: Bool = false) async -> SomeIMCodingPlanStatus {
-        if !force, !someIMCodingPlanStatus.isStale {
-            return someIMCodingPlanStatus
-        }
-        someIMCodingPlanRefreshFailure = nil
-        do {
-            let status = try await SomeIMClient.fetchCodingPlanStatus()
-            someIMCodingPlanStatus = status
-            SomeIMIntegrationStore.saveCodingPlanStatus(status)
-            return status
-        } catch {
-            someIMCodingPlanRefreshFailure = SomeIMCodingPlanRefreshFailure.classify(error)
-            return someIMCodingPlanStatus
-        }
-    }
 
     func syncLocalModelComposerProvider(settings rawSettings: AgentLocalModelSettings) {
         let settings = rawSettings.normalized
@@ -2539,24 +2504,17 @@ extension AppState {
         persistActiveAgentSession()
     }
 
-    /// User selected a managed-routing floor in the composer menu.
-    func setManagedRoutingFloor(_ tier: AgentManagedCapabilityTier) {
-        guard let runtime = activeRuntime else { return }
-        guard runtime.managedRouting != nil else { return }
-        runtime.setManagedFloor(to: tier)
-        persistActiveAgentSession()
-    }
-
-    /// User selected the base managed tier.
+    /// Selecting managed routing starts a fresh Flash task.
     func resetManagedRoutingFloor() {
-        setManagedRoutingFloor(.low)
+        activeRuntime?.resetManagedFloor()
+        persistActiveAgentSession()
     }
 
     // MARK: - Model selection
 
     func recordFetchedAgentModels(_ ids: [String]) {
         let merged = Array(Set(agentKnownModelIDs + ids))
-            .filter { !$0.isEmpty }
+            .filter { !$0.isEmpty && !SomeIMManagedModel.isRetired($0) }
             .sorted()
         agentKnownModelIDs = merged
         AgentSettingsStore.saveKnownModelIDs(merged)
@@ -2564,7 +2522,7 @@ extension AppState {
 
     func recordFetchedAgentModelDiscoveries(_ models: [AgentModelDiscovery]) {
         recordFetchedAgentModels(models.map(\.id))
-        agentDiscoveredModelMetadata = models
+        agentDiscoveredModelMetadata = models.filter { !SomeIMManagedModel.isRetired($0.id) }
         AgentModelContextWindowCatalog.merge(models)
         AgentGatewayCapabilityCatalog.merge(models)
         AgentSettingsStore.saveDiscoveredModelMetadata(models)

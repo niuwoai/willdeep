@@ -117,11 +117,7 @@ struct AgentRouteJudgeBudgetTests {
         let judge = AgentGoalRouteJudge(client: AgentClient(configuration: configuration(responses: true), session: f.session),
             executionBudget: f.envelope)
         let content = Array(repeating: "repetition fixture sentence", count: 6).joined(separator: "\n")
-        let decision = await SomeIMManagedRouting.outputQuality(assistantText: content, reasoningText: nil,
-            latestUserMessage: "fixture", model: SomeIMManagedModel.autoFlash, finishReason: "stop") { system, user, cap in
-            await judge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: cap)
-        }
-        #expect(decision.shouldRetry) // The legacy fallback WOULD retry this.
+        _ = await judge.text(model: SomeIMManagedModel.judge, system: "fixture", user: "fixture", maxTokens: 32)
         #expect(judge.requestStop == .admission(.budgetExceeded))
         let app = AppState(loadSessionCatalog: false)
         let runtime = AgentRuntime(session: .init(interactionMode: .goal,

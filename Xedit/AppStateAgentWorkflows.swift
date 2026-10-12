@@ -128,16 +128,7 @@ extension AppState {
         // 3. 起后台 Task 跑 engine，并把句柄留在 owning runtime 里供卡片
         // stop / 会话删除 / clear conversation 精确取消。
         let configuration = configurationForCurrentTurn(for: runtime)
-        // 省心托管:主循环每回合跑 routing judge 解析具体虚拟模型
-        // (AppStateAgentLoop),workflow 之前直接拿原始配置里的静态模型,
-        // 完全绕过托管路由 —— 与 5dd9273a 修的 someIMContext 缺失同族,
-        // some.im 托管会话的子 agent 请求与主循环行为不一致。workflow
-        // 是多 agent 编排,天然复杂任务,不必再问 judge:floor 与 high
-        // 取高者直接解析。非托管/非 some.im 会话为 nil,不动配置。
-        let managedFloor: AgentManagedCapabilityTier? =
-            configuration.providerID == AgentProviderPreset.someIMID
-                ? runtime.managedRouting?.minimumTier
-                : nil
+        let usesManagedRouting = configuration.providerID == AgentProviderPreset.someIMID && runtime.managedRouting != nil
         // some.im session/workspace context headers, built exactly like the main
         // loop (AppStateAgentLoop). Every subagent request needs these on a
         // some.im-gated provider — without them some.im stalls the call and the
@@ -161,13 +152,8 @@ extension AppState {
             }
 
             var workflowConfiguration = configuration
-            if let managedFloor {
-                let hasCodingPlan = await self.refreshedSomeIMCodingPlanStatusIfNeeded().isActiveNow
-                workflowConfiguration.model = Self.managedWorkflowModel(
-                    floor: managedFloor,
-                    domain: workflow.managedDomain,
-                    hasCodingPlan: hasCodingPlan
-                )
+            if usesManagedRouting {
+                workflowConfiguration.model = Self.managedWorkflowModel()
             }
 
             let engine = WorkflowEngine(
@@ -326,19 +312,9 @@ extension AppState {
         """
     }
 
-    /// 省心托管会话里 workflow 子 agent 的主模型解析:floor 与 high 取
-    /// 高者(workflow 天然是复杂任务,不再走每回合 judge),按任务域映射
-    /// 到 some.im 虚拟模型。纯函数,单测覆盖。
-    static func managedWorkflowModel(
-        floor: AgentManagedCapabilityTier,
-        domain: SomeIMManagedDomain,
-        hasCodingPlan: Bool
-    ) -> String {
-        SomeIMManagedModel.resolve(
-            domain: domain,
-            tier: max(floor, .high),
-            hasCodingPlan: hasCodingPlan
-        )
+    /// Managed workflows start on Flash without task classification.
+    static func managedWorkflowModel() -> String {
+        SomeIMManagedModel.autoFlash
     }
 
     /// 单次 workflow 运行的看门狗时限。某个子 agent 的 provider 请求 stall（例如

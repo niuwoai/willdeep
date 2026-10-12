@@ -71,6 +71,7 @@ struct OpenAIChatAdapter {
                 throw AgentClientError.invalidResponse
             }
             SomeIMCreditsResponseObserver.capture(httpResponse, providerID: configuration.providerID)
+            await AgentRoutedModelResponseObserver.capture(httpResponse, providerID: configuration.providerID)
             if let requestID = AgentNetworkSupport.someIMRequestID(
                 from: httpResponse,
                 providerID: configuration.providerID

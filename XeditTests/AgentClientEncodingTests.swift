@@ -679,7 +679,7 @@ struct AgentContextCompressionSplitTests {
             newTier: .high
         ))
         #expect(AppState.managedEscalationCrossesTier(
-            previousModel: SomeIMManagedModel.codingPlanLow,
+            previousModel: SomeIMManagedModel.autoFlash,
             newTier: .premium
         ))
         #expect(!AppState.managedEscalationCrossesTier(

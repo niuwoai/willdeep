@@ -221,7 +221,8 @@ extension AppState {
               !override.isEmpty else {
             return result
         }
-        result.model = override
+        result.model = result.providerID == AgentProviderPreset.someIMID && SomeIMManagedModel.isRetired(override)
+            ? SomeIMManagedModel.autoFlash : override
         return result
     }
 

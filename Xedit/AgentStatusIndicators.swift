@@ -430,12 +430,7 @@ struct AgentStatsDashboard: View {
     }
 
     private var profilePlanName: String {
-        let status = appState.someIMCodingPlanStatus
-        if status.isActiveNow {
-            let name = status.planName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return name.isEmpty ? L10n.StatsDashboard.profilePlanPro : name
-        }
-        return L10n.StatsDashboard.profilePlanFree
+        L10n.AgentManagedRouting.title
     }
 
     private var overviewSummaryBand: some View {

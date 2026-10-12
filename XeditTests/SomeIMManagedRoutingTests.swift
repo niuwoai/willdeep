@@ -1,647 +1,117 @@
-//
-//  SomeIMManagedRoutingTests.swift
-//  WillDeepTests
-//
-//  Phase 1 data-model coverage for some.im "省心托管" managed routing:
-//  the (domain, tier) → model mapping and its inverse, allowlist /
-//  canonicalize, the only-goes-up session floor, and additive decode of
-//  the new AgentSession.managedRouting field. All pure/local — no network.
-//
-
-import Testing
 import Foundation
+import Testing
 @testable import WillDeep
 
 @Suite
-struct SomeIMManagedModelMappingTests {
-
-    @Test
-    func resolvesEveryDomainAndTierWithoutPlan() {
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .low, hasCodingPlan: false) == "someim-code-low")
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .high, hasCodingPlan: false) == "someim-code-high")
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .premium, hasCodingPlan: false) == "someim-code-premium")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .low, hasCodingPlan: false) == "someim-auto-flash")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .high, hasCodingPlan: false) == "someim-auto-pro")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .premium, hasCodingPlan: false) == "someim-auto-premium")
-    }
-
-    @Test
-    func codingPlanOnlyReplacesCodingModelsWhenPlanIsActive() {
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .low, hasCodingPlan: true) == "someim-coding-plan-low")
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .high, hasCodingPlan: true) == "someim-coding-plan-high")
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .premium, hasCodingPlan: true) == "someim-coding-plan-premium")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .low, hasCodingPlan: true) == "someim-auto-flash")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .high, hasCodingPlan: true) == "someim-auto-pro")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .premium, hasCodingPlan: true) == "someim-auto-premium")
-    }
-
-    @Test
-    func tierInverseMapsKnownModels() {
-        #expect(SomeIMManagedModel.tier(of: "someim-coding-plan-low") == .low)
-        #expect(SomeIMManagedModel.tier(of: "someim-code-low") == .low)
-        #expect(SomeIMManagedModel.tier(of: "someim-auto-flash") == .low)
-        #expect(SomeIMManagedModel.tier(of: "someim-coding-plan-high") == .high)
-        #expect(SomeIMManagedModel.tier(of: "someim-code-high") == .high)
-        #expect(SomeIMManagedModel.tier(of: "someim-auto-pro") == .high)
-        #expect(SomeIMManagedModel.tier(of: "someim-coding-plan-premium") == .premium)
-        #expect(SomeIMManagedModel.tier(of: "someim-code-premium") == .premium)
-        #expect(SomeIMManagedModel.tier(of: "someim-auto-premium") == .premium)
-        #expect(SomeIMManagedModel.tier(of: "gpt-4.1") == nil)
-    }
-
-    @Test
-    func allowlistCoversMainModelsButNotJudge() {
-        #expect(SomeIMManagedModel.allowlist.contains("someim-coding-plan-low"))
-        #expect(SomeIMManagedModel.allowlist.contains("someim-code-high"))
-        #expect(SomeIMManagedModel.allowlist.contains("someim-auto-premium"))
-        // The judge is never a turn's main model.
-        #expect(!SomeIMManagedModel.allowlist.contains(SomeIMManagedModel.judge))
-    }
-
-    @Test
-    func capabilityTierIsOrdered() {
-        #expect(AgentManagedCapabilityTier.low < .high)
-        #expect(AgentManagedCapabilityTier.high < .premium)
-        #expect(max(AgentManagedCapabilityTier.high, .low) == .high)
-        #expect(AgentManagedCapabilityTier.low.next == .high)
-        #expect(AgentManagedCapabilityTier.high.next == .premium)
-        #expect(AgentManagedCapabilityTier.premium.next == nil)
-    }
-}
-
-@Suite
 @MainActor
-struct SomeIMManagedFloorTests {
-
-    private func managedRuntime() -> AgentRuntime {
-        var session = AgentSession(title: "t")
-        session.managedRouting = AgentManagedRoutingState()
-        return AgentRuntime(session: session)
-    }
-
-    @Test
-    func floorOnlyRises() {
-        let rt = managedRuntime()
-        #expect(rt.managedRouting?.minimumTier == .low)
-
-        #expect(rt.raiseManagedFloor(to: .high, reason: "quality") == true)
-        #expect(rt.managedRouting?.minimumTier == .high)
-
-        // A lower/equal tier is ignored — the floor never drops.
-        #expect(rt.raiseManagedFloor(to: .low, reason: nil) == false)
-        #expect(rt.managedRouting?.minimumTier == .high)
-        #expect(rt.raiseManagedFloor(to: .high, reason: nil) == false)
-        #expect(rt.managedRouting?.minimumTier == .high)
-
-        #expect(rt.raiseManagedFloor(to: .premium, reason: nil) == true)
-        #expect(rt.managedRouting?.minimumTier == .premium)
-    }
-
-    @Test
-    func resetReturnsToLow() {
-        let rt = managedRuntime()
-        _ = rt.raiseManagedFloor(to: .premium, reason: "x")
-        #expect(rt.managedRouting?.minimumTier == .premium)
-        rt.resetManagedFloor()
-        #expect(rt.managedRouting?.minimumTier == .low)
-        #expect(rt.managedRouting?.lastEscalationReason == nil)
-    }
-
-    @Test
-    func raiseIsNoopOnNonManagedSession() {
-        let rt = AgentRuntime(session: AgentSession(title: "plain"))
-        #expect(rt.managedRouting == nil)
-        #expect(rt.raiseManagedFloor(to: .high, reason: nil) == false)
-        #expect(rt.managedRouting == nil)
-    }
-}
-
-@Suite
-struct AgentSessionManagedRoutingDecodeTests {
-
-    @Test
-    func roundTripsManagedRouting() throws {
-        var session = AgentSession(title: "t")
-        session.managedRouting = AgentManagedRoutingState(
-            minimumTier: .high,
-            lastSelectedModel: "someim-coding-plan-high"
-        )
-        let data = try JSONEncoder().encode(session)
-        let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
-        #expect(decoded.managedRouting?.minimumTier == .high)
-        #expect(decoded.managedRouting?.lastSelectedModel == "someim-coding-plan-high")
-    }
-
-    @Test
-    func legacySessionWithoutFieldDecodesToNil() throws {
-        let session = AgentSession(title: "legacy")
-        let data = try JSONEncoder().encode(session)
-        var object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        object.removeValue(forKey: "managedRouting")
-        let stripped = try JSONSerialization.data(withJSONObject: object)
-        let decoded = try JSONDecoder().decode(AgentSession.self, from: stripped)
-        #expect(decoded.managedRouting == nil)
-    }
-}
-
-@Suite
-struct SomeIMRouteJudgeParsingTests {
-
-    @Test
-    func judgePromptDoesNotTreatWorkspaceOrToolsAsCodingEvidence() {
-        let prompt = SomeIMManagedRouting.judgeSystemPrompt()
-        #expect(prompt.contains("仅仅打开了 Workspace、启用了工具或身处开发应用，绝不是 coding 证据"))
-        #expect(prompt.contains("应判为 general"))
-    }
-
-    @Test
-    func parsesCleanJSON() {
-        let raw = #"{"domain":"coding","complexity":"high","target_model":null,"confidence":0.9,"reason":"multi-file"}"#
-        let verdict = SomeIMManagedRouting.decodeVerdict(fromRaw: raw)
-        #expect(verdict?.domain == .coding)
-        #expect(verdict?.complexity == .high)
-        #expect(verdict?.confidence == 0.9)
-    }
-
-    @Test
-    func parsesJSONWrappedInMarkdownFence() {
-        let raw = "```json\n{\"domain\":\"general\",\"complexity\":\"low\",\"confidence\":0.7}\n```"
-        let verdict = SomeIMManagedRouting.decodeVerdict(fromRaw: raw)
-        #expect(verdict?.domain == .general)
-        #expect(verdict?.complexity == .low)
-        // Missing target_model / reason are tolerated.
-        #expect(verdict?.targetModel == nil)
-    }
-
-    @Test
-    func dropsNonAllowlistedTargetModel() {
-        let raw = #"{"domain":"coding","complexity":"low","target_model":"gpt-5.5","confidence":0.8}"#
-        let verdict = SomeIMManagedRouting.decodeVerdict(fromRaw: raw)
-        #expect(verdict?.targetModel == nil)
-    }
-
-    @Test
-    func rejectsGarbage() {
-        #expect(SomeIMManagedRouting.decodeVerdict(fromRaw: "not json at all") == nil)
-        #expect(SomeIMManagedRouting.decodeVerdict(fromRaw: "") == nil)
-        // Unknown enum value → nil.
-        #expect(SomeIMManagedRouting.decodeVerdict(fromRaw: #"{"domain":"math","complexity":"low","confidence":1}"#) == nil)
-    }
-}
-
-@Suite
-struct SomeIMRouteResolutionTests {
-
-    @Test
-    func mergesVerdictWithFloorOnlyUp() {
-        // Judge says coding-low, but the session floor is high → code-high.
-        let verdict = SomeIMRouteJudgeVerdict(domain: .coding, complexity: .low, confidence: 0.9)
-        let res = SomeIMManagedRouting.resolution(
-            for: verdict,
-            floor: .high,
-            usedFallback: false,
-            hasCodingPlan: false
-        )
-        #expect(res.effectiveTier == .high)
-        #expect(res.model == "someim-code-high")
-    }
-
-    @Test
-    func lowConfidenceEscalatesOneStep() {
-        let verdict = SomeIMRouteJudgeVerdict(domain: .coding, complexity: .low, confidence: 0.2)
-        let res = SomeIMManagedRouting.resolution(
-            for: verdict,
-            floor: .low,
-            usedFallback: false,
-            hasCodingPlan: false
-        )
-        #expect(res.effectiveTier == .high)
-        #expect(res.model == "someim-code-high")
-    }
-
-    @Test
-    func generalLowUsesAutoFlashWithoutPlan() {
-        let verdict = SomeIMRouteJudgeVerdict(domain: .general, complexity: .low, confidence: 0.9)
-        let res = SomeIMManagedRouting.resolution(
-            for: verdict,
-            floor: .low,
-            usedFallback: false,
-            hasCodingPlan: false
-        )
-        #expect(res.model == "someim-auto-flash")
-    }
-
-    @Test
-    func planDoesNotReplaceGeneralAutoFamily() {
-        let verdict = SomeIMRouteJudgeVerdict(domain: .general, complexity: .low, confidence: 0.9)
-        let res = SomeIMManagedRouting.resolution(
-            for: verdict,
-            floor: .high,
-            usedFallback: false,
-            hasCodingPlan: true
-        )
-        #expect(res.model == "someim-auto-pro")
-    }
-
-    @Test
-    func fallbackHeuristicPrefersCodingHighForCodeContext() {
-        let input = SomeIMRouteJudgeInput(latestUserMessage: "帮我重构这个函数", workspaceAvailable: true)
-        let verdict = SomeIMManagedRouting.fallbackVerdict(for: input)
-        #expect(verdict.domain == .coding)
-        #expect(verdict.complexity == .high)
-    }
-
-    @Test
-    func fallbackHeuristicGeneralForChitchat() {
-        let input = SomeIMRouteJudgeInput(latestUserMessage: "今天天气不错")
-        let verdict = SomeIMManagedRouting.fallbackVerdict(for: input)
-        #expect(verdict.domain == .general)
-        #expect(verdict.complexity == .low)
-    }
-}
-
-@Suite
-struct SomeIMRouteOrchestrationTests {
-
-    @Test
-    func usesJudgeVerdictWhenParseable() async {
-        let input = SomeIMRouteJudgeInput(latestUserMessage: "hi")
-        let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: false) { _, _, _ in
-            #"{"domain":"coding","complexity":"high","confidence":0.9}"#
-        }
-        #expect(res.usedFallback == false)
-        #expect(res.model == "someim-code-high")
-    }
-
-    @Test
-    func activePlanKeepsGeneralVerdictOnAutoFamily() async {
-        let input = SomeIMRouteJudgeInput(latestUserMessage: "hi")
-        let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: true) { _, _, _ in
-            #"{"domain":"general","complexity":"high","confidence":0.9}"#
-        }
-        #expect(res.usedFallback == false)
-        #expect(res.model == "someim-auto-pro")
-    }
-
-    @Test
-    func activePlanRoutesCodingVerdictToCodingPlanFamily() async {
-        let input = SomeIMRouteJudgeInput(latestUserMessage: "重构这个模块")
-        let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: true) { _, _, _ in
-            #"{"domain":"coding","complexity":"high","confidence":0.9}"#
-        }
-        #expect(res.usedFallback == false)
-        #expect(res.model == "someim-coding-plan-high")
-    }
-
-    @Test
-    func fallsBackWhenJudgeReturnsNil() async {
-        let input = SomeIMRouteJudgeInput(latestUserMessage: "写代码 fix bug", workspaceAvailable: true)
-        let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: false) { _, _, _ in nil }
-        #expect(res.usedFallback == true)
-        #expect(res.model == "someim-code-high")
-    }
-
-    @Test
-    func judgeTimeoutFallsBackToFloor() async {
-        let input = SomeIMRouteJudgeInput(latestUserMessage: "Explain this code", workspaceAvailable: true)
-        let probe = RouteJudgeCancellationProbe()
-        let res = await SomeIMManagedRouting.route(
-            input: input,
-            floor: .high,
-            hasCodingPlan: true,
-            timeout: 0.05
-        ) { _, _, _ in
-            do {
-                try await Task.sleep(for: .seconds(30))
-                return #"{"domain":"coding","complexity":"high","confidence":1.0}"#
-            } catch is CancellationError {
-                await probe.recordCancellation()
-                return nil
-            } catch {
-                return nil
+struct SomeIMManagedRoutingTests {
+    @Test("实际上游回执按请求隔离，错误响应和其他供应商不覆盖")
+    func physicalModelReceiptIsScoped() throws {
+        let url = URL(string: "https://example.invalid/v1/responses")!
+        let success = try #require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+            headerFields: ["X-Routed-Model": "physical-fixture"]))
+        let failure = try #require(HTTPURLResponse(url: url, statusCode: 500, httpVersion: nil,
+            headerFields: ["X-Routed-Model": "failed-fixture"]))
+        var received: [String] = []
+        AgentRoutedModelResponseObserver.$receive.withValue({ model in received.append(model) }) {
+            AgentRoutedModelResponseObserver.capture(success, providerID: "openai")
+            AgentRoutedModelResponseObserver.capture(failure, providerID: AgentProviderPreset.someIMID)
+            AgentRoutedModelResponseObserver.$receive.withValue(nil) {
+                AgentRoutedModelResponseObserver.capture(success, providerID: AgentProviderPreset.someIMID)
             }
+            AgentRoutedModelResponseObserver.capture(success, providerID: AgentProviderPreset.someIMID)
         }
-
-        #expect(res.usedFallback)
-        #expect(res.effectiveTier == .high)
-        // The timeout must win and cancel the pending judge, not merely get
-        // nil from a normally completed request. Loaded test hosts need not
-        // schedule all these tasks inside an arbitrary 200 ms wall window.
-        #expect(await probe.wasCancelled)
+        #expect(received == ["physical-fixture"])
     }
 
-    @Test
-    func fallbackDoesNotDropBelowFloor() async {
-        // Even a general fallback must respect an existing premium floor.
-        let input = SomeIMRouteJudgeInput(latestUserMessage: "hello")
-        let res = await SomeIMManagedRouting.route(input: input, floor: .premium, hasCodingPlan: false) { _, _, _ in nil }
-        #expect(res.usedFallback == true)
-        #expect(res.effectiveTier == .premium)
-        #expect(res.model == "someim-auto-premium")
-    }
-}
-
-private actor RouteJudgeCancellationProbe {
-    private(set) var wasCancelled = false
-    func recordCancellation() { wasCancelled = true }
-}
-
-@Suite(.serialized)
-struct AgentWorkspaceIdentityStoreTests {
-
-    private func freshStore() -> (suite: UserDefaults, name: String) {
-        let name = "test.workspace.identity.\(UUID().uuidString)"
-        let suite = UserDefaults(suiteName: name)!
-        AgentWorkspaceIdentityStore.defaults = suite
-        return (suite, name)
+    @Test("旧会话高档下限不影响新任务")
+    func legacyFloorIsIgnored() throws {
+        let state = try JSONDecoder().decode(AgentManagedRoutingState.self,
+            from: Data(#"{"minimumTier":"premium","lastSelectedModel":"someim-code-premium"}"#.utf8))
+        #expect(state.currentTaskID == nil)
+        var session = AgentSession(title: "fixture")
+        session.managedRouting = state
+        let runtime = AgentRuntime(session: session)
+        #expect(runtime.beginManagedTask(id: UUID()) == SomeIMManagedModel.autoFlash)
+        #expect(runtime.managedRouting?.minimumTier == .low)
     }
 
-    @Test
-    func stableForSameKeyDistinctForDifferent() {
-        let sandbox = freshStore()
-        defer { TestDefaultsHygiene.cleanup(suite: sandbox.suite, named: sandbox.name) }
-        let a1 = AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: "/Users/x/proj-a")
-        let a2 = AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: "/Users/x/proj-a")
-        let b = AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: "/Users/x/proj-b")
-        #expect(a1 != nil)
-        #expect(a1 == a2)
-        #expect(a1 != b)
-        // Sent value is a UUID, never a path.
-        #expect(a1.flatMap { UUID(uuidString: $0) } != nil)
-        #expect(a1?.contains("/") == false)
+    @Test("接手仅保留当前任务，新用户任务回到 Flash")
+    func takeoverScope() throws {
+        var session = AgentSession(title: "fixture")
+        session.managedRouting = .init()
+        let runtime = AgentRuntime(session: session)
+        let taskID = UUID()
+        #expect(runtime.beginManagedTask(id: taskID) == SomeIMManagedModel.autoFlash)
+        runtime.noteManagedTaskTakeover(model: SomeIMManagedModel.autoPro, reason: "repetition_loop")
+        #expect(runtime.beginManagedTask(id: taskID) == SomeIMManagedModel.autoPro)
+        #expect(runtime.managedRouting?.minimumTier == .low)
+        let restored = try JSONDecoder().decode(AgentManagedRoutingState.self,
+            from: JSONEncoder().encode(runtime.managedRouting!))
+        #expect(restored.currentTaskID == taskID)
+        #expect(restored.currentTaskModel == SomeIMManagedModel.autoPro)
+        #expect(runtime.beginManagedTask(id: UUID()) == SomeIMManagedModel.autoFlash)
+        #expect(runtime.managedRouting?.lastEscalationReason == nil)
     }
 
-    @Test
-    func nilForNoWorkspace() {
-        let sandbox = freshStore()
-        defer { TestDefaultsHygiene.cleanup(suite: sandbox.suite, named: sandbox.name) }
-        #expect(AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: "") == nil)
-        #expect(AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: AgentSession.noWorkspaceSidebarGroupKey) == nil)
-    }
-}
-
-@Suite
-struct SomeIMEscalationTests {
-
-    @Test
-    func escalationLadder() {
-        #expect(SomeIMManagedModel.escalated(from: "someim-coding-plan-low") == "someim-coding-plan-high")
-        #expect(SomeIMManagedModel.escalated(from: "someim-coding-plan-high") == "someim-coding-plan-premium")
-        #expect(SomeIMManagedModel.escalated(from: "someim-coding-plan-premium") == nil)
-        #expect(SomeIMManagedModel.escalated(from: "someim-code-low") == "someim-code-high")
-        #expect(SomeIMManagedModel.escalated(from: "someim-code-high") == "someim-code-premium")
-        #expect(SomeIMManagedModel.escalated(from: "someim-code-premium") == nil)
-        #expect(SomeIMManagedModel.escalated(from: "someim-auto-flash") == "someim-auto-pro")
-        #expect(SomeIMManagedModel.escalated(from: "someim-auto-pro") == "someim-auto-premium")
-        #expect(SomeIMManagedModel.escalated(from: "someim-auto-premium") == nil)
-    }
-}
-
-@Suite
-struct SomeIMOutputQualityTests {
-
-    private func repeatedText() -> String {
-        let line = "重复内容重复内容重复内容重复内容"
-        return Array(repeating: line, count: 8).joined(separator: "\n")
-    }
-
-    @Test
-    func detectsEmpty() {
-        #expect(SomeIMManagedRouting.detectDeterministicFailure(assistantText: "   \n  ") == "empty_output")
-    }
-
-    @Test
-    func detectsRepetitionLoop() {
-        #expect(SomeIMManagedRouting.detectDeterministicFailure(assistantText: repeatedText()) == "repetition_loop")
-    }
-
-    @Test
-    func ignoresNormalText() {
-        #expect(SomeIMManagedRouting.detectDeterministicFailure(assistantText: "这是一段正常的回答，没有异常重复内容。") == nil)
-    }
-
-    @Test
-    func judgeFailTriggersRetry() async {
-        let decision = await SomeIMManagedRouting.outputQuality(
-            assistantText: "some answer text that is long enough to look real",
-            reasoningText: nil,
-            latestUserMessage: "q",
-            model: "someim-coding-plan-low",
-            finishReason: "stop"
-        ) { _, _, _ in
-            #"{"verdict":"fail","failure_type":"garbled_output","confidence":0.9,"should_retry":true}"#
+    @Test("复杂任务初始化也不发送分类请求")
+    func startsWithoutJudge() async {
+        let app = AppState(loadSessionCatalog: false)
+        var session = AgentSession(title: "fixture")
+        session.managedRouting = .init(minimumTier: .premium)
+        session.messages = [.init(role: .user, content: "复杂跨文件架构重构")]
+        let runtime = AgentRuntime(session: session)
+        let config = AgentConfiguration(providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://no-network.invalid/v1", model: "legacy", apiKey: "")
+        let route = await app.resolveManagedTurnRoute(for: runtime, configuration: config, someIMContext: nil)
+        guard case .routed(let model, let decision) = route else {
+            Issue.record("Managed task did not resolve")
+            return
         }
-        #expect(decision.shouldRetry == true)
-        #expect(decision.failureType == "garbled_output")
+        #expect(model == SomeIMManagedModel.autoFlash)
+        #expect(!decision.didEscalate)
+        #expect(!decision.didFallback)
     }
 
-    @Test
-    func judgePassNoRetry() async {
-        let decision = await SomeIMManagedRouting.outputQuality(
-            assistantText: "clean answer",
-            reasoningText: nil,
-            latestUserMessage: "q",
-            model: "someim-coding-plan-low",
-            finishReason: "stop"
-        ) { _, _, _ in
-            #"{"verdict":"pass","failure_type":"none","confidence":0.9,"should_retry":false}"#
-        }
-        #expect(decision.shouldRetry == false)
+    @Test("仅明确生成失败触发，限长和内容过滤不触发")
+    func explicitFailurePolicy() {
+        let repeated = Array(repeating: "This is a repeated generation failure sentence.", count: 6).joined(separator: "\n")
+        #expect(!SomeIMManagedRouting.outputQuality(assistantText: "普通回答", finishReason: "stop").shouldRetry)
+        #expect(SomeIMManagedRouting.outputQuality(assistantText: " \n", finishReason: "stop").failureType == "empty_output")
+        #expect(SomeIMManagedRouting.outputQuality(assistantText: repeated, finishReason: "stop").failureType == "repetition_loop")
+        #expect(!SomeIMManagedRouting.outputQuality(assistantText: "", finishReason: "length").shouldRetry)
+        #expect(!SomeIMManagedRouting.outputQuality(assistantText: "", finishReason: "content_filter").shouldRetry)
+        #expect(SomeIMManagedModel.escalated(from: SomeIMManagedModel.autoPremium) == nil)
     }
 
-    @Test
-    func localRepetitionOverridesJudgePass() async {
-        let decision = await SomeIMManagedRouting.outputQuality(
-            assistantText: repeatedText(),
-            reasoningText: nil,
-            latestUserMessage: "q",
-            model: "someim-coding-plan-low",
-            finishReason: "stop"
-        ) { _, _, _ in
-            #"{"verdict":"pass","should_retry":false}"#
-        }
-        #expect(decision.shouldRetry == true)
-        #expect(decision.failureType == "repetition_loop")
+    @Test("历史配置不再调用废弃编程别名")
+    func retiredAliases() {
+        let config = AgentConfiguration(providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://example.invalid/v1", model: "someim-code-low",
+            flashModel: "someim-coding-plan-low", proModel: "someim-code-high", apiKey: "")
+        #expect(config.normalized.model == SomeIMManagedModel.autoFlash)
+        #expect(config.normalized.flashModel == SomeIMManagedModel.autoFlash)
+        #expect(config.normalized.proModel == SomeIMManagedModel.autoPro)
+        #expect(AppState.applyingSessionModelOverride("someim-code-premium", to: config).model == SomeIMManagedModel.autoFlash)
+        #expect(SomeIMManagedModel.isRetired("SomeIM-Coding-Plan-Premium"))
+        #expect(SomeIMManagedModel.allowlist.count == 3)
+        let entry = AgentProviderEntry(id: UUID(), providerID: AgentProviderPreset.someIMID,
+            displayName: "fixture", baseURL: "https://example.invalid/v1",
+            flashPrimary: "someim-code-low", proPrimary: "someim-coding-plan-high")
+        let models = AgentModelPickerCatalog.models(for: entry,
+            fetchedModels: ["someim-code-premium", "someim-coding-plan-low", SomeIMManagedModel.autoFlash])
+        #expect(models == [SomeIMManagedModel.autoFlash])
     }
 
-    @Test
-    func judgeUnavailableRetriesOnStrongLocalSignal() async {
-        let decision = await SomeIMManagedRouting.outputQuality(
-            assistantText: repeatedText(),
-            reasoningText: nil,
-            latestUserMessage: "q",
-            model: "someim-coding-plan-low",
-            finishReason: "stop"
-        ) { _, _, _ in nil }
-        #expect(decision.shouldRetry == true)
-    }
-
-    @Test
-    func judgeUnavailableNoRetryOnCleanOutput() async {
-        let decision = await SomeIMManagedRouting.outputQuality(
-            assistantText: "clean normal answer text",
-            reasoningText: nil,
-            latestUserMessage: "q",
-            model: "someim-coding-plan-low",
-            finishReason: "stop"
-        ) { _, _, _ in nil }
-        #expect(decision.shouldRetry == false)
-    }
-}
-
-@Suite
-struct AgentManagedRouteDecisionTests {
-
-    @Test
-    func tierMarkers() {
-        let base = AgentManagedRouteDecision(
-            selectedModel: "someim-coding-plan-high", tier: .high,
-            domain: .coding, complexity: .high, didFallback: false
-        )
-        #expect(base.tierMarkers == "High")
-
-        var escalated = base
-        escalated.didEscalate = true
-        #expect(escalated.tierMarkers == "High↑")
-
-        let fallback = AgentManagedRouteDecision(
-            selectedModel: "someim-auto-flash", tier: .low,
-            domain: .general, complexity: .low, didFallback: true
-        )
-        #expect(fallback.tierMarkers == "Low~")
-    }
-
-    @Test
-    func footerUsesJudgeDomainAndActualModelLevel() {
-        let cases: [(String, SomeIMManagedDomain, AgentManagedCapabilityTier, AgentManagedRouteFamily, String)] = [
-            ("someim-auto-flash", .general, .low, .general, "flash"),
-            ("someim-auto-pro", .general, .high, .general, "pro"),
-            ("someim-auto-premium", .general, .premium, .general, "premium"),
-            ("someim-coding-plan-low", .general, .low, .general, "flash"),
-            ("someim-coding-plan-high", .coding, .high, .coding, "pro"),
-            ("someim-coding-plan-premium", .coding, .premium, .coding, "premium"),
-            ("someim-code-low", .coding, .low, .coding, "flash"),
-            ("someim-code-high", .coding, .high, .coding, "pro"),
-            ("someim-code-premium", .coding, .premium, .coding, "premium"),
-        ]
-
-        for (selectedModel, domain, tier, expectedFamily, expectedLevel) in cases {
-            let route = AgentManagedRouteDecision(
-                selectedModel: selectedModel,
-                tier: tier,
-                domain: domain,
-                complexity: .low,
-                didFallback: false
-            )
-
-            #expect(route.footerFamily == expectedFamily)
-            #expect(route.footerLevelLabel == expectedLevel)
-            let expectedText = expectedFamily == .general
-                ? L10n.AgentManagedRouting.generalFooter(expectedLevel)
-                : L10n.AgentManagedRouting.codingFooter(expectedLevel)
-            #expect(route.footerChipText == expectedText)
-        }
-    }
-
-    @Test
-    func footerLevelKeepsEscalationAndFallbackMarkers() {
-        var escalated = AgentManagedRouteDecision(
-            selectedModel: "someim-code-high",
-            tier: .high,
-            domain: .coding,
-            complexity: .high,
-            didFallback: false,
-            didEscalate: true
-        )
-        #expect(escalated.footerLevelMarkers == "pro↑")
-
-        escalated.didEscalate = false
-        escalated.didFallback = true
-        #expect(escalated.footerLevelMarkers == "pro~")
-    }
-
-    @Test
-    func decodesOnAssistantMessage() throws {
-        var message = AgentMessage(role: .assistant, content: "hi")
-        message.managedRoute = AgentManagedRouteDecision(
-            selectedModel: "someim-coding-plan-high", tier: .high,
-            domain: .coding, complexity: .high, didFallback: false,
-            didEscalate: true, failureType: "repetition_loop"
-        )
-        let data = try JSONEncoder().encode(message)
-        let decoded = try JSONDecoder().decode(AgentMessage.self, from: data)
-        #expect(decoded.managedRoute?.selectedModel == "someim-coding-plan-high")
-        #expect(decoded.managedRoute?.tier == .high)
-        #expect(decoded.managedRoute?.didEscalate == true)
-        #expect(decoded.managedRoute?.failureType == "repetition_loop")
-    }
-
-    @Test
-    func legacyMessageDecodesToNilManagedRoute() throws {
-        let message = AgentMessage(role: .assistant, content: "hi")
-        let data = try JSONEncoder().encode(message)
-        var object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        object.removeValue(forKey: "managedRoute")
-        let stripped = try JSONSerialization.data(withJSONObject: object)
-        let decoded = try JSONDecoder().decode(AgentMessage.self, from: stripped)
-        #expect(decoded.managedRoute == nil)
-    }
-}
-
-@Suite
-struct SomeIMRouteFloorPersistenceTests {
-
-    @Test
-    func lowConfidenceEscalationStaysPerTurnAndNeverRaisesFloor() {
-        let verdict = SomeIMRouteJudgeVerdict(
-            domain: .general, complexity: .low, confidence: 0.1, reason: "unsure"
-        )
-        let resolution = SomeIMManagedRouting.resolution(
-            for: verdict, floor: .low, usedFallback: false, hasCodingPlan: false
-        )
-        // The hedge escalates this turn's model choice…
-        #expect(resolution.effectiveTier == .high)
-        // …but must never be eligible for the only-goes-up persisted floor.
-        #expect(resolution.persistedFloorTier == .low)
-    }
-
-    @Test
-    func explicitHighVerdictStillRaisesFloor() {
-        let verdict = SomeIMRouteJudgeVerdict(
-            domain: .coding, complexity: .high, confidence: 0.9, reason: "hard task"
-        )
-        let resolution = SomeIMManagedRouting.resolution(
-            for: verdict, floor: .low, usedFallback: false, hasCodingPlan: false
-        )
-        #expect(resolution.effectiveTier == .high)
-        #expect(resolution.persistedFloorTier == .high)
-    }
-
-    @Test
-    func judgePromptTemplateDoesNotAnchorCopyableConfidence() {
-        let prompt = SomeIMManagedRouting.judgeSystemPrompt()
-        // No copyable numeric anchor in either direction: 0.0 trips the
-        // escalation every turn (fail-expensive), a high literal like 0.92
-        // silently disables the hedge (fail-open). The placeholder is
-        // deliberately invalid JSON so a verbatim copy falls back cleanly.
-        #expect(!prompt.contains("\"confidence\":0.0"))
-        #expect(!prompt.contains("\"confidence\":0.92"))
-        #expect(prompt.contains("\"confidence\":<"))
-        #expect(prompt.contains("数字字面量"))
-    }
-
-    @Test
-    func missingConfidenceDefaultsToFailSafeZero() {
-        // A judge that omits confidence gets the per-turn conservative
-        // escalation, not silent full trust.
-        let verdict = SomeIMManagedRouting.decodeVerdict(
-            fromRaw: #"{"domain":"general","complexity":"low"}"#
-        )
-        #expect(verdict?.confidence == 0.0)
-        let resolution = SomeIMManagedRouting.resolution(
-            for: verdict!, floor: .low, usedFallback: false, hasCodingPlan: false
-        )
-        #expect(resolution.effectiveTier == .high)
-        #expect(resolution.persistedFloorTier == .low)
+    @Test("页脚显示请求模型和切换原因")
+    func footer() {
+        var decision = AgentManagedRouteDecision(selectedModel: SomeIMManagedModel.autoPro,
+            tier: .high, domain: .general, complexity: .low, didFallback: false,
+            didEscalate: true, failureType: "repetition_loop")
+        #expect(decision.footerChipText.contains(SomeIMManagedModel.autoPro))
+        #expect(decision.footerChipText.contains(SomeIMManagedRouting.failureLabel("repetition_loop")))
+        decision.actualModel = "physical-model-fixture"
+        #expect(decision.footerChipText.contains("physical-model-fixture"))
+        #expect(!decision.footerChipText.contains(SomeIMManagedModel.autoPro))
     }
 }

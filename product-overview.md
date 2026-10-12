@@ -1,5 +1,7 @@
 # WillDeep Product Overview
 
+随心托管（1.417.0-rc3）：新任务直接使用 `someim-auto-flash`，不做每轮难度分类、不保留会话最低档位。空输出或明显重复循环可为当前任务切换模型，每轮最多重试一次；自动续跑沿用当前任务模型，新用户任务回到 Flash。模型胶囊与消息页脚优先显示网关 `X-Routed-Model` 确认的物理上游，没有回执时显示请求路由名，页脚注明切换原因。套餐查询与专用编程模型已退出，历史配置自动迁移。网络、权限、工具失败和输出长度限制不触发模型切换。
+
 聊天历史折叠工具摘要只占一行，窄布局末尾省略；点击展开后查看完整分类与工具记录。
 `@terminal` 保存当前会话的侧边栏终端执行偏好，逐轮提醒并保留到压缩、自动续跑与会话恢复之后；排队输入实际派发时生效，执行前仍核对实时主机与输入状态。
 终端执行偏好进入每次请求的最终系统提示；凭据缓存与访问计数同步保护，系统钥匙串读写不持有共享缓存锁。
@@ -17,7 +19,7 @@
 目标的计划、全部阶段和验收完成后，当前会话自动切回普通模式，保留计划和验收证据供回看；预算暂停、待复核和阶段中途完成仍保持目标模式。恢复旧的已完成目标会话也会退出目标模式。
 主 Agent 按工具结果判断能否跨过轮数检查点继续：新读取结果或成功操作是执行活跃信号，不代表验收通过；重复结果、同一操作连续失败或持续无新结果会暂停。后台任务仍运行时允许等待，token 预算和 Goal 时间/交接限制仍生效；子 Agent 保留独立硬轮数上限。
 
-> Last updated: 2026-10-11 | Current version: v1.417.0-rc2
+> Last updated: 2026-10-12 | Current version: v1.417.0-rc3
 
 正式版内置收藏夹 v2.3.0，支持安全富文本备忘录、图文顺序保留和正文读取；配置管理插件为 v0.4.0-rc1，短剧工坊为 v0.44.0-rc2，发布时核验实际 App 插件载荷。
 
@@ -347,9 +349,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **会话与项目统一搜索定位（1.272.0-rc12）** —— 左侧“新聊天”下新增搜索入口，并与顶部放大镜、⌘⇧P 共用同一面板；搜索会匹配会话标题和项目名称。选择会话会自动显示左栏、展开必要的项目/归档/更多会话区并将目标行居中后打开；选择项目则只聚焦并居中高亮该项目标题，不擅自切换当前会话。
 - **Token 活动热力图自适应填宽与分享图加载反馈（1.272.0-rc11）** —— 启动页热力图默认覆盖最多 32 周、约 7.4 个月，并展示 8 个月份标签；格子会在 12–14 pt 内随可用宽度调整，首列与末列共享内容区边界。窗口变窄时自动减少周数，避免固定尺寸导致右侧留白或横向溢出。生成单日分享图期间改由按钮内进度承接等待，成图就绪后才打开预览，不再闪现空白 Sheet；预览的“关闭”按钮退出键盘焦点链，避免打开时出现突兀的蓝色焦点框。
 - **前台命令启动失败不再击穿进程（1.272.0-rc10）** —— `run_command` 只在子进程成功启动后才创建 stdout/stderr 排空任务，避免启动失败清理文件句柄时与并发读取发生竞态并抛出无法由 Swift 捕获的 `NSFileHandleOperationException`；单个命令启动错误现在只返回结构化工具失败，不再让应用或整套发布测试崩溃。
-- **模型选择视觉契约收口（1.272.0-rc9）** —— 发布级灰阶图标测试不再要求已经从省心托管页删除的 Coding Plan 购买按钮重新出现，改为明确守住该入口不存在，并继续检查其余 Composer 控件采用单色语义色。
 - **调度节点完成态纠偏与人工接管（1.272.0-rc8）** —— 结构化验收已全部完成时，节点不再被随后发生的计划续跑或运行错误覆盖成失败；重新进入调度项目会自动修复历史上“失败但验收 4/4”的错标节点并放行依赖。失败、已停止或待验收节点还可在节点详情及任务对话中经确认后“标记成功并继续”，同步收口运行时清单、解锁后继节点并恢复调度。
-- **单日 Token 复盘与黑底分享卡（1.272.0-rc7）** —— 启动页 Token 活动格子放大并聚焦最近半年，累计 Token 增加可点击提示；日历中的单天可下钻到模型输入/输出/缓存、任务与会话、主要技能/插件、缓存率和最大上下文，并生成 1080×1350 黑底 PNG，通过系统面板保存或分享。省心托管页同步移除 Coding Plan 推广区，Worker 菜单的 Profile 管理入口改走稳定设置深链。
 - **自动更新失败可诊断（1.272.0-rc6）** —— 手动更新失败时，在 Sparkle 原始提示之后补充错误域、错误码与脱敏摘要，可一键复制详情或打开 `~/Library/Logs/WillDeep/update.log`；后台自动检查仍保持安静，只落日志。诊断只保留应用版本、系统、安装路径和最多四层错误链，不记录完整 `NSError.userInfo`。
 - **发布测试与安全判定解耦（1.272.0-rc4）** —— Goal 模式的命令型工具继续遵循“静态分类 → AI 安全判定”闸门；发布回归测试不再假设测试机缺少安全判定配置，而是同时验证判定放行与回退人工审批两条合法路径，并禁止 Goal 模式或静态白名单绕过命令安全检查。
 - **Agent Markdown 有序列表连续编号（1.272.0-rc3）** —— Markdown 解析块现在携带按缩进层级解析出的显示序号，不再由实时、历史和预览渲染器各自写死 `1.`。同一列表允许项目之间存在空行，也兼容模型统一使用 `1.` 标记的常见写法；自定义起始序号、嵌套列表独立计数、返回父层后续号及段落边界重置均由同一解析器统一处理。
@@ -366,9 +366,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **调度历史、语言测试与对话收口（1.250.0-rc4）** —— “已安排的任务”页面全部文字统一采用 Agent 外观正文字体与字号，底部持久化展示近期运行时间并可跳回对应对话；“帐户与设备”支持跟随系统或指定简体中文、English、日本語（重启生效）。窗口菜单不再注册专家圆桌独立窗口或 Agent 专项入口；对话搜索支持 Escape 收起，已完成计划不再悬浮，也不能重新规划。
 - **Composer 活动卡统一灰阶与 Editor 菜单收口（1.250.0-rc3）** —— 计划、产物与 Dev Server 卡片共用安静的黑白灰视觉层级；产物不再使用系统蓝，运行中的 Dev Server 也不再使用绿色。Agent-only App 同时移除“显示 Editor / 切换到 Editor 模式”菜单及其快捷键，不再暴露已删除的 Editor Scene。
 - **侧边栏 Markdown 表格统一列宽（1.250.0-rc2）** —— 预览表格根据表头与全部数据行统一计算列宽，同一列的边界不再逐行漂移；单列宽度限制在 80–320 pt，DSN、命令和长说明会在单元格内换行，列数较多时仍可横向滚动。
-- **DeepSeek V4 Pro 接入 Responses 与网关状态续接（1.250.0-rc1）** —— `deepseek-v4-pro` 与 Flash 使用同一条 Responses 链路：直连 DeepSeek 时发送无服务端存储的请求，经 some.im 时启用 24 小时网关状态，有效游标下只上传新增 user/tool input，由 some.im 服务端按租户/API Key/会话/模型隔离地拼装完整历史。高档托管别名 `someim-coding-plan-high`、`someim-code-high`、`someim-auto-pro` 一并复用；premium 档解析到非 DeepSeek 后端，继续走 Chat Completions。
 - **Agent 与本地 Editor 正式拆分（1.249.0-rc1）** —— WillDeep 删除通用 Editor scene、文本/源码文件类型注册和 Editor 设置入口；Agent 文件面板与终端快捷 JSON 统一交给 macOS 默认外部编辑器。独立的 Qeditor 使用自己的 Bundle ID、沙盒容器、设置与 Sparkle feed，不迁移 WillDeep 数据。
-- **Coding Plan 主按钮对比度修复（1.248.0-rc8）** —— 模型选择面板的“了解并购买”按钮将文字与外链图标显式绑定到 Composer 主操作反差色，并将背景绑定到统一主操作填充色；浅色界面的黑色按钮恢复白色内容，深色界面也会自动保持反差。
 - **终端捷径编辑以正式存储为准（1.248.0-rc7）** —— 每次进入单条终端捷径编辑前，当前 Controller 都会先从正式 `shortcuts.json` 刷新，再生成临时 JSON。Editor 保存并关闭后，即使 Agent 回落到旧的 headless `AppState`，旧内存快照也不能覆盖已保存内容；重新打开会稳定显示最后一次成功保存的版本。
 - **调度项目先定义、后绑定工作区（1.248.0-rc6）** —— “新建调度项目”直接进入定义页，头部工作区按钮负责绑定或更换目录；绑定前整份项目配置只读，绑定后才可填写目标、调用 AI 生成验收清单并创建项目，取消会清理临时草稿。新项目默认由 some.im `deepseek-v4-pro` 规划、由单个 `deepseek-v4-flash` Worker Profile 执行；同一 Profile 可按 Provider 并发上限服务多个独立节点，补选多个 Worker 用于扩展路由和故障转移。AI 草稿与验收清单复用 Agent 外观中的正文字体、字号与行高。
 - **会话标题多展示约两个汉字（1.248.0-rc5）** —— 工作区会话行保留左侧 32 pt 子级缩进，继续与工作区标题的文本列对齐；右侧内容留白从 32 pt 收紧为 4 pt，为单行标题释放 28 pt。悬停图钉/归档区仍固定为 40 pt，空闲行仍完全归还操作区宽度，因此标题增宽不会牺牲操作命中区或运行状态标记。
@@ -485,7 +483,6 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 - **some.im 裁判模型统一使用 Responses（1.220.0-rc12）** —— `someim-judge` 作为 DeepSeek V4 Flash 的托管别名，现与其他 Flash 型号共用 Responses、无服务端存储请求和网关状态续接链路；其他提供商的同名模型不受影响。
 
-- **some.im Flash 别名统一使用 Responses（1.220.0-rc11）** —— `someim-auto-flash`、`someim-code-low`、兼容别名 `someim-coding-plan` 与托管型号 `someim-coding-plan-low` 复用 `deepseek-v4-flash` 的 Responses、无服务端存储请求和网关状态续接链路；高档 coding-plan 型号及其他提供商不受影响。
 
 - **Computer Use 截图直通（1.220.0-rc10）** —— 模型按需获取的目标窗口截图与聊天区右上角本地控制预览暂时跳过 Accessibility 敏感区域扫描和像素遮罩，避免钉钉等动态 AX 树因扫描超时或节点瞬时失效而丢弃整张截图；密码、验证码等自动读写限制仍独立保留。
 
@@ -834,7 +831,6 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **MuseTerm 风格关于页（1.187.0-rc1）** —— App 菜单的“关于 WillDeep”窗口采用与 QTerm 一致的 700×500 信息布局，展示项目简介、作者主页与 83d 产品目录中的其他 macOS App；推荐项以本地化整卡链接呈现，点击可直达对应产品页，页首复用随 App 打包的企鹅资产与实时版本号。
 - **可复用受保护密钥与别名标签（1.186.0-rc1）** —— 密钥弹窗列出本机钥匙串中由 Composer 保存的可复用密钥，点击即可在当前光标插入；升级前未进入别名索引的 UUID 密钥也会以“旧密钥 + 短编号”列出。新密钥以规范化别名生成 `${secret:production-ssh-password}` 一类可读占位符，同别名保存会安全更新原值。Composer 将占位符绘制为强调色圆角标签，禁止局部修改并支持整块删除。
 - **无工作区交互会话与可行动空态（1.185.0-rc9）** —— 未选择工作区时，执行器、模式、审批、专家、插件及右侧辅助栏的首次操作会自动创建无工作区草稿会话并立即保存选择；之后选目录会原地绑定该会话。Files / Diff 这类必须有文件系统根目录的面板不再静默空白，而是说明原因并提供“选择工作区”入口；聊天、终端、浏览器和预览仍可脱离工作区使用。
-- **主线审核解释修复整合（1.185.0-rc6）** —— 将 `main` 上已验证的 Coding Plan 审核解释模型路由、`someim-auto-flash` 回退与 provider 错误详情展示纳入当前发布线；贴图生成、浏览器和 Computer Use 改进与这一修复共同交付，版本与构建号同步递增。
 - **执行器即时状态刷新（1.185.0-rc8）** —— Composer 执行器在选择 Claude Code 或 Codex 后立即更新图标、名称、选中标记和配色；切换会话时会重新读取该会话的已保存选择，不再出现实际已切换但 pill 仍显示 WillDeep 的错觉。
 - **执行器身份与任务图标（1.185.0-rc7）** —— Composer 的内置执行器显示为 WillDeep，使用锤子图标清楚表达“实际干活 / 执行任务”；菜单摘要与悬浮提示不再用“我们”指代产品。
 - **Codex 风格 Computer Use / 浏览器授权（1.185.0-rc2）** —— Computer Use、Chrome 与内置浏览器的普通写操作使用紧凑三按钮授权卡；“允许此对话”只写入当前 Agent runtime 并按工具族隔离，“始终允许”按工具族持久化，danger 级调试操作继续走严格确认，避免便捷授权扩大高风险操作边界。（1.396.0-rc3 起浏览器的“始终允许”收窄为单个工具、navigate 再绑定域名，旧的整族规则不再生效。）
@@ -859,7 +855,6 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **悬浮语音连续波形与明亮配色（1.179.0-rc1）** —— 悬浮转写条在原有柱状波形之外新增跟随实时音量的正弦波、余弦波和心电图动态曲线；颜色库新增 8 组天空蓝、薄荷绿、薰衣草紫、蜜桃橙、玫瑰粉、柠檬黄、水色青与暖沙金浅色背景，并为每组提供高对比波形渐变和描边。
 - **AI Agent 全局壁纸与认证状态统一（1.178.0-rc1）** —— 设置 → 编辑器 → 格式可将 8 张内置 4K 壁纸或自定义图片应用到整个 Agent 工作区，支持填充、适应、拉伸、居中、平铺、缩放、图片与内容表面透明度，以及可选材质和强度的毛玻璃；some.im 设置页与左下账号区共用同一认证快照，不再因残留账号缓存显示互相矛盾的登录状态。
 - **Agent 长任务工具轮次扩容（1.177.0-rc3）** —— 单轮任务的工具调用安全上限从 64 轮提高到 256 轮，支持更长的排查、实现和验证链路；到达上限后仍会暂停并等待用户继续，保留意外循环保护。
-- **审核解释模型路由修复（1.177.0-rc2）** —— 命令确认卡使用 some.im Coding Plan 时请求已配置的 `someim-coding-plan-low`，失败后回退 `someim-auto-flash`；provider 返回错误时直接显示经过统一解析和长度限制的服务端原因，避免只显示孤零零的 HTTP 状态码。
 - **some.im 登录凭据单一真相与请求前自愈（1.177.0-rc2）** —— 侧边栏只在共享会话中确有 API 凭据时显示登录；App 启动、新消息、错误重试和后台续跑前都会把共享凭据同步到当前 some.im Provider，区域探测失败也不再阻断凭据注入，避免“左下角已登录、发送却提示未配置 API Key”的状态分裂。
 - **macOS App 图文文档站内置技能（1.177.0-rc1）** —— 新增 `mac-app-docs-site`，在 WillDeep 内可调用原生 `computer_use_*` 工具、在 Codex Desktop 内可调用 `node_repl + @oai/sky`，以真实界面状态采集流程截图并生成标准 Markdown 教程；同一技能继续把内容目录接入既有 React 或其他文档站路由，附带模板、隐私边界、深链/SSR/i18n 验收规则与 Markdown/JSON 双格式审计报告。
 - **命令确认按钮密度再收紧（1.176.0-rc8）** —— “拒绝 / 允许”在宽屏左右栏与窄屏上下栏中均使用更低的按钮高度和 124pt 最大宽度，按钮间距扩大到 24pt，保留主次操作与左右顺序但减少视觉压迫。
@@ -904,14 +899,11 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **委托视觉双保险（1.166.0-rc3）** —— Composer 委托给 Codex 时同时传入 `--image` 原图与 VL 文字描述；委托给 Claude Code 时创建仅当前用户可访问的临时图片副本，通过受信目录和 prompt 文件路径供其读取，并保留同一份 VL 描述兜底。临时目录与文件分别使用 `0700`、`0600` 权限，在任务成功、失败或取消后统一删除；远程工作区仍仅发送文字描述，避免把本机临时路径误传到远端。
 - **工作树 diff 审查防卡顿（1.166.0-rc2）** —— Composer 的“审查”入口会直接读取有界的小型未跟踪 UTF-8 文本，不再为每个 `+0 -0` 文件串行启动 `git diff --no-index`；大型、二进制和特殊文件提前降级为摘要。按钮在准备期间展示进度并阻止重复请求，弹窗 diff 着色移到后台执行，避免主线程承担大段 `AttributedString` 构建。
 - **执行器入口与可见委托终端（1.166.0-rc1）** —— 输入框顶部工作区信息行右侧直接选择“我们 / Claude Code / Codex”，内置名称完整支持 i18n；审批入口紧跟普通、计划与目标模式选择器，“更多”只保留插件与专家。Codex 探测新增 ChatGPT App 内置 CLI 路径。Claude Code、Codex 等外部委托改在右侧栏可见的专用 `/bin/sh` 标签页中执行，不再生成隐藏临时脚本；自动化标签页最多 3 个，任务结束后回到空闲池复用，繁忙时按超时预算排队。
-- **Coding Plan 控制面与状态语义修复（1.165.0-rc2）** —— 客户资料、登录和 Coding Plan 查询固定走 some.im 控制面，不再复用中国区模型推理网关；套餐状态新增“查询中、登录失效、服务不可用、已订阅、未订阅”的明确分流，查询失败不会再沿用旧的 `false` 缓存并误报未购买。中国区模型调用仍走 `api.niuwoai.com`，不受本次修复影响。
 - **Composer 未知附件安全分流与宠物动画降噪（1.165.0-rc1）** —— Composer 统一文件选择、拖放与 `@文件` 的附件校验入口，扩展 Procfile、Dockerfile、常见无扩展名工程文件和源码/配置文本类型；未知类型不超过 8 KB 时先征求用户确认再按纯文本解析发送，超过 8 KB 或无法读取大小时直接在 Composer 上方提示且不进入附件栏。“用户确认按文本发送”会随会话文档持久化，文件刷新后仍使用相同解析策略。桌面宠物删除 3D 转圈状态与渲染属性，新输出就绪时改用温和待机动作，只保留周期性红唇与闪光彩蛋。
-- **省心托管信息页与聊天排版统一（1.164.0-rc1）** —— Composer 的省心托管胶囊不再暴露内部 Auto/Flash/Pro/Premium 名称，始终只显示“省心托管”；模型面板中的省心托管标签改为模式说明页，明确当前是否选中、裁判模型负责选型与校验、干活模型成本优先且必要时自动升档。Coding Plan 作为 some.im 独立可选套餐展示订阅与到期日期，未购买或未登录时提供购买入口，并明确不购买也能使用省心托管。聊天正文的普通段落边界统一为正常换行，不再出现整行空白；代码块后的正文继续保持与前文一致的字号和行距。
 - **流式输出光标按字符活动收口（1.163.0-rc3）** —— 助手正文末尾的闪烁方块不再跟随整个 Agent 响应周期常驻；每次流式或普通正文内容变化时显示并重置计时，连续 500ms 没有新字符后自动隐藏。长消息预览即使字符总数保持不变，也会按尾部实际变化重新计时。
 - **Composer 当前工作区 `@文件` 引用（1.162.0-rc2）** —— 在输入框键入 `@` 后，WillDeep 会针对当前 Agent 会话绑定的本地工作区异步检查文件，而不是借用 Editor 可能指向另一目录的 Quick Open 缓存；文件名、部分文件名和相对路径都可召回，精确文件名优先。选中候选后文件以附件 chip 挂载并进入既有本地解析/检索链路；扫描跳过隐藏、依赖和构建目录，并设置遍历上限保护大型仓库。
 - **侧边栏委托任务跨 Shell 启动（1.161.0-rc5）** —— Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 不再把完整 prompt 和 zsh 包装语法直接输入用户配置的交互式 Shell；宿主改为生成权限 `0600` 的临时 POSIX runner，只向侧边栏发送短 `/bin/sh <runner>` 命令，兼容 fish、zsh、bash 与 sh，并规避超长 PTY 单行阻塞。runner 以独立启动标记和输出冲刷后的最终状态文件回报生命周期；15 秒内未真正启动会明确失败，结束后统一清理 prompt、日志和状态临时文件。
 - **当前 worktree 一键安装 Debug App（1.163.0-rc1）** —— 仓库根目录的 `dev_install.rb` 只从本 worktree 的 `.env.local` 读取 `WILLDEEP_CLIENT_LOGIN_SECRET`，以隐藏值的子进程环境完成 Debug 编译和 Apple Development 签名；安装前后校验版本、签名与 Debug dylib 密钥注入，并通过临时 App 路径原子替换 `/Applications/WillDeep.app`。支持 `--dry-run`、自定义 DerivedData、签名 Team 和安装目录。
-- **Composer 完整模型选择与省心托管升档（1.163.0-rc1）** —— 输入区将模型选择与托管升档拆成两个清晰动作：点击模型胶囊打开支持全局搜索、供应商切换、完整目录、编程推荐与最近使用的模型面板；省心托管会话可用独立升档按钮从 Flash 升至 Pro / Premium，并在自动升档时给出轻量反馈。Coding Plan 只作用于编程任务，通用任务始终路由到 `someim-auto-*`。
 - **some.im 客户中心直达（1.161.0-rc4）** —— 设置页已连接账户区域的 some.im 入口直接通过系统默认浏览器打开 `https://some.im/customer`，不再先请求一次性 handoff-link，避免网络接口异常导致点击后没有动作。
 - **账户弹出菜单退出键盘焦点链（1.161.0-rc3）** —— 剩余点数、桌面宠物、设置和退出登录四个操作共用不可聚焦的菜单行，打开弹窗时不会再自动选中首项或绘制紫色焦点框；鼠标悬停、点击与辅助功能标签保持原有行为。
 - **思考状态行降噪（1.161.0-rc2）** —— 全屏对话和紧凑侧栏中的“正在思考”状态不再绘制上方横向分隔线；计时与两行实时 reasoning 预览保持不变，排队和上下文压缩等其他状态仍保留原有分隔提示。
@@ -959,19 +951,16 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **桌面宠物自适应网格选择器（1.152.0-rc23）** —— 设置页移除重复的宠物下拉框和横向小缩略图条，改为 4–5 列起步、随窗口宽度自动增列的大卡片网格；每张卡展示更大的像素宠物、名称和清晰选中标记。
 - **任务监控文件 Finder 定位（1.152.0-rc22）** —— 右侧栏“产物”和“工作文件”的行内容都可整行点击；单文件在 Finder 中直接选中，多文件分组打开对应目录，已删除文件回退打开其所在目录。
 - **some.im 头像与昵称同步（1.152.0-rc22）** —— WillDeep 解析 some.im 客户资料中的 `nickname` 与 `avatar_url`，侧栏 some.im 账号区、设置页和 onboarding 优先展示昵称；头像 URL 存在时以圆形远程头像显示，缺失时继续回退首字母。
-- **Coding Plan 已购状态提示（1.152.0-rc21）** —— Agent 模型面板会在打开时刷新 some.im 套餐状态；已购用户直接看到套餐名称、“已订阅”和有效期，入口改为“管理套餐”，首次查询期间不再误显示“购买套餐”。
 - **模型选择面板全部禁用焦点抢占（1.152.0-rc20）** —— Agent 的“选择模型与托管方式”弹窗里，关闭按钮、托管卡片、套餐按钮、模型行和滚动区域统一设为 `.focusable(false)`，避免 popover 内控件抢占键盘焦点。
 - **模型选择面板先 Provider 后模型（1.152.0-rc20）** —— Agent 模型弹窗改为左侧选择 provider/省心托管来源、右侧选择具体模型或路由默认，降低推荐模型、套餐与用户配置混在一起的认知负担。
 - **设置侧边栏整行命中（1.152.0-rc20）** —— 设置窗口左侧 tab 行显式撑满宽度，点击文字后面的空白区域也会切换对应设置页。
 - **桌面宠物空状态进入新聊天（1.152.0-rc20）** —— 桌面宠物没有活跃对话时，点击“守望中 / 暂无活跃对话”卡片会打开 Agent 窗口并创建新聊天。
 - **Git/远程命令尾部输出读取更可靠（1.152.0-rc19）** —— Git 状态命令与远程 SSH 命令在子进程退出后会继续读到 EOF，减少 stdout/stderr 尾部输出因异步 readability 事件竞态而丢失的概率。
 - **桌面宠物前台消息卡片隐藏（1.152.0-rc18）** —— WillDeep App 在前台时，桌面宠物不再展示最近 3 个会话输出卡片或收起计数，避免用户已经看着主窗口时重复弹消息；切到后台后仍保留最近输出提醒。
-- **Agent 模型选择大面板（1.152.0-rc17）** —— Composer 模型选择入口改为宽面板配置：未绑定 some.im 时仅显示用户自配 Flash / Pro；已绑定 some.im 时展示省心托管、Coding Plan 订阅购买入口、`someim-coding-plan-low/high` 快捷选择，以及 deepseek-v4、glm、grok-4.5 等重点推荐模型。不熟悉模型差异的用户可直接选「省心托管」，由 WillDeep 按任务路由。
 - **专家介入锁定提示（1.152.0-rc16）** —— Agent 专家弹窗现在区分“只打开过”和“已经对话过”：空会话里误开的专家可以关闭；一旦会话已有用户消息，已启用专家会保持锁定，并在专家区顶部显示提示条说明“专家介入对话后，本会话内就不能再关闭”。
 - **Workspace 会话查询与自动改名（1.152.0-rc15，1.228.0-rc5 全模式免审）** —— Agent 新增 `list_workspace_sessions` 只读工具查看当前 workspace 分组下的会话列表，并新增 `suggest_session_title` 通过标题总结 flash 模型生成当前会话短标题候选；系统提示会在新用户输入后检查会话名是否仍贴合任务。`rename_session` 现已在所有审批模式自动通过且不打断目标执行，`change_workspace` 仍在 Goal 模式禁用并在普通模式保持人工门禁。
 - **同会话后续请求待办刷新（1.152.0-rc14）** —— Plan 模式中已完成计划会重新进入计划门，后续同一会话的新需求必须先生成新 `plan`；捕获逻辑现在优先识别最新助手消息里的 `plan` 块并替换旧计划，右侧待办随新需求刷新。
 - **当前会话排队任务工具（1.152.0-rc14）** —— Agent 新增 `list_queued_tasks` 只读工具，可查看当前会话排队用户消息、provider dispatch 等候、后台 job、媒体任务和 `.codex-build/queue` 项目构建队列；系统提示要求在用户未明确要求时，完整编译、测试、归档、发布、上线等重操作前先查队列，若还有后续用户任务则优先推迟重操作。
-- **Agent 主界面与审核框重排（1.152.0-rc13）** —— Agent 窗口的聊天区、左侧会话栏和右侧任务监控做了更清晰的视觉层次；工具审核卡独立展示风险、命令预览和操作按钮，长命令限制在约 3 行内滚动，并提供“查看解释与解决建议”。解释模型按 some.im Coding Plan 订阅优先 `someim-coding-plan-low/flow`，无订阅回退 `someim-auto-flash`，未绑定 some.im 则使用当前 provider 的 flash 模型。
 - **省心托管档位菜单（1.152.0-rc12）** —— 模型菜单在当前会话启用「省心托管」后显示「托管档位」子菜单，支持 Flash / Pro / Premium 三档互切并勾选当前档位；会话标签也展示 `省心托管 · Flash/Pro/Premium`，避免用户看不出托管最低档。
 - **项目级构建守卫（1.152.0-rc11）** —— 仓库新增 `scripts/project_build_guard.rb`，以 `.codex-build/` 维护 workspace 级队列、锁、manifest 与报告；Xedit 的测试和 release 打包入口已接入该守卫，多个 Agent 会话同时触发 `xcodebuild` 时会排队执行，且相同 fingerprint 的成功产物可直接复用。
 - **Agent 模型菜单勾选与分组文案（1.152.0-rc10）** —— 模型选择菜单里路由默认值、省心托管与具体模型的勾选态互斥；具体模型只在用户显式选择后显示勾选。尾部“最近获取”分组改为“所有模型”，省心托管升档后的重置操作改称“降回基础托管档”。
@@ -1010,7 +999,6 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **Agent 右侧面板与终端刷新修复（1.141.0-rc1）** —— 顶部侧栏快捷图标点击会走统一 side-panel open request 并扩大命中区；侧边栏/底部 SwiftTerm 终端在挂载、尺寸变化和输出到达后主动刷新 NSView，降低光标残影和旧内容留在光标下方的概率。
 - **多专家会诊（1.141.0）** —— Composer 可把当前议题交给 WillDeep 主持：先由 WillDeep 形成初版，Claude Code、Codex CLI、Cursor Agent 中至少两位按可选模型并行独立评审；WillDeep 做阶段性归纳后，各专家读取共享意见再互评一轮，最终由 WillDeep 输出自包含结论。外部 CLI 固定使用只读权限模式，不自动修改仓库；进度、单专家失败、停止状态和两轮意见随会话持久化。
 - **some.im 品牌名固定（1.141.0）** —— some.im 供应商在设置、会话持久化、轮次报告和模型用量统计中统一展示为 `some.im`；历史数据里的旧括号昵称会被展示层归一，不再覆盖重金域名本名。
-- **省心托管默认与领域标签修正（1.140.0-rc2）** —— some.im 登录状态下新聊天始终默认选择省心托管，手动选择具体模型只影响当前会话；托管页脚按裁判实际任务领域显示“通用/编程”，Coding Plan 权益模型族不再被误展示为裁判的编程结论。
 - **Goal 模式会话操作隔离（1.140.0-rc1）** —— Goal 模式不向模型暴露会话改名和 Workspace 切换工具；即使供应商缓存了旧工具定义或模型异常构造调用，执行层也会直接拒绝且不弹确认卡，避免正在运行的目标被暂停。
 - **会话状态工具（1.140.0）** —— Agent 可在任务范围明显变化时提议重命名当前会话，也可在当前目录缺失或错误时提议切换到已知的本地 Workspace；两项操作都必须逐次由用户确认，Goal 模式和智能审批不能绕过。Workspace 切换成功后立即结束当前工具轮次，避免继续使用旧目录上下文。
 - **附件 Source 无工作区降级（1.139.0-rc3）** —— 精确行号引用可映射到本地较大的文本分块并裁出对应原文；章节无法解析时在 Finder 中选中原附件。当前会话未选择工作区时，附件路径不再打开空 Files 侧栏。
@@ -1036,7 +1024,6 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **连续天数固定为全历史口径（1.137.0-rc6）** —— 统计面板切换 24 小时、7 天、30 天或全部时，会话、消息、活跃天数、图表等继续按所选范围过滤；“当前连续天数”和“最长连续天数”始终使用完整使用历史计算，不随范围选择变化。
 - **some.im 登录后默认省心托管（1.137.0-rc5）** —— 已登录 some.im 且尚未明确选择模型时，新聊天默认进入“省心托管”；登录对账只会接管尚未开始的空聊天，不改写历史会话。用户手动选择具体模型或路由默认值后，后续新聊天持续尊重该选择；再次手动选择“省心托管”即可恢复托管默认。
 - **Slash 命令参数输入态（1.137.0-rc4）** —— 无参数命令保持选中即执行；必填或可选参数的 workflow 命令选中后只将规范命令与空格填入 composer、光标停在末尾并显示参数格式，用户补完后再按 Enter 执行。必填参数缺失时保留输入并提示，不再清空 composer 或误启动 workflow。
-- **托管路由页脚显示实际模型族（1.137.0-rc3）** —— Judge 完成选路及可能的质量升级后，消息页脚按最终实际使用的虚拟模型显示：`someim-auto-*` 显示“托管-通用-flash/pro/premium”，`someim-coding-*` 与 `someim-code-*` 显示“托管-编程-flash/pro/premium”；其中 coding/code 的 `low/high` 统一映射为 `flash/pro`。历史消息与流式消息使用同一口径，并保留升级 `↑`、裁判回退 `~` 标记。
 - **聊天选文悬浮入口（1.137.0-rc2）** —— 历史消息选中文字后不再弹出会抢占交互的原生菜单，而是在选区上方显示轻量圆角 tooltip；顶部空间不足时自动放到下方，点击空白处或历史内容刷新时自动收起。
 - **聊天历史选文添加到任务（1.137.0-rc1）** —— 在历史用户输入或 AI 输出中选中文字后，会在选区旁显示“添加到任务”；点击后将原文作为“对话摘录”附件放入底部 composer，可删除、补写问题并随下一条用户消息发送和持久化，不包含“更多详情”或侧边提问入口。
 - **终端 Shell 选项（1.136.0-rc52）** —— 终端设置提供 zsh、bash、sh、fish、ksh、tcsh 等常见 Shell 路径菜单，同时保留自定义路径输入；编辑器底部终端和 Agent 侧栏本地终端统一使用该设置。
@@ -1048,7 +1035,6 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **侧边栏终端 ZMODEM 可由工具直接指定路径（1.136.0-rc43）** —— `terminal_send_command` 支持 `zmodem_upload_paths`（上传文件数组）和 `zmodem_download_directory`（下载目录），路径支持绝对路径或相对当前 workspace 的路径；Xedit 在远端 `rz` / `sz` 握手时使用一次性预选，未提供参数时保留 macOS 文件/目录面板兜底。
 - **会话级产物清单（1.136.0-rc42）** —— Agent 右侧任务监控里的“产物”不再从 Git 未提交变更按扩展名猜测，而是使用持久化的会话级产物路径，并合并严格属于当前 runtime 的媒体任务输出；只收录本会话新建的用户可交付文档、图片、音视频等文件，排除已有源码修改和 `build`、`.local-cache`、`node_modules` 等临时目录。产物提交 Git 后仍保留；“工作文件”继续单独展示本会话关联的未提交变更，两块口径在界面中明确标注且不会重复列同一文件。
 - **some.im 浏览器登录协议兼容（1.136.0-rc38）** —— 浏览器登录 URL 与状态轮询同时带新旧参数名（`code` / `device_code` / `willdeep_device_code`，`pair_token` / `willdeep_pair_token`），browser-status 也兼容扁平返回的 `api_token`、`customer_session_token`、`email`、`credits` 等字段；只要 some.im 返回 app API key，WillDeep 就能保存共享 session，不再因为缺少嵌套 `account` 对象误报“登录完成但没返回凭据”。
-- **some.im Coding Plan 感知托管路由（1.136.0-rc37）** —— WillDeep 登录 some.im 后会定期查询 `/customer/plan/subscription` 并缓存 coding plan 权益；省心托管每轮裁判后按权益选模型族：有 plan 时 low/high/premium 全部走 `someim-coding-plan-*`，没有 plan 时编程域走 `someim-code-low/high/premium`、通用域走 `someim-auto-flash/pro/premium`。
 - **委派 coding agent 默认免审核（1.136.0-rc35）** —— `claude_code` / `codex_cli` / `cursor_agent` / `cline_cli` 这类把整段任务委派给本机已装 CLI agent 的工具，默认 smart 模式下不再逐次弹审批，直接放行（`.staticAllowlist`），因为这三家各自自带审批 + 沙箱审核、视为可信。`requestEveryTime` 模式仍逐次问，goal 模式本就已放行，子进程自身沙箱边界不变（不提权）。
 - **本地模型设置拆分与离线 composer 备选（1.136.0-rc35）** —— “标题和上下文压缩先用本地”拆成“会话标题先用本地”和“上下文压缩先用本地”两个开关；上下文压缩默认不走本地小模型，避免误压缩长上下文。设置页新增“加入 composer 模型备选”和显示名称，勾选后会用固定本地 provider 条目把 Ollama / Local OpenAI 兼容模型放进 composer 模型菜单，断网时可手动切到本地聊天。
 - **some.im 登录凭据落库校验（1.136.0-rc34）** —— 浏览器配对返回 connected 后，必须先把 app API Key 写入共享 session 并读回验证，成功后才保存 account 与启用 some.im；若 some.im 没返回 key 或本机 Keychain/共享 session 写入失败，设置页不再显示“已连接但 API Key 为空”。设置页也会监听 some.im account/session 变更并重读 API Key，跨 App 登录或浏览器回调后能同步填上输入框与 Agent provider。
@@ -1062,7 +1048,6 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **some.im 账号入口点击直达设置（1.136.0-rc27）** —— Agent 侧栏底部的 some.im 账号位:已登录点击直接打开「设置 → some.im」整合 tab(齿轮图标),不再跳浏览器;未登录点击仍进浏览器登录。
 - **some.im 登录态跨 App 共享（1.136.0-rc26）** —— apiKey / sessionToken 改存共享 Keychain 访问组（Team `ZH2S7D6PL6`），由独立私有 Swift 包 `SomeIMSharedSession`（`github.com/xurenlu/SomeIMSharedSession`）收拢读写，供 WillDeep / museterm 等同签名 App 共用一份登录态：一处登录处处登录、一处登出处处登出（登录/登出经 `DistributedNotificationCenter` 广播不含密钥的变更通知，各 App 重读凭据并对账 agent provider）。首启一次性把旧 per-app Keychain 凭据迁入共享组、验证读回后删旧；`saveAPIKey("")` 改为 no-op 杜绝空串误覆盖。设置页新增带二次确认的「退出登录」。未签名/dev 走 `SOMEIM_SESSION_FILE` 环境变量逃生舱；CI 用只读 deploy key 解析该私有包。
 - **some.im 生图默认异步化（1.136.0-rc25）** —— `generate_image` 复用 `some_im_create_media_task`，普通 Agent 生图不再阻塞等待同步 `/images/generations`，而是提交到媒体任务中心并由轮询下载产物；some.im 图片媒体任务默认端点改为 `images/async-generations`，短剧分镜/资产图片生成等复用默认 endpoint 的入口同步走异步生图接口。`SomeIMAsyncMediaClient` 的提交、轮询、取消请求显式使用 600 秒 `URLRequest.timeoutInterval`，避免客户端 120 秒 request timeout 先取消长耗时任务。
-- **some.im 省心托管动态路由（1.136.0-rc24）** —— composer 在 some.im provider 下新增「省心托管」入口：每个用户轮先用轻量裁判 `someim-judge`（底层非思考 DeepSeek）判任务域（coding/general）+ 复杂度（low/high），结合会话级「只升不降」档位动态选实际模型（`someim-coding-plan-low/high/premium`、`someim-auto-flash/pro`），裁判失败回退本地启发式。无 tool call 的输出做质检（本地确定性重复/空检测 + `someim-judge` 复核），命中明确生成故障则清掉本轮输出、升一档重试一次（每轮至多一次）。some.im 请求附带 `x-willdeep-session-id` 与本机随机 `x-willdeep-workspace-id`（只发随机 UUID、不含路径）。裁判与主模型共用同一 provider 并发槽；路由锁定每用户轮一次，tool 循环内不重判。每条 assistant 消息记录 route 决策元数据，footer 显示「托管 · Low/High/Premium」（升档 ↑、fallback ~），用户能一眼看出这条用了哪档。设计文档见 `docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`。
 - **智能审批判官补位 + Goal 按风险过判官（1.136.0-rc22）** —— 两处收敛，向 Codex auto-review 语义靠拢。① 判官 key 兜底：`configurationForSafetyJudge()` 在运行时配置 apiKey 为空时，直接从当前 active provider library 条目的 Keychain 密钥补齐（读本地副本，不触发 provider-library 的 didSet 级联），消除审计日志里大量 `unavailable / missing api key` 造成的“判官没上岗、静默退回人工”。② Goal 模式不再对所有写操作一刀切放行：沙箱内非破坏性文件写与已校验公网 `web_fetch` 仍快速放行以保持自主；命令类调用（`run_command` / `terminal_send_command` / `terminal_send_control` / `call_mcp_tool`）改走与 smart 模式相同的「静态分类 → LLM 判官」闸门（Goal 隐式启用判官），判官判危险、判官不可用或需打字确认的破坏性操作 → 暂停等待人工。
 - **Agent 生成图可见引用链路（1.136.0-rc21）** —— Agent 调用 `generate_image` / some.im 图片任务后，会把生成图保存到当前 workspace（默认根目录，也可由 `output_directory` 指定子目录），并在 assistant Markdown 下方直接渲染缩略图；用户右键“引用”会向 composer 写入 `<generated-image-reference ... />` 标记，后续要求修改该图时走 `edit_generated_image` / `gpt-image-2` 参考图编辑，不再重新上传生成图。
 - **Agent 侧栏快捷入口去框（1.136.0-rc20）** —— Agent 会话区右上 Diff、Terminal、Preview、Files 快捷入口移除外层胶囊框和单个图标选中底框，只用图标颜色与字重表达当前侧栏状态。

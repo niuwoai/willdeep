@@ -30,9 +30,8 @@ private struct AgentApprovalExplanationRoute {
 }
 
 nonisolated enum AgentApprovalExplanationRouting {
-    static func someIMModels(hasCodingPlan: Bool) -> [String] {
-        guard hasCodingPlan else { return [SomeIMManagedModel.autoFlash] }
-        return [SomeIMManagedModel.codingPlanLow, SomeIMManagedModel.autoFlash]
+    static func someIMModels() -> [String] {
+        return [SomeIMManagedModel.autoFlash]
     }
 }
 
@@ -93,9 +92,8 @@ extension AppState {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !someIMAPIKey.isEmpty {
             let settings = SomeIMIntegrationStore.loadSettings().normalized
-            let status = await refreshedSomeIMCodingPlanStatusIfNeeded()
             let configurations = AgentApprovalExplanationRouting
-                .someIMModels(hasCodingPlan: status.isActiveNow)
+                .someIMModels()
                 .map { model in
                     AgentConfiguration(
                         providerID: AgentProviderPreset.someIMID,

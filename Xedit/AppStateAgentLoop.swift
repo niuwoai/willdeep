@@ -152,20 +152,14 @@ extension AppState {
         // tool-call loop (see AppStateAgentLoopTurnSetup.swift).
         var turnConfiguration = configuration
         var managedRouteDecision: AgentManagedRouteDecision?
-        // The judge's explicit complexity verdict (nil on fallback turns).
-        // Floor writes later in the turn — including the output-quality
-        // escalation — must derive from this, never from a hedge-inflated
-        // effective tier.
-        var managedJudgeExplicitTier: AgentManagedCapabilityTier?
         switch await resolveManagedTurnRoute(for: runtime, configuration: configuration, someIMContext: someIMContext) {
         case .unmanaged:
             break
         case .stopped:
             return
-        case .routed(let model, let decision, let explicitTier):
+        case .routed(let model, let decision):
             turnConfiguration.model = model
             managedRouteDecision = decision
-            managedJudgeExplicitTier = explicitTier
         }
         if runtime.activeTurnID == turnID {
             runtime.activeTurnConfiguration = turnConfiguration
@@ -182,7 +176,11 @@ extension AppState {
             session: agentLoopInferenceEnvironment?.session,
             someIMContext: someIMContext,
             openAIResponsesContinuationState: runtime.openAIResponsesContinuationState,
-            requestLedger: modelRequestLedger(for: runtime)
+            requestLedger: modelRequestLedger(for: runtime),
+            onRoutedModel: { [weak runtime] model in
+                guard let runtime, runtime.acceptsResponseEvents(for: turnID) else { return }
+                runtime.managedRouting?.currentTaskActualModel = model
+            }
         )
         // Resolve the runtime's workspace path for tool execution —
         // never read AppState.rootDirectory here. Concurrent runtimes
@@ -865,10 +863,13 @@ extension AppState {
                     let budgetRequestID = UUID()
                     tokenBudget.begin(budgetRequestID)
                     do {
+                        runtime.managedRouting?.currentTaskActualModel = nil
                         try await client.streamChat(
                             messages: requestMessages,
                             tools: requestTools,
-                            executionBudget: modelExecutionBudget(for: runtime)
+                            executionBudget: modelExecutionBudget(for: runtime),
+                            allowsEmptyTaskTakeover: runtime.managedRouting != nil
+                                && configuration.providerID == AgentProviderPreset.someIMID
                         ) { event in
                             await MainActor.run { [weak runtime] in
                                 guard let runtime,
@@ -1080,6 +1081,7 @@ extension AppState {
                     runtime.messages[index].content = ""
                 }
                 runtime.messages[index].elapsedSeconds = Date().timeIntervalSince(turnStartedAt)
+                managedRouteDecision?.actualModel = runtime.managedRouting?.currentTaskActualModel
                 runtime.messages[index].managedRoute = managedRouteDecision
                 runtime.messages[index].requestModelID = managedRouteDecision?.selectedModel
                     ?? turnConfiguration.model
@@ -1106,58 +1108,29 @@ extension AppState {
 
             // No tool calls → assistant finished talking. Capture patches and return.
             guard !latestToolCalls.isEmpty else {
-                // Phase 2: managed-routing output quality check + single
-                // escalation retry. Only for a managed some.im turn that
-                // produced text, hasn't already retried, and can still climb a
-                // tier. On failure we discard this output and re-run the round
-                // one tier up: the outer loop rebuilds provider-ready history
-                // from `runtime.messages` (excluding the removed message), so a
-                // retry that emits tool calls flows into the tool path and
-                // history stays intact. The judge shares this turn's slot.
+                // Only observable generation failures allow one task-local
+                // retry per turn. No auxiliary judge request runs here, and
+                // tool rounds are never replayed by this output check.
                 if !didRequestContextRunwayHandoff,
                    !didQualityRetry,
                    runtime.managedRouting != nil,
                    configuration.providerID == AgentProviderPreset.someIMID,
                    let escalatedModel = SomeIMManagedModel.escalated(from: turnConfiguration.model),
-                   let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
-                   !runtime.messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                       || !(runtime.messages[index].reasoningContent ?? "").isEmpty {
+                   let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
                     let assistantText = runtime.messages[index].content
-                    let reasoningText = runtime.messages[index].reasoningContent
-                    let latestUserMessage = runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
                     let qualityConfig = turnConfiguration
-                    let qualityContext = someIMContext
-                    let qualityJudge = AgentGoalRouteJudge(client: AgentClient(configuration: qualityConfig,
-                        session: agentLoopInferenceEnvironment?.session, someIMContext: qualityContext,
-                        requestLedger: modelRequestLedger(for: runtime)), executionBudget: auxiliaryModelExecutionBudget(for: runtime))
-                    let qualityMeasurement = AgentAuxiliaryRequestMeasurement()
-                    let decision = await AgentNonStreamingModelRequest.$usageObserver.withValue(qualityMeasurement) {
-                        await SomeIMManagedRouting.outputQuality(
-                            assistantText: assistantText,
-                            reasoningText: reasoningText,
-                            latestUserMessage: latestUserMessage,
-                            model: turnConfiguration.model,
-                            finishReason: finishReason
-                        ) { system, user, maxTokens in
-                            await qualityJudge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: maxTokens)
-                        }
-                    }
-                    await recordJudgeRequest(qualityMeasurement, purpose: .qualityJudge, configuration: qualityConfig,
-                        model: SomeIMManagedModel.judge, succeeded: decision.judgeAvailable, runtimeID: runtime.id)
-                    if !decision.judgeAvailable || decision.shouldRetry {
+                    let decision = SomeIMManagedRouting.outputQuality(
+                        assistantText: assistantText, finishReason: finishReason
+                    )
+                    if decision.shouldRetry {
                         AgentModelRouteLog.record(AgentModelRouteLog.Entry(
-                            surface: .qualityJudge,
-                            sessionID: runtime.id,
-                            subject: decision.failureType,
-                            requested: turnConfiguration.model,
-                            providerID: qualityConfig.providerID,
-                            model: decision.shouldRetry ? escalatedModel : turnConfiguration.model,
-                            fallback: !decision.judgeAvailable,
-                            reason: decision.judgeAvailable ? .routed : .judgeUnavailable,
-                            detail: decision.shouldRetry ? "escalate after \(decision.failureType)" : nil
+                            surface: .qualityJudge, sessionID: runtime.id,
+                            subject: decision.failureType, requested: turnConfiguration.model,
+                            providerID: qualityConfig.providerID, model: escalatedModel,
+                            fallback: false, reason: .routed,
+                            detail: "task takeover after \(decision.failureType)"
                         ))
                     }
-                    if stopAfterRouteJudge(qualityJudge, runtime: runtime) { return }
                     if decision.shouldRetry {
                         didQualityRetry = true
                         if let dropIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
@@ -1168,32 +1141,21 @@ extension AppState {
                             runtime.messages.remove(at: dropIndex)
                         }
                         turnConfiguration.model = escalatedModel
+                        runtime.activeTurnConfiguration = turnConfiguration
                         turnTelemetry.noteResolvedModel(escalatedModel)
                         client = AgentClient(
                             configuration: turnConfiguration,
                             session: agentLoopInferenceEnvironment?.session,
                             someIMContext: someIMContext,
                             openAIResponsesContinuationState: runtime.openAIResponsesContinuationState,
-                            requestLedger: modelRequestLedger(for: runtime)
+                            requestLedger: modelRequestLedger(for: runtime),
+                            onRoutedModel: { [weak runtime] model in
+                                guard let runtime, runtime.acceptsResponseEvents(for: turnID) else { return }
+                                runtime.managedRouting?.currentTaskActualModel = model
+                            }
                         )
                         let escalatedTier = SomeIMManagedModel.tier(of: escalatedModel)
-                        if let escalatedTier {
-                            // Cap the persisted floor at one step above the
-                            // judge's EXPLICIT verdict. The retry model itself
-                            // may climb from a hedge-inflated tier (low judged
-                            // with low confidence → turn ran high → retry runs
-                            // premium), but locking the session at premium when
-                            // the judge never said high defeats the
-                            // hedge-stays-per-turn rule.
-                            let floorTier: AgentManagedCapabilityTier
-                            if let judgeTier = managedJudgeExplicitTier {
-                                floorTier = min(escalatedTier, judgeTier.next ?? judgeTier)
-                            } else {
-                                floorTier = escalatedTier
-                            }
-                            runtime.raiseManagedFloor(to: floorTier, reason: "output-quality:\(decision.failureType)")
-                        }
-                        runtime.noteManagedSelectedModel(escalatedModel)
+                        runtime.noteManagedTaskTakeover(model: escalatedModel, reason: decision.failureType)
                         // Carry the escalation into this turn's route metadata so
                         // the retried message's footer shows the climbed tier.
                         managedRouteDecision?.didEscalate = true

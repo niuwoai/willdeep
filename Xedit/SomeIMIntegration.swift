@@ -83,58 +83,7 @@ struct SomeIMModel: Identifiable, Codable, Equatable {
     }
 }
 
-struct SomeIMCodingPlanStatus: Codable, Equatable {
-    var hasActivePlan: Bool
-    var planID: String?
-    var planName: String?
-    var periodEnd: Date?
-    var checkedAt: Date
 
-    static let unknown = SomeIMCodingPlanStatus(
-        hasActivePlan: false,
-        planID: nil,
-        planName: nil,
-        periodEnd: nil,
-        checkedAt: .distantPast
-    )
-
-    var isActiveNow: Bool {
-        guard hasActivePlan else { return false }
-        guard let periodEnd else { return true }
-        return periodEnd > Date()
-    }
-
-    var isStale: Bool {
-        Date().timeIntervalSince(checkedAt) > 10 * 60
-    }
-}
-
-enum SomeIMCodingPlanRefreshFailure: Equatable {
-    case authenticationRequired
-    case unavailable
-
-    static func classify(_ error: Error) -> SomeIMCodingPlanRefreshFailure? {
-        if error is CancellationError {
-            return nil
-        }
-        if let urlError = error as? URLError {
-            switch urlError.code {
-            case .cancelled:
-                return nil
-            case .userAuthenticationRequired:
-                return .authenticationRequired
-            default:
-                return .unavailable
-            }
-        }
-        if let toolError = error as? AgentToolError,
-           case .httpFailed(let status, _) = toolError,
-           status == 401 || status == 403 {
-            return .authenticationRequired
-        }
-        return .unavailable
-    }
-}
 
 struct SomeIMIntegrationSettings: Codable, Equatable {
     static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
@@ -908,43 +857,7 @@ enum SomeIMClient {
         let tenant_id: String?
     }
 
-    static func fetchCodingPlanStatus() async throws -> SomeIMCodingPlanStatus {
-        try await fetchCodingPlanStatus(
-            settings: SomeIMIntegrationStore.loadSettings(),
-            sessionToken: SomeIMIntegrationStore.loadSessionToken(),
-            session: AgentNetworkSupport.defaultSession()
-        )
-    }
 
-    static func fetchCodingPlanStatus(
-        settings _: SomeIMIntegrationSettings,
-        sessionToken: String,
-        session: URLSession
-    ) async throws -> SomeIMCodingPlanStatus {
-        let token = sessionToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty else { throw URLError(.userAuthenticationRequired) }
-        let endpoint = try publicAPIEndpoint(from: controlPlaneOrigin, suffix: "customer/plan/subscription")
-        var request = jsonRequest(url: endpoint, method: "GET")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let data = try await send(request, session: session)
-        let decoded = try decodeEnvelope(CodingPlanSubscriptionData.self, from: data)
-        guard let subscription = decoded.subscription else {
-            return SomeIMCodingPlanStatus(
-                hasActivePlan: false,
-                planID: nil,
-                planName: nil,
-                periodEnd: nil,
-                checkedAt: Date()
-            )
-        }
-        return SomeIMCodingPlanStatus(
-            hasActivePlan: subscription.status.lowercased() == "active",
-            planID: subscription.plan_id.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
-            planName: (subscription.plan_display_name ?? subscription.plan_name).trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
-            periodEnd: parseRFC3339Date(subscription.period_end),
-            checkedAt: Date()
-        )
-    }
 
     static func fetchModels(
         settings: SomeIMIntegrationSettings,
@@ -953,12 +866,14 @@ enum SomeIMClient {
     ) async throws -> [SomeIMModel] {
         do {
             let models = try await fetchPricingModels(settings: settings.normalized, apiKey: apiKey, session: session)
+                .filter { !SomeIMManagedModel.isRetired($0.model) }
             if !models.isEmpty { return models }
         } catch {
             // Fall through to OpenAI-compatible /models below. some.im
             // deployments may expose only one of these endpoints.
         }
         return try await fetchOpenAIModels(settings: settings.normalized, apiKey: apiKey, session: session)
+            .filter { !SomeIMManagedModel.isRetired($0.model) }
     }
 
     static func fetchModels(
@@ -1395,9 +1310,6 @@ enum SomeIMClient {
         }
     }
 
-    private struct CodingPlanSubscriptionData: Decodable {
-        let subscription: CodingPlanSubscription?
-    }
 
     private struct ClientLocationData: Decodable {
         let country: String?
@@ -1417,13 +1329,6 @@ enum SomeIMClient {
         }
     }
 
-    private struct CodingPlanSubscription: Decodable {
-        let plan_id: String
-        let plan_name: String
-        let plan_display_name: String?
-        let period_end: String
-        let status: String
-    }
 
     private struct APIEnvelope<T: Decodable>: Decodable {
         let data: T

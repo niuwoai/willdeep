@@ -208,6 +208,15 @@ struct AgentConfiguration: Codable, Equatable {
         result.apiKey = result.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         result.titleModel = result.titleModel.trimmingCharacters(in: .whitespacesAndNewlines)
         result.compressionModel = result.compressionModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Migrate retired persisted aliases before any request can use them.
+        if result.providerID == AgentProviderPreset.someIMID {
+            if SomeIMManagedModel.isRetired(result.model) { result.model = SomeIMManagedModel.autoFlash }
+            if SomeIMManagedModel.isRetired(result.flashModel) { result.flashModel = SomeIMManagedModel.autoFlash }
+            if SomeIMManagedModel.isRetired(result.proModel) { result.proModel = SomeIMManagedModel.autoPro }
+            if SomeIMManagedModel.isRetired(result.titleModel) { result.titleModel = SomeIMManagedModel.autoFlash }
+            if SomeIMManagedModel.isRetired(result.compressionModel) { result.compressionModel = SomeIMManagedModel.autoFlash }
+        }
+
 
         let preset = AgentProviderPreset.preset(id: result.providerID)
         if preset == nil {
@@ -419,12 +428,7 @@ struct AgentConfiguration: Codable, Equatable {
         SomeIMManagedModel.judge,
         SomeIMManagedModel.securityGuard,
         SomeIMManagedModel.autoFlash,
-        SomeIMManagedModel.autoPro,
-        SomeIMManagedModel.codeLow,
-        SomeIMManagedModel.codeHigh,
-        "someim-coding-plan",
-        SomeIMManagedModel.codingPlanLow,
-        SomeIMManagedModel.codingPlanHigh
+        SomeIMManagedModel.autoPro
     ])
 
     var isDeepSeekV4ResponsesModel: Bool {

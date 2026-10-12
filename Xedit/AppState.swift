@@ -173,8 +173,6 @@ final class AppState: ObservableObject {
     /// Hot/new flags discovered from provider model metadata. some.im
     /// exposes these through public pricing and `/v1/models` extensions.
     @Published var agentDiscoveredModelMetadata: [AgentModelDiscovery] = []
-    @Published var someIMCodingPlanStatus = SomeIMIntegrationStore.loadCodingPlanStatus()
-    @Published var someIMCodingPlanRefreshFailure: SomeIMCodingPlanRefreshFailure?
     /// Model IDs explicitly chosen in the composer, most-recently-used
     /// first. This is separate from fetched IDs so a large /models
     /// result doesn't drown out the handful of models the user actually
@@ -763,8 +761,6 @@ final class AppState: ObservableObject {
     /// Pending re-check of an empty shared-session read before the provider
     /// entry is destroyed. See `reconcileSomeIMProviderFromSharedSession`.
     var someIMSignOutConfirmationTask: Task<Void, Never>?
-    var someIMCodingPlanRefreshTimer: Timer?
-    var someIMCodingPlanRefreshTask: Task<Void, Never>?
     @Published var availableAppUpdate: AppUpdateMeta?
     @Published var isDownloadingAppUpdate = false
     var appUpdateCheckTask: Task<Void, Never>?
@@ -1007,7 +1003,6 @@ final class AppState: ObservableObject {
                 self?.reconcileSomeIMProviderFromSharedSession(
                     trigger: signedOut ? .signOut : .routine
                 )
-                self?.refreshSomeIMCodingPlanStatus(force: true)
             }
         // Session observers only report future cross-app changes. Reconcile the
         // session that already exists at launch immediately and without a
@@ -1027,8 +1022,6 @@ final class AppState: ObservableObject {
         // reconcile→relay-probe ordering (and its source-scan invariant) intact.
         seedDevProviderIfNeeded()
         #endif
-        startSomeIMCodingPlanRefreshTimer()
-        refreshSomeIMCodingPlanStatus(force: false)
         startAppUpdateChecks()
         agentMediaTaskRegistry.shortDramaStore = agentShortDramaStore
         agentMediaTaskPoller.start(registry: agentMediaTaskRegistry)
@@ -1255,8 +1248,6 @@ final class AppState: ObservableObject {
         runtimeKernelSubscription?.cancel()
         runtimeKernelSaveFailureSubscription?.cancel()
         sessionSaveFailureSubscription?.cancel()
-        someIMCodingPlanRefreshTask?.cancel()
-        someIMCodingPlanRefreshTimer?.invalidate()
         appUpdateCheckTask?.cancel()
         agentSidePanelResourceReaperTimer?.invalidate()
         Task { @MainActor [poller = agentMediaTaskPoller] in

@@ -281,33 +281,9 @@ extension WillDeepTests {
     // 声明的任务域解析成 some.im 虚拟模型。
 
     @MainActor
-    @Test("省心托管:workflow 模型 floor 与 high 取高者、按域映射")
-    func managedWorkflowModelResolvesFloorAndDomain() {
-        // 默认 floor(.low)抬到 high。
-        #expect(
-            AppState.managedWorkflowModel(floor: .low, domain: .general, hasCodingPlan: false)
-                == SomeIMManagedModel.autoPro
-        )
-        // 会话 floor 已升到 premium 时不降档。
-        #expect(
-            AppState.managedWorkflowModel(floor: .premium, domain: .general, hasCodingPlan: false)
-                == SomeIMManagedModel.autoPremium
-        )
-        // coding 域走 code* 梯子。
-        #expect(
-            AppState.managedWorkflowModel(floor: .low, domain: .coding, hasCodingPlan: false)
-                == SomeIMManagedModel.codeHigh
-        )
-        // coding plan 不改变 general 域，仍走 auto 梯子。
-        #expect(
-            AppState.managedWorkflowModel(floor: .low, domain: .general, hasCodingPlan: true)
-                == SomeIMManagedModel.autoPro
-        )
-        // coding plan 只接管 coding 域。
-        #expect(
-            AppState.managedWorkflowModel(floor: .low, domain: .coding, hasCodingPlan: true)
-                == SomeIMManagedModel.codingPlanHigh
-        )
+    @Test("托管 workflow 默认使用 Flash")
+    func managedWorkflowStartsOnFlash() {
+        #expect(AppState.managedWorkflowModel() == SomeIMManagedModel.autoFlash)
     }
 
     @MainActor

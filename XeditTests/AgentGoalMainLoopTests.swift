@@ -486,11 +486,69 @@ struct AgentGoalMainLoopTests {
         #expect(AgentUsageStats.modelUsage(for: [snapshot]).isEmpty)
     }
 
-    @Test("托管路由预算不足时真实主循环零请求暂停，不使用路由降级继续发送")
+    @Test("托管真实主循环无分类请求，失败只接手当前任务", arguments: ["empty", "repetition", "normal"])
+    func managedTaskTakeoverTrace(kind: String) async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        f.runtime.interactionMode = .normal
+        f.runtime.currentGoal = nil
+        f.runtime.currentPlan = nil
+        f.runtime.managedRouting = .init(minimumTier: .premium)
+        f.app.agentLoopRuntimeParametersOverride?.inputSuggestions = false
+        let config = AgentConfiguration(providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://goal-loop.invalid/v1", model: SomeIMManagedModel.autoFlash, apiKey: "test-placeholder")
+        f.app.agentLoopInferenceEnvironment = (config, f.session)
+        var requestedModels: [String] = []
+        GoalLoopURLProtocol.install(f.token) { request in
+            let body = try Self.requestJSON(request)
+            requestedModels.append(body["model"] as? String ?? "missing")
+            let text: String
+            if requestedModels.count == 1, kind == "empty" { text = "" }
+            else if requestedModels.count == 1, kind == "repetition" {
+                text = Array(repeating: "Repeated generation failure sentence.", count: 6).joined(separator: "\n")
+            } else { text = "A complete answer." }
+            let delta = try JSONSerialization.data(withJSONObject: ["delta": text])
+            let completed = try JSONSerialization.data(withJSONObject: ["response": [
+                "id": "resp_\(requestedModels.count)", "status": "completed", "output": [],
+                "usage": ["input_tokens": 10, "output_tokens": 10, "total_tokens": 20]
+            ]])
+            return Data(("event: response.output_text.delta\ndata: " + String(decoding: delta, as: UTF8.self)
+                + "\n\nevent: response.completed\ndata: " + String(decoding: completed, as: UTF8.self) + "\n\n").utf8)
+        }
+        for task in 0..<2 {
+            if task == 1 {
+                f.runtime.messages.append(.init(role: .user, content: "A new task.", source: .operatorInput))
+            }
+            try #require(f.app.acquireProviderSlotIfPossible(providerID: config.providerID))
+            let claim = f.app.claimProviderSlot(for: f.runtime, providerID: config.providerID)
+            let turnID = UUID()
+            f.runtime.activeTurnID = turnID
+            f.runtime.activeTurnConfiguration = config
+            f.runtime.isResponding = true
+            f.runtime.turnStartedAt = Date()
+            await f.app.runAgentLoop(for: f.runtime, configuration: config, providerSlotClaimID: claim.id, turnID: turnID)
+            #expect(f.runtime.errorMessage == nil)
+            if task == 0 {
+                #expect(requestedModels == (kind == "normal"
+                    ? [SomeIMManagedModel.autoFlash]
+                    : [SomeIMManagedModel.autoFlash, SomeIMManagedModel.autoPro]))
+                let last = try #require(f.runtime.messages.last(where: { $0.role == .assistant }))
+                #expect(last.managedRoute?.actualModel == "fixture-physical-model")
+                #expect(last.managedRoute?.didEscalate == (kind != "normal"))
+                if kind != "normal" {
+                    #expect(last.managedRoute?.failureType == (kind == "empty" ? "empty_output" : "repetition_loop"))
+                }
+            }
+        }
+        #expect(requestedModels.last == SomeIMManagedModel.autoFlash)
+        #expect(!requestedModels.contains(SomeIMManagedModel.judge))
+        #expect(f.runtime.managedRouting?.minimumTier == .low)
+        #expect(f.runtime.managedRouting?.lastEscalationReason == nil)
+    }
+
+    @Test("托管主请求预算不足时零请求暂停")
     func managedRouteAdmissionStopsMainRequest() async throws {
         let f = try fixture(); defer { f.cleanup() }
         f.runtime.managedRouting = .init()
-        f.app.someIMCodingPlanStatus = .init(hasActivePlan: false, checkedAt: Date())
         f.app.agentLoopInferenceEnvironment = (.init(providerID: AgentProviderPreset.someIMID,
             baseURL: "https://goal-loop.invalid/v1", model: SomeIMManagedModel.autoFlash, apiKey: "test-placeholder"), f.session)
         let ledger = try #require(f.app.modelRequestLedger(for: f.runtime))
@@ -717,7 +775,7 @@ nonisolated final class GoalLoopURLProtocol: URLProtocol, @unchecked Sendable {
                 try Task.checkCancellation()
                 let status = request.value(forHTTPHeaderField: Self.statusHeader).flatMap(Int.init) ?? 200
                 guard let url = request.url, let response = HTTPURLResponse(url: url, statusCode: status,
-                    httpVersion: nil, headerFields: ["Content-Type": "text/event-stream"]) else { throw URLError(.badServerResponse) }
+                    httpVersion: nil, headerFields: ["Content-Type": "text/event-stream", "X-Routed-Model": "fixture-physical-model"]) else { throw URLError(.badServerResponse) }
                 client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
                 client?.urlProtocol(self, didLoad: data)
                 client?.urlProtocolDidFinishLoading(self)

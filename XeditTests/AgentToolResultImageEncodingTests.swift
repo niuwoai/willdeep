@@ -96,17 +96,10 @@ struct AgentToolResultImageEncodingTests {
             "someim-judge",
             SomeIMManagedModel.securityGuard,
             "someim-auto-flash",
-            "someim-auto-pro",
-            "someim-code-low",
-            "someim-code-high",
-            "someim-coding-plan",
-            "someim-coding-plan-low",
-            "someim-coding-plan-high"
+            "someim-auto-pro"
         ]
         // Premium aliases resolve to non-DeepSeek backends and stay on Chat.
         let nonDeepSeekSomeIMModels = [
-            "someim-coding-plan-premium",
-            "someim-code-premium",
             "someim-auto-premium"
         ]
 

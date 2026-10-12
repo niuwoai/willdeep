@@ -6,6 +6,38 @@ import Testing
 struct AgentEmptyResponseRetryTests {
     private var empty: AgentClientError { .emptyStream(providerID: "fixture", model: "fixture") }
 
+    @Test("托管空输出交给任务层，保留用量且不在同模型上重试")
+    func managedEmptyOutputKeepsUsage() async throws {
+        var requests = 0
+        var invalidations = 0
+        let events = RetryEventRecorder()
+        try await AgentEmptyResponseRetry.run(providerID: "fixture", model: "fixture",
+            returnsEmptyOutput: true, onEmptyOutput: { invalidations += 1 },
+            onEvent: { await events.consume($0) },
+            sleep: { _ in Issue.record("Managed emptiness must not back off") }) { consume in
+            requests += 1
+            await consume(.usageReported(prompt: 10, completion: 5, total: 15,
+                cachedPrompt: nil, cacheWritePrompt: nil, reasoning: 0))
+            await consume(.finishedTurn("stop"))
+            throw empty
+        }
+        #expect(requests == 1)
+        #expect(invalidations == 1)
+        #expect(await events.usageTotals == [15])
+        #expect(await events.finishes == 1)
+    }
+
+    @Test("托管空输出策略不吞权限或网络错误")
+    func managedErrorsStillPropagate() async {
+        await #expect(throws: FixtureError.self) {
+            try await AgentEmptyResponseRetry.run(providerID: "fixture", model: "fixture",
+                returnsEmptyOutput: true, onEvent: { _ in },
+                sleep: { _ in Issue.record("Must not back off") }) { _ in
+                throw FixtureError.unauthorized
+            }
+        }
+    }
+
     @Test("empty requests back off three times then recover without replaying prior tools")
     func resumesCurrentRequest() async throws {
         var requests = 0

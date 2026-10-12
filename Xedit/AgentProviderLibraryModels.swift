@@ -128,14 +128,14 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
     var allFlashModels: [String] {
         var out = [flashPrimary]
         out.append(contentsOf: flashAlternates)
-        return out.filter { !$0.isEmpty }
+        return out.filter { !$0.isEmpty && !SomeIMManagedModel.isRetired($0) }
     }
 
     /// All pro candidates with the primary first.
     var allProModels: [String] {
         var out = [proPrimary]
         out.append(contentsOf: proAlternates)
-        return out.filter { !$0.isEmpty }
+        return out.filter { !$0.isEmpty && !SomeIMManagedModel.isRetired($0) }
     }
 
     /// Whether this entry can actually back a chat turn right now. Model

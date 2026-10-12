@@ -46,7 +46,6 @@ enum SomeIMIntegrationStore {
 
     private static let settingsKey = "com.willdeep.someIM.integrationSettings.v1"
     private static let accountKey = "com.willdeep.someIM.account.v1"
-    private static let codingPlanStatusKey = "com.willdeep.someIM.codingPlanStatus.v1"
     // Per-app Keychain accounts. They were originally legacy migration inputs;
     // now they also act as the local fallback when the shared access group is
     // unavailable or the user's Keychain ACL rejects the shared write.
@@ -442,7 +441,6 @@ enum SomeIMIntegrationStore {
         invalidateSharedSessionCache()
         sharedSessionMemo.forgetLastKnownGoodSession()
         defaults.removeObject(forKey: accountKey)
-        defaults.removeObject(forKey: codingPlanStatusKey)
         var settings = loadSettings()
         if settings.enabled {
             settings.enabled = false
@@ -458,19 +456,7 @@ enum SomeIMIntegrationStore {
         )
     }
 
-    static func loadCodingPlanStatus() -> SomeIMCodingPlanStatus {
-        guard let data = defaults.data(forKey: codingPlanStatusKey),
-              let decoded = try? JSONDecoder().decode(SomeIMCodingPlanStatus.self, from: data) else {
-            return .unknown
-        }
-        return decoded
-    }
 
-    static func saveCodingPlanStatus(_ status: SomeIMCodingPlanStatus) {
-        if let data = try? JSONEncoder().encode(status) {
-            defaults.set(data, forKey: codingPlanStatusKey)
-        }
-    }
 
     // MARK: - Shared session plumbing
 

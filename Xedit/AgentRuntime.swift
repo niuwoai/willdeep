@@ -933,51 +933,43 @@ final class AgentRuntime: ObservableObject, Identifiable {
         AgentSessionStore.saveAsync(session)
     }
 
-    // MARK: - Managed routing ("省心托管") floor
+    // MARK: - Managed task routing
 
-    /// Raise the managed-routing capability floor. Router-driven changes are
-    /// only-goes-up: a tier at or below the current floor is ignored. Returns
-    /// true if the floor rose. Callers persist afterwards.
-    @discardableResult
-    func raiseManagedFloor(to tier: AgentManagedCapabilityTier, reason: String?) -> Bool {
-        guard var state = managedRouting else { return false }
-        guard tier > state.minimumTier else { return false }
-        state.minimumTier = tier
-        state.lastEscalatedAt = Date()
-        state.lastEscalationReason = reason
-        managedRouting = state
-        return true
-    }
-
-    /// Record the main-call model the router resolved to this turn
-    /// (diagnostic only; does not affect the floor).
+    /// Keep the request model for this operator task and its automatic continuations.
     func noteManagedSelectedModel(_ model: String) {
         guard var state = managedRouting else { return }
-        guard state.lastSelectedModel != model else { return }
         state.lastSelectedModel = model
+        state.currentTaskModel = model
+        state.currentTaskActualModel = nil
         managedRouting = state
     }
 
-    /// User-selected managed-routing floor. Unlike router escalation, this can
-    /// move both up and down. No-op when the session is not managed.
-    func setManagedFloor(to tier: AgentManagedCapabilityTier) {
-        guard var state = managedRouting else { return }
-        guard state.minimumTier != tier else { return }
-        state.minimumTier = tier
-        if tier == .low {
-            state.lastEscalatedAt = nil
+    func beginManagedTask(id: UUID?) -> String {
+        guard var state = managedRouting else { return SomeIMManagedModel.autoFlash }
+        let continuesTask = id != nil && state.currentTaskID == id
+        let model = continuesTask ? state.currentTaskModel ?? SomeIMManagedModel.autoFlash : SomeIMManagedModel.autoFlash
+        state.minimumTier = .low
+        state.currentTaskID = id
+        state.currentTaskModel = SomeIMManagedModel.allowlist.contains(model) ? model : SomeIMManagedModel.autoFlash
+        state.lastSelectedModel = state.currentTaskModel
+        if !continuesTask {
+            state.currentTaskActualModel = nil
             state.lastEscalationReason = nil
-        } else {
-            state.lastEscalatedAt = Date()
-            state.lastEscalationReason = "user_selected_\(tier.rawValue)"
+            state.lastEscalatedAt = nil
         }
         managedRouting = state
+        return state.currentTaskModel ?? SomeIMManagedModel.autoFlash
     }
 
-    /// Reset the managed floor to `.low`. No-op when the session is not
-    /// managed.
+    func noteManagedTaskTakeover(model: String, reason: String) {
+        noteManagedSelectedModel(model)
+        managedRouting?.lastEscalationReason = reason
+        managedRouting?.lastEscalatedAt = Date()
+    }
+
+    /// Explicitly selecting managed routing starts a fresh Flash task.
     func resetManagedFloor() {
-        setManagedFloor(to: .low)
+        managedRouting = managedRouting.map { _ in AgentManagedRoutingState() }
     }
 
     /// True if this session has no real user messages yet.

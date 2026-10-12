@@ -114,16 +114,10 @@ struct AgentModelSelectionTests {
             == .failure(AgentWorkerTierUnavailable(reason: .bindingUnconfigured)))
     }
 
-    @Test("an unreachable quality judge is marked unavailable")
-    func qualityJudgeUnavailableIsFlagged() async {
-        let decision = await SomeIMManagedRouting.outputQuality(
-            assistantText: "a perfectly ordinary answer",
-            reasoningText: nil,
-            latestUserMessage: "q",
-            model: "someim-code-low",
-            finishReason: "stop"
-        ) { _, _, _ in nil }
-        #expect(decision.judgeAvailable == false)
+    @Test("ordinary output is accepted locally without a quality judge")
+    func ordinaryOutputNeedsNoJudge() {
+        let decision = SomeIMManagedRouting.outputQuality(assistantText: "a perfectly ordinary answer", finishReason: "stop")
+        #expect(decision.judgeAvailable == true)
         #expect(decision.shouldRetry == false)
     }
 

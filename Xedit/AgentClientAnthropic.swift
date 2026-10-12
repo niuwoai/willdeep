@@ -105,6 +105,7 @@ struct AnthropicMessagesAdapter {
             ) {
                 await onEvent(.requestIdentified(requestID))
             }
+            await AgentRoutedModelResponseObserver.capture(httpResponse, providerID: configuration.providerID)
             guard (200..<300).contains(httpResponse.statusCode) else {
                 let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
                 throw AgentClientError.serverStatus(

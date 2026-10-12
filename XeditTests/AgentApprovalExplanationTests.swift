@@ -11,11 +11,11 @@ import Testing
 
 @Suite
 struct AgentApprovalExplanationTests {
-    @Test("Coding Plan explanation uses the configured model and falls back to auto flash")
+    @Test("Approval explanations always use Flash")
     func codingPlanRouteUsesKnownModelNames() {
-        let models = AgentApprovalExplanationRouting.someIMModels(hasCodingPlan: true)
+        let models = AgentApprovalExplanationRouting.someIMModels()
 
-        #expect(models == [SomeIMManagedModel.codingPlanLow, SomeIMManagedModel.autoFlash])
+        #expect(models == [SomeIMManagedModel.autoFlash])
         #expect(models.allSatisfy { !$0.contains("/flow") })
         #expect(models.allSatisfy {
             SomeIMManagedModel.allowlist.contains($0) || $0 == SomeIMManagedModel.autoFlash
@@ -25,7 +25,7 @@ struct AgentApprovalExplanationTests {
     @Test("Accounts without Coding Plan use auto flash directly")
     func nonPlanRouteUsesAutoFlashOnly() {
         #expect(
-            AgentApprovalExplanationRouting.someIMModels(hasCodingPlan: false)
+            AgentApprovalExplanationRouting.someIMModels()
                 == [SomeIMManagedModel.autoFlash]
         )
     }
@@ -39,7 +39,7 @@ struct AgentApprovalExplanationTests {
                 method: "POST",
                 url: "https://some.im/v1/chat/completions",
                 providerID: AgentProviderPreset.someIMID,
-                model: SomeIMManagedModel.codingPlanLow,
+                model: SomeIMManagedModel.autoFlash,
                 requestSummary: "test",
                 requestBody: "{}",
                 responseBody: #"{"error":"model not configured"}"#

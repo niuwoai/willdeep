@@ -133,7 +133,7 @@ struct AgentModelPickerCatalogTests {
             managedLabel: "省心托管",
             selectModelLabel: "选择模型"
         )
-        #expect(label == "省心托管")
+        #expect(label == "some.im · Auto Flash")
     }
 
     @Test

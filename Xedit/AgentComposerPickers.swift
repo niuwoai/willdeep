@@ -419,9 +419,6 @@ struct ModelPickerPill: View {
     @State private var fetchedModelsByProvider: [UUID: [String]] = [:]
     @State private var loadingProviderIDs: Set<UUID> = []
     @State private var providerLoadFailures: Set<UUID> = []
-    @State private var observedManagedTier: AgentManagedCapabilityTier?
-    @State private var showsAutomaticUpgradeBadge = false
-    @State private var automaticUpgradeBadgeTask: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -437,42 +434,18 @@ struct ModelPickerPill: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: AgentModelPickerPresentation.compactLabelMaxWidth)
-                    if showsAutomaticUpgradeBadge {
-                        Text(L10n.AgentModelPicker.autoUpgrade)
-                            .font(AgentDesign.chatSupportingFont(
-                                baseFontSize: appState.agentChatBaseFontSize,
-                                visualMinimum: 8,
-                                weight: .bold
-                            ))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(AgentComposerChrome.selectedControlFill)
-                            .clipShape(Capsule())
-                    }
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .semibold))
                 }
                 .padding(.leading, 8)
-                .padding(.trailing, canUpgradeManagedTier ? 7 : 8)
+                .padding(.trailing, 8)
                 .padding(.vertical, 4)
             }
             .buttonStyle(.plain)
             .focusable(false)
             .help(L10n.AgentModelPicker.chooseHelp)
 
-            if canUpgradeManagedTier {
-                Divider()
-                    .frame(height: 16)
-                Button(action: upgradeManagedTier) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 9, weight: .bold))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .help(L10n.AgentModelPicker.upgradeTo(nextManagedTierLabel))
-            }
+
         }
         .foregroundStyle(.secondary)
         .background(AgentComposerChrome.controlFill)
@@ -480,9 +453,7 @@ struct ModelPickerPill: View {
         .overlay {
             RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius, style: .continuous)
                 .stroke(
-                    canUpgradeManagedTier
-                        ? AgentComposerChrome.selectedBorder
-                        : AgentComposerChrome.border,
+                    AgentComposerChrome.border,
                     lineWidth: 1
                 )
         }
@@ -493,7 +464,6 @@ struct ModelPickerPill: View {
         }
         .onAppear {
             refreshMenuSnapshot()
-            observedManagedTier = appState.activeRuntime?.managedRouting?.minimumTier
         }
         .onReceive(appState.$agentProviderLibrary) { _ in
             refreshMenuSnapshot()
@@ -512,16 +482,11 @@ struct ModelPickerPill: View {
         }
         .onReceive(appState.$activeAgentSessionID) { _ in
             refreshMenuSnapshot()
-            observedManagedTier = appState.activeRuntime?.managedRouting?.minimumTier
-            showsAutomaticUpgradeBadge = false
         }
         .onCompatibleChange(of: appState.agentSessionModelOverride ?? "") { _, _ in
             refreshMenuSnapshot()
         }
         .onReceive(managedRoutingPublisher, perform: handleManagedRoutingChange)
-        .onDisappear {
-            automaticUpgradeBadgeTask?.cancel()
-        }
     }
 
     @ViewBuilder
@@ -1196,33 +1161,17 @@ struct ModelPickerPill: View {
         .frame(maxWidth: .infinity, minHeight: 180)
     }
 
-    private func catalogManagedTierButton(_ tier: AgentManagedCapabilityTier) -> some View {
-        let checked = menuSnapshot.managedActive && menuSnapshot.managedFloor == tier
-        return Button {
-            activateManagedTier(tier)
-        } label: {
-            Text(managedTierLabel(tier))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(checked ? Color.white : Color.secondary)
-                .frame(minWidth: 50)
-                .padding(.vertical, 6)
-                .background(checked ? Color.teal : appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.58))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
-    }
 
     @ViewBuilder
     private var managedRoutingDetail: some View {
         detailHeader(
             title: "省心托管",
-            subtitle: "some.im 根据任务自动在通用、编码和高能力模型间路由。",
+            subtitle: L10n.AgentModelPicker.managedRule,
             systemImage: "wand.and.stars",
             checked: menuSnapshot.managedActive
         )
 
-        modelPanelSection(title: "托管档位", systemImage: "slider.horizontal.3") {
+        modelPanelSection(title: L10n.AgentManagedRouting.title, systemImage: "slider.horizontal.3") {
             Button {
                 chooseManagedRouting(tier: menuSnapshot.managedFloor ?? .low)
             } label: {
@@ -1252,11 +1201,6 @@ struct ModelPickerPill: View {
             .buttonStyle(.plain)
             .focusable(false)
 
-            HStack(spacing: 8) {
-                managedTierChip(.low)
-                managedTierChip(.high)
-                managedTierChip(.premium)
-            }
         }
 
         recommendedModelsSection
@@ -1515,7 +1459,7 @@ struct ModelPickerPill: View {
                                 .background(.teal.opacity(0.13))
                                 .clipShape(Capsule())
                         }
-                        Text("WillDeep 按任务自动在通用、编码和高能力模型间路由；需要绑定 some.im。")
+                        Text(L10n.AgentModelPicker.managedRule)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
@@ -1532,11 +1476,6 @@ struct ModelPickerPill: View {
             .buttonStyle(.plain)
             .focusable(false)
 
-            HStack(spacing: 8) {
-                managedTierChip(.low)
-                managedTierChip(.high)
-                managedTierChip(.premium)
-            }
         }
     }
 
@@ -1638,7 +1577,7 @@ struct ModelPickerPill: View {
                 }
                 Spacer()
             }
-            if !entry.flashPrimary.isEmpty {
+            if !entry.flashPrimary.isEmpty, !SomeIMManagedModel.isRetired(entry.flashPrimary) {
                 providerModelButton(entry: entry, model: entry.flashPrimary, label: "Flash")
             }
             if menuSnapshot.isSomeIMAuthenticated {
@@ -1646,7 +1585,7 @@ struct ModelPickerPill: View {
                     providerModelButton(entry: entry, model: model, label: "Flash")
                 }
             }
-            if !entry.proPrimary.isEmpty {
+            if !entry.proPrimary.isEmpty, !SomeIMManagedModel.isRetired(entry.proPrimary) {
                 providerModelButton(entry: entry, model: entry.proPrimary, label: "Pro")
             }
             if menuSnapshot.isSomeIMAuthenticated {
@@ -1676,28 +1615,6 @@ struct ModelPickerPill: View {
             pick(entry: entry, model: model)
             closeModelPanel()
         }
-    }
-
-    @ViewBuilder
-    private func managedTierChip(_ tier: AgentManagedCapabilityTier) -> some View {
-        Button {
-            chooseManagedRouting(tier: tier)
-        } label: {
-            HStack(spacing: 5) {
-                if menuSnapshot.managedActive, menuSnapshot.managedFloor == tier {
-                    Image(systemName: "checkmark.circle.fill")
-                }
-                Text(managedTierLabel(tier))
-            }
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(menuSnapshot.managedActive && menuSnapshot.managedFloor == tier ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity)
-            .background(modelRowBackground(checked: menuSnapshot.managedActive && menuSnapshot.managedFloor == tier))
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
     }
 
     @ViewBuilder
@@ -1954,28 +1871,8 @@ struct ModelPickerPill: View {
         closeModelPanel()
     }
 
-    private func activateManagedTier(_ tier: AgentManagedCapabilityTier) {
-        appState.selectSomeIMManagedRouting()
-        appState.setManagedRoutingFloor(tier)
-        selectSource(.managed)
-        refreshMenuSnapshot()
-    }
 
-    private func upgradeManagedTier() {
-        guard let current = appState.activeRuntime?.managedRouting?.minimumTier,
-              let next = current.next else { return }
-        appState.setManagedRoutingFloor(next)
-        refreshMenuSnapshot()
-    }
 
-    private var canUpgradeManagedTier: Bool {
-        appState.activeRuntime?.managedRouting?.minimumTier.next != nil
-    }
-
-    private var nextManagedTierLabel: String {
-        guard let next = appState.activeRuntime?.managedRouting?.minimumTier.next else { return "" }
-        return managedTierLabel(next)
-    }
 
     private var managedRoutingPublisher: AnyPublisher<AgentManagedRoutingState?, Never> {
         guard let runtime = appState.activeRuntime else {
@@ -1985,22 +1882,7 @@ struct ModelPickerPill: View {
     }
 
     private func handleManagedRoutingChange(_ state: AgentManagedRoutingState?) {
-        let previousTier = observedManagedTier
-        observedManagedTier = state?.minimumTier
         refreshMenuSnapshot()
-        guard let previousTier,
-              let state,
-              state.minimumTier > previousTier,
-              state.lastEscalationReason?.hasPrefix("user_selected_") != true else {
-            return
-        }
-        automaticUpgradeBadgeTask?.cancel()
-        showsAutomaticUpgradeBadge = true
-        automaticUpgradeBadgeTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            guard !Task.isCancelled else { return }
-            showsAutomaticUpgradeBadge = false
-        }
     }
 
     private var pillLabel: String {
@@ -2088,7 +1970,7 @@ struct ModelPickerPill: View {
 
     private func chooseManagedRouting(tier: AgentManagedCapabilityTier) {
         appState.selectSomeIMManagedRouting()
-        appState.setManagedRoutingFloor(tier)
+        appState.resetManagedRoutingFloor()
         closeModelPanel()
     }
 
@@ -2188,7 +2070,7 @@ struct ModelPickerPill: View {
         let isActive = activeProviderID == entry.id
 
         Section(sectionHeader(for: entry, isActive: isActive)) {
-            if !entry.flashPrimary.isEmpty {
+            if !entry.flashPrimary.isEmpty, !SomeIMManagedModel.isRetired(entry.flashPrimary) {
                 Button { pick(entry: entry, model: entry.flashPrimary) } label: {
                     modelRow(label: "Flash · \(entry.flashPrimary)",
                              checked: isCurrent(model: entry.flashPrimary, override: override, isActive: isActive))
@@ -2202,7 +2084,7 @@ struct ModelPickerPill: View {
                 }
                 .focusable(false)
             }
-            if !entry.proPrimary.isEmpty {
+            if !entry.proPrimary.isEmpty, !SomeIMManagedModel.isRetired(entry.proPrimary) {
                 Button { pick(entry: entry, model: entry.proPrimary) } label: {
                     modelRow(label: "Pro · \(entry.proPrimary)",
                              checked: isCurrent(model: entry.proPrimary, override: override, isActive: isActive))
@@ -2235,27 +2117,6 @@ struct ModelPickerPill: View {
         }
     }
 
-    @ViewBuilder
-    private func managedTierButton(_ tier: AgentManagedCapabilityTier) -> some View {
-        Button {
-            appState.setManagedRoutingFloor(tier)
-            refreshMenuSnapshot()
-        } label: {
-            modelRow(
-                label: managedTierLabel(tier),
-                checked: menuSnapshot.managedFloor == tier
-            )
-        }
-        .focusable(false)
-    }
-
-    private func managedTierLabel(_ tier: AgentManagedCapabilityTier) -> String {
-        switch tier {
-        case .low: return L10n.AgentManagedRouting.tierFlash
-        case .high: return L10n.AgentManagedRouting.tierPro
-        case .premium: return L10n.AgentManagedRouting.tierPremium
-        }
-    }
 
     /// Concrete model rows only check when the user explicitly picked that
     /// model. Route defaults and managed routing are separate menu states.
@@ -2306,6 +2167,7 @@ struct ModelPickerPill: View {
             let model = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = model.lowercased()
             guard !model.isEmpty,
+                  !SomeIMManagedModel.isRetired(model),
                   !excludedKeys.contains(key),
                   isKnownModelRelevantToActiveProvider(model) else {
                 return nil
@@ -2323,7 +2185,7 @@ struct ModelPickerPill: View {
 
     private func isKnownModelRelevantToActiveProvider(_ model: String) -> Bool {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        guard !trimmed.isEmpty, !SomeIMManagedModel.isRetired(trimmed) else { return false }
         guard let active = appState.activeAgentProviderEntry,
               let preset = AgentProviderPreset.preset(id: active.providerID),
               preset.id != AgentProviderPreset.customID else {
@@ -2368,15 +2230,11 @@ struct ModelPickerPill: View {
     /// when there's more than one library entry, so the user always
     /// knows which provider this chat is talking to).
     private var currentModelLabel: String {
-        // Managed routing has no single model — show the "省心托管" label with
-        // the escalated tier suffix instead of a resolved model name.
+        // Show this task's request model, without legacy session tier labels.
         if let managed = appState.activeRuntime?.managedRouting {
-            let core: String
-            switch managed.minimumTier {
-            case .low: core = L10n.AgentManagedRouting.titleFlash
-            case .high: core = L10n.AgentManagedRouting.titleHigh
-            case .premium: core = L10n.AgentManagedRouting.titlePremium
-            }
+            let model = managed.currentTaskActualModel ?? managed.currentTaskModel.flatMap { SomeIMManagedModel.allowlist.contains($0) ? $0 : nil }
+                ?? SomeIMManagedModel.autoFlash
+            let core = "\(L10n.AgentManagedRouting.title) · \(model)"
             guard appState.agentProviderLibrary.entries.count > 1,
                   let active = appState.activeAgentProviderEntry else {
                 return core
@@ -2386,8 +2244,8 @@ struct ModelPickerPill: View {
         let routed = appState.activeRuntime.map {
             appState.configurationForCurrentTurn(for: $0).model(for: .interactive)
         } ?? appState.agentConfiguration.normalized.model(for: .interactive)
-        let model = appState.agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty ?? routed
+        let override = appState.agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let model = override.flatMap { SomeIMManagedModel.isRetired($0) ? nil : $0 } ?? routed
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
         guard appState.activeAgentProviderEntry?.isUsableForChatSelection(
             isSomeIMAuthenticated: authenticated

@@ -9,6 +9,8 @@ enum AgentEmptyResponseRetry {
     static func run(
         providerID: String,
         model: String,
+        returnsEmptyOutput: Bool = false,
+        onEmptyOutput: (@MainActor () -> Void)? = nil,
         onEvent: @escaping Consumer,
         onRetry: (@MainActor (Int, Int) -> Void)? = nil,
         sleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) },
@@ -29,6 +31,17 @@ enum AgentEmptyResponseRetry {
             accumulated.add(state.usage)
             if failure == nil, !state.hasPayload, state.allowsRetry {
                 failure = AgentClientError.emptyStream(providerID: providerID, model: model)
+            }
+            // Managed tasks own the one allowed takeover retry. Surface only
+            // a typed empty completion; transport/auth/partial-output failures
+            // keep their existing error and never enter this path.
+            if returnsEmptyOutput, let failure,
+               case AgentClientError.emptyStream = failure,
+               !state.hasPayload, state.allowsRetry {
+                onEmptyOutput?()
+                if let event = accumulated.event { await onEvent(event) }
+                if state.didFinish { await onEvent(.finishedTurn(state.finishReason)) }
+                return
             }
             guard let failure else {
                 if let event = accumulated.event { await onEvent(event) }

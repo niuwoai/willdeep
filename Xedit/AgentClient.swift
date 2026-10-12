@@ -135,54 +135,65 @@ struct AgentClient {
     private let someIMContext: SomeIMRequestContext?
     private let requestLedger: AgentModelRequestLedger?
     private let openAIResponsesContinuationState: OpenAIResponsesContinuationState
+    private let onRoutedModel: (@MainActor @Sendable (String) -> Void)?
 
     init(
         configuration: AgentConfiguration,
         session: URLSession? = nil,
         someIMContext: SomeIMRequestContext? = nil,
         openAIResponsesContinuationState: OpenAIResponsesContinuationState = OpenAIResponsesContinuationState(),
-        requestLedger: AgentModelRequestLedger? = nil
+        requestLedger: AgentModelRequestLedger? = nil,
+        onRoutedModel: (@MainActor @Sendable (String) -> Void)? = nil
     ) {
         self.configuration = configuration.normalized
         self.session = session
         self.someIMContext = someIMContext
         self.requestLedger = requestLedger
         self.openAIResponsesContinuationState = openAIResponsesContinuationState
+        self.onRoutedModel = onRoutedModel
     }
 
     func streamChat(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor] = [],
         executionBudget: AgentToolExecutionBudget? = nil,
+        allowsEmptyTaskTakeover: Bool = false,
         onEmptyResponseRetry: (@MainActor (Int, Int) -> Void)? = nil,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
         if let executionBudget {
             try await executionBudget.runModelRequest {
                 try await streamChatRetryLoop(messages: messages, tools: tools, executionBudget: executionBudget,
+                    allowsEmptyTaskTakeover: allowsEmptyTaskTakeover,
                     onEmptyResponseRetry: onEmptyResponseRetry, onEvent: onEvent)
             }
             return
         }
         try await streamChatRetryLoop(messages: messages, tools: tools, executionBudget: nil,
+            allowsEmptyTaskTakeover: allowsEmptyTaskTakeover,
             onEmptyResponseRetry: onEmptyResponseRetry, onEvent: onEvent)
     }
 
     private func streamChatRetryLoop(messages: [AgentMessage], tools: [AgentToolDescriptor],
-        executionBudget: AgentToolExecutionBudget?, onEmptyResponseRetry: (@MainActor (Int, Int) -> Void)?,
+        executionBudget: AgentToolExecutionBudget?, allowsEmptyTaskTakeover: Bool,
+        onEmptyResponseRetry: (@MainActor (Int, Int) -> Void)?,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void) async throws {
-        try await AgentEmptyResponseRetry.run(
-            providerID: configuration.providerID, model: configuration.model,
-            onEvent: onEvent, onRetry: { attempt, limit in
-                // An empty Responses completion may already have committed a
-                // response ID. Retry with the intact history, not that empty
-                // continuation checkpoint.
-                openAIResponsesContinuationState.invalidate()
-                onEmptyResponseRetry?(attempt, limit)
+        try await AgentRoutedModelResponseObserver.$receive.withValue(onRoutedModel) {
+            try await AgentEmptyResponseRetry.run(
+                providerID: configuration.providerID, model: configuration.model,
+                returnsEmptyOutput: allowsEmptyTaskTakeover,
+                onEmptyOutput: { openAIResponsesContinuationState.invalidate() },
+                onEvent: onEvent, onRetry: { attempt, limit in
+                    // An empty Responses completion may already have committed a
+                    // response ID. Retry with the intact history, not that empty
+                    // continuation checkpoint.
+                    openAIResponsesContinuationState.invalidate()
+                    onEmptyResponseRetry?(attempt, limit)
+                }
+            ) { consume in
+                try executionBudget?.checkCurrentOwner()
+                try await streamChatOnce(messages: messages, tools: tools, executionBudget: executionBudget, onEvent: consume)
             }
-        ) { consume in
-            try executionBudget?.checkCurrentOwner()
-            try await streamChatOnce(messages: messages, tools: tools, executionBudget: executionBudget, onEvent: consume)
         }
     }
 

@@ -21,121 +21,36 @@ import Foundation
 enum AgentManagedTurnRoute {
     /// 不走托管路由（没开，或 provider 不是 some.im），沿用原配置。
     case unmanaged
-    /// 路由判官运行期间用户停止了回合，调用方应直接返回。
+    /// 调用方应停止本轮。
     case stopped
-    /// 已选定模型。`explicitTier` 是判官给出的显式档位；回落时为 nil，
-    /// 之后写只升不降的下限时必须用它，不能用对冲抬高过的有效档位。
-    case routed(model: String, decision: AgentManagedRouteDecision, explicitTier: AgentManagedCapabilityTier?)
+    /// 已选定当前任务的请求模型。
+    case routed(model: String, decision: AgentManagedRouteDecision)
 }
 
 extension AppState {
-    /// "省心托管" dynamic routing. Resolved ONCE per user turn, BEFORE the
-    /// tool-call loop, so the whole loop reuses a single model — no
-    /// mid-turn re-judging that could desync tool_call pairing. The judge
-    /// shares this turn's already-held provider slot; `routeJudge` never
-    /// acquires/releases a slot and never throws, so the caller's `defer`
-    /// still owns every release path.
+    /// Resolve the current task locally, before the tool loop. No classifier
+    /// or account subscription request participates in task initialization.
     @MainActor
     func resolveManagedTurnRoute(
         for runtime: AgentRuntime,
         configuration: AgentConfiguration,
         someIMContext: SomeIMRequestContext?
     ) async -> AgentManagedTurnRoute {
+        if Task.isCancelled { return .stopped }
         guard runtime.managedRouting != nil,
               configuration.providerID == AgentProviderPreset.someIMID else {
             return .unmanaged
         }
-        let floor = runtime.managedRouting?.minimumTier ?? .low
-        // isOperatorInput: hidden host carriers (empty content, per-turn
-        // context reminders) are `.user` role but must never stand in for
-        // what the human actually asked — a wake-up turn would otherwise
-        // send the judge an empty message.
-        let latestOperatorMessage = runtime.messages.last(where: { $0.isOperatorInput })
-        let judgeInput = SomeIMRouteJudgeInput(
-            latestUserMessage: latestOperatorMessage?.content ?? "",
-            hasImages: latestOperatorMessage?.images.isEmpty == false,
-            hasTextAttachments: latestOperatorMessage?.textAttachments.isEmpty == false,
-            workspaceAvailable: runtime.workspaceLocation != nil || (runtime.workspaceRootPath?.isEmpty == false),
-            selectedFileLanguage: openedFileURL.flatMap { $0.pathExtension.isEmpty ? nil : $0.pathExtension },
-            interactionMode: "\(runtime.interactionMode)",
-            approvalMode: "\(runtime.approvalMode)",
-            toolsEnabled: true,
-            conversationSummary: runtime.contextSummary
-        )
-        beginGoalExecutionBudgetIfNeeded(for: runtime)
-        let judgeClient = AgentClient(configuration: configuration, session: agentLoopInferenceEnvironment?.session,
-            someIMContext: someIMContext, requestLedger: modelRequestLedger(for: runtime))
-        let routeJudge = AgentGoalRouteJudge(client: judgeClient, executionBudget: auxiliaryModelExecutionBudget(for: runtime))
-        // Routing must never wait on the account control plane. The
-        // launch timer owns refreshes; a stale value is still a better
-        // latency trade than blocking the first provider request.
-        let hasCodingPlan = someIMCodingPlanStatus.isActiveNow
-        if someIMCodingPlanStatus.isStale {
-            refreshSomeIMCodingPlanStatus(force: false)
-        }
-        let routeMeasurement = AgentAuxiliaryRequestMeasurement()
-        let resolution = await AgentNonStreamingModelRequest.$usageObserver.withValue(routeMeasurement) {
-            await SomeIMManagedRouting.route(
-                input: judgeInput,
-                floor: floor,
-                hasCodingPlan: hasCodingPlan
-            ) { system, user, maxTokens in
-                await routeJudge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: maxTokens)
-            }
-        }
-        await recordJudgeRequest(routeMeasurement, purpose: .routeJudge, configuration: configuration,
-            model: SomeIMManagedModel.judge, succeeded: !resolution.usedFallback, runtimeID: runtime.id)
-        AgentModelRouteLog.record(AgentModelRouteLog.Entry(
-            surface: .managedRouting,
-            sessionID: runtime.id,
-            subject: resolution.verdict.domain.rawValue,
-            requested: resolution.verdict.targetModel,
-            providerID: configuration.providerID,
-            model: resolution.model,
-            fallback: resolution.usedFallback,
-            reason: resolution.usedFallback ? .judgeUnavailable : .routed,
-            detail: resolution.verdict.reason
-        ))
-        if stopAfterRouteJudge(routeJudge, runtime: runtime) { return .stopped }
-        // Captured BEFORE noteManagedSelectedModel overwrites it — the
-        // escalation check below compares against the tier the session
-        // actually ran on last turn.
-        let previousManagedModel = runtime.managedRouting?.lastSelectedModel
-        runtime.noteManagedSelectedModel(resolution.model)
+        let taskID = runtime.messages.last(where: { $0.isOperatorInput })?.id
+        let model = runtime.beginManagedTask(id: taskID)
+        let reason = runtime.managedRouting?.lastEscalationReason
         let decision = AgentManagedRouteDecision(
-            selectedModel: resolution.model,
-            tier: resolution.effectiveTier,
-            domain: resolution.verdict.domain,
-            complexity: resolution.verdict.complexity,
-            didFallback: resolution.usedFallback
+            selectedModel: model,
+            tier: SomeIMManagedModel.tier(of: model) ?? .low,
+            domain: .general, complexity: .low, didFallback: false,
+            didEscalate: reason != nil, failureType: reason
         )
-        // Only a real judge verdict raises the persisted floor — a network
-        // fallback must not lock the session into a high tier. Use the
-        // judge's explicit tier, not `effectiveTier`: the low-confidence
-        // conservative escalation applies to this turn's model choice only
-        // and must never be written into the only-goes-up floor.
-        var explicitTier: AgentManagedCapabilityTier?
-        if !resolution.usedFallback {
-            explicitTier = resolution.persistedFloorTier
-            runtime.raiseManagedFloor(to: resolution.persistedFloorTier, reason: resolution.verdict.reason)
-        }
-        // 升档前压缩（见 muchtoken docs/someim-32b-compressor.md）：
-        // 切到高档模型本来就必然使前缀缓存失效，此刻压缩零缓存损失，
-        // 却直接削减高档模型要摄入的 input。只在 turn 开始的路由升档
-        // 处做；输出质检的 mid-turn 升档重跑不压——一轮之内不改写
-        // 历史，避免 tool_call 配对漂移。低于阈值或压缩失败都原文
-        // 照发，不阻塞本轮。
-        if Self.managedEscalationCrossesTier(
-            previousModel: previousManagedModel,
-            newTier: resolution.effectiveTier
-        ) {
-            await compressBeforeManagedEscalationIfNeeded(
-                for: runtime,
-                escalatedModel: resolution.model,
-                providerID: configuration.providerID
-            )
-        }
-        return .routed(model: resolution.model, decision: decision, explicitTier: explicitTier)
+        return .routed(model: model, decision: decision)
     }
 
     /// `runAgentLoop` 每条退出路径上的收尾，由它的 `defer` 调用。

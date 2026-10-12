@@ -9,12 +9,7 @@ import Foundation
 
 // MARK: - some.im managed routing ("省心托管")
 
-/// Capability floor for a some.im managed-routing session. The floor only
-/// ever rises within a session ("只升不降"): once a turn proves it needs
-/// `.high` / `.premium`, later turns cannot be dropped back to a weaker tier
-/// by the lightweight judge. The user can still explicitly choose Flash / Pro /
-/// Premium, switch model, or start a new session. See
-/// SOME_IM_MANAGED_ROUTING_DESIGN.md.
+/// Legacy tier values and explicit model fallback order.
 nonisolated enum AgentManagedCapabilityTier: String, Codable, Equatable, Comparable {
     case low
     case high
@@ -45,13 +40,17 @@ nonisolated enum AgentManagedCapabilityTier: String, Codable, Equatable, Compara
 /// `AgentSession` (additively decoded — absent on legacy sessions → nil,
 /// i.e. "not a managed session").
 nonisolated struct AgentManagedRoutingState: Codable, Equatable {
-    /// Lowest capability tier this session may use until the user chooses a
-    /// different managed tier, switches model, or starts a new session.
+    /// Legacy decoding field. New task routing ignores it and writes low.
     var minimumTier: AgentManagedCapabilityTier
     /// Last main-call model the router resolved to. Diagnostic only.
     var lastSelectedModel: String?
     var lastEscalatedAt: Date?
     var lastEscalationReason: String?
+    /// Identity of the operator request. Automatic continuations share its takeover;
+    /// a new operator request starts on Flash. Legacy sessions decode these as nil.
+    var currentTaskID: UUID?
+    var currentTaskModel: String?
+    var currentTaskActualModel: String?
 
     init(
         minimumTier: AgentManagedCapabilityTier = .low,
@@ -84,6 +83,8 @@ nonisolated enum AgentManagedRouteFamily: Equatable {
 /// lives in SomeIMManagedRouting.swift (same module).
 nonisolated struct AgentManagedRouteDecision: Codable, Equatable {
     var selectedModel: String
+    /// Physical upstream confirmed by the gateway response, if available.
+    var actualModel: String?
     var tier: AgentManagedCapabilityTier
     var domain: SomeIMManagedDomain
     var complexity: SomeIMManagedComplexity
@@ -169,17 +170,11 @@ nonisolated struct AgentManagedRouteDecision: Codable, Equatable {
         return text
     }
 
-    /// Full footer text derived from the judge domain and actual model level, e.g.
-    /// `托管-通用-flash` or `托管-编程-pro↑`.
+    /// The request model and the observable reason for this task's takeover.
     var footerChipText: String {
-        switch footerFamily {
-        case .general:
-            return L10n.AgentManagedRouting.generalFooter(footerLevelMarkers)
-        case .coding:
-            return L10n.AgentManagedRouting.codingFooter(footerLevelMarkers)
-        case .unknown:
-            return "\(L10n.AgentManagedRouting.footerPrefix) \(tierMarkers)"
-        }
+        let label = "\(L10n.AgentManagedRouting.footerPrefix) · \(actualModel ?? selectedModel)"
+        guard didEscalate, let failureType else { return label }
+        return "\(label) · \(SomeIMManagedRouting.failureLabel(failureType))"
     }
 }
 
@@ -189,12 +184,11 @@ nonisolated struct AgentManagedRouteDecision: Codable, Equatable {
 /// relay, not raw upstream models. See SOME_IM_MANAGED_ROUTING_DESIGN.md
 /// ("模型与命名").
 nonisolated enum SomeIMManagedModel {
-    static let codingPlanLow = "someim-coding-plan-low"
-    static let codingPlanHigh = "someim-coding-plan-high"
-    static let codingPlanPremium = "someim-coding-plan-premium"
-    static let codeLow = "someim-code-low"
-    static let codeHigh = "someim-code-high"
-    static let codePremium = "someim-code-premium"
+    /// Retired gateway families must never be selected, including cached catalogs.
+    static func isRetired(_ model: String) -> Bool {
+        let id = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return id.hasPrefix("someim-code-") || id.hasPrefix("someim-coding-plan")
+    }
     static let autoFlash = "someim-auto-flash"
     static let autoPro = "someim-auto-pro"
     static let autoPremium = "someim-auto-premium"
@@ -218,36 +212,16 @@ nonisolated enum SomeIMManagedModel {
     /// docs/someim-32b-compressor.md. Never a turn's main model.
     static let contextCompressor = "someim-32b-compressor"
 
-    /// Every main-call model a judge decision is allowed to resolve to. A
-    /// `target_model` outside this set is rejected and the local
-    /// (domain, tier) mapping is used instead.
-    static let allowlist: Set<String> = [
-        codingPlanLow, codingPlanHigh, codingPlanPremium,
-        codeLow, codeHigh, codePremium,
-        autoFlash, autoPro, autoPremium
-    ]
+    /// Supported request aliases. Retired families are never dispatched.
+    static let allowlist: Set<String> = [autoFlash, autoPro, autoPremium]
 
     /// Resolve the actual main-call model from a task domain and the
     /// effective capability tier (already merged with the session floor).
-    static func resolve(
-        domain: SomeIMManagedDomain,
-        tier: AgentManagedCapabilityTier,
-        hasCodingPlan: Bool
-    ) -> String {
-        if hasCodingPlan, domain == .coding {
-            switch tier {
-            case .low: return codingPlanLow
-            case .high: return codingPlanHigh
-            case .premium: return codingPlanPremium
-            }
-        }
-        switch (domain, tier) {
-        case (.coding, .low): return codeLow
-        case (.coding, .high): return codeHigh
-        case (.coding, .premium): return codePremium
-        case (.general, .low): return autoFlash
-        case (.general, .high): return autoPro
-        case (.general, .premium): return autoPremium
+    static func resolve(tier: AgentManagedCapabilityTier) -> String {
+        switch tier {
+        case .low: return autoFlash
+        case .high: return autoPro
+        case .premium: return autoPremium
         }
     }
 
@@ -255,9 +229,9 @@ nonisolated enum SomeIMManagedModel {
     /// tier does a resolved model correspond to. Unknown → nil.
     static func tier(of model: String) -> AgentManagedCapabilityTier? {
         switch model {
-        case codingPlanLow, codeLow, autoFlash: return .low
-        case codingPlanHigh, codeHigh, autoPro: return .high
-        case codingPlanPremium, codePremium, autoPremium: return .premium
+        case autoFlash: return .low
+        case autoPro: return .high
+        case autoPremium: return .premium
         default: return nil
         }
     }
@@ -267,10 +241,6 @@ nonisolated enum SomeIMManagedModel {
     /// See design doc "升档模型".
     static func escalated(from model: String) -> String? {
         switch model {
-        case codingPlanLow: return codingPlanHigh
-        case codingPlanHigh: return codingPlanPremium
-        case codeLow: return codeHigh
-        case codeHigh: return codePremium
         case autoFlash: return autoPro
         case autoPro: return autoPremium
         // premium models: top of ladder → no auto-escalation.
