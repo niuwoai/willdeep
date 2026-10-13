@@ -41,6 +41,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryImageID = NSAttributedString.Key("AgentChatHistoryImageID")
     static let agentChatHistoryImageReferenceMarker = NSAttributedString.Key("AgentChatHistoryImageReferenceMarker")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
+    static let agentChatHistoryProcessGroupID = NSAttributedString.Key("AgentChatHistoryProcessGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
     static let agentChatHistoryMessageID = NSAttributedString.Key("AgentChatHistoryMessageID")
     /// 同一轮 Agent 输出的所有消息共用的 key（该轮最后一条可见回复的 id）。

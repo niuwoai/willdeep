@@ -35,6 +35,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     /// `messages`, so internal tool results never leak into the transcript.
     var assistantTurnContextMessages: [AgentMessage]? = nil
     var isAssistantTurnActive = false
+    var foldsCompletedTurnProcess = false
     /// User-controlled base size for the transcript body, threaded
     /// from `AppState.agentChatBaseFontSize`. Tool summaries and
     /// chrome stay on fixed sizes inside the renderer.
@@ -105,6 +106,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onSendShellCommandToTerminal = onSendShellCommandToTerminal
         view.onOpenScheduledTask = onOpenScheduledTask
         configure(view)
+        view.foldsCompletedTurnProcess = foldsCompletedTurnProcess
         view.applyMessages(
             messages,
             isDark: colorScheme == .dark,
@@ -128,6 +130,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: AgentChatHistoryNSTextView, context: Context) {
+        nsView.foldsCompletedTurnProcess = foldsCompletedTurnProcess
         nsView.onRetryLastTurn = onRetryLastTurn
         nsView.onShowTurnReport = onShowTurnReport
         nsView.onReferenceGeneratedImage = onReferenceGeneratedImage
@@ -164,6 +167,11 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             isDark: colorScheme == .dark
         )
         nsView.applyScrollRequest(token: scrollToUserMessageToken, userMessageID: scrollToUserMessageID)
+    }
+
+    static func dismantleNSView(_ nsView: AgentChatHistoryNSTextView, coordinator: ()) {
+        nsView.stopHoverTracking()
+        nsView.delegate = nil
     }
 
     private func configure(_ view: AgentChatHistoryNSTextView) {
@@ -227,6 +235,16 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentSearchIsDark = false
     private var lastReportedSearchResultCount: Int?
     private var expandedToolGroupIDs = Set<String>()
+    private var isHoverTrackingEnabled = false
+    private var expandedProcessGroupIDs = Set<String>()
+    var foldsCompletedTurnProcess = false {
+        didSet {
+            if oldValue != foldsCompletedTurnProcess {
+                lastInputFingerprint = nil
+                lastContentHash = nil
+            }
+        }
+    }
     private var expandedProgressBlockIDs = Set<String>()
     private var hoveredUserMessageID: UUID?
     /// 鼠标所在那一轮 Agent 输出的 key；它的完成时间标签此刻显色。
@@ -320,13 +338,45 @@ final class AgentChatHistoryNSTextView: NSTextView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.acceptsMouseMovedEvents = true
+        isHoverTrackingEnabled = window != nil
+        if let window {
+            NotificationCenter.default.addObserver(self, selector: #selector(hostWindowWillClose(_:)),
+                name: NSWindow.willCloseNotification, object: window)
+        }
+        updateTrackingAreas()
         mediaOverlay.hostWindowDidChange()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        stopHoverTracking()
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    @objc private func hostWindowWillClose(_ notification: Notification) {
+        stopHoverTracking()
+    }
+
+    /// Tracking areas deliver local hover events without enabling mouse movement
+    /// across the entire hosting window. Stop before SwiftUI tears the view down.
+    func stopHoverTracking() {
+        isHoverTrackingEnabled = false
+        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+            self.hoverTrackingArea = nil
+        }
+        hoveredUserMessageID = nil
+        hoveredAssistantTurnKey = nil
     }
 
     override func updateTrackingAreas() {
         if let hoverTrackingArea {
             removeTrackingArea(hoverTrackingArea)
+            self.hoverTrackingArea = nil
+        }
+        guard isHoverTrackingEnabled, window != nil else {
+            super.updateTrackingAreas()
+            return
         }
         let trackingArea = NSTrackingArea(
             rect: .zero,
@@ -340,6 +390,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        guard isHoverTrackingEnabled, let window, event.window === window else { return }
         let point = convert(event.locationInWindow, from: nil)
         updateHoveredUserMessage(at: point)
         updateHoveredAssistantTurn(key: assistantTurnKey(at: point))
@@ -347,6 +398,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     }
 
     override func mouseExited(with event: NSEvent) {
+        guard isHoverTrackingEnabled, window != nil else { return }
         updateHoveredUserMessage(id: nil)
         updateHoveredAssistantTurn(key: nil)
         super.mouseExited(with: event)
@@ -762,6 +814,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             isAssistantTurnActive: currentIsAssistantTurnActive,
             expandedToolGroupIDs: expandedToolGroupIDs,
             expandedProgressBlockIDs: expandedProgressBlockIDs,
+            foldsCompletedTurnProcess: foldsCompletedTurnProcess,
+            expandedProcessGroupIDs: expandedProcessGroupIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: currentBaseFontSize,
             fontID: currentFontID,
@@ -783,6 +837,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hasher.combine(currentLayoutWidth)
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(expandedProgressBlockIDs.sorted())
+        hasher.combine(expandedProcessGroupIDs.sorted())
+        hasher.combine(foldsCompletedTurnProcess)
         hasher.combine(hoveredUserMessageID)
         let hash = hasher.finalize()
         if hash == lastContentHash, attr.length == currentBaseAttributedString.length {
@@ -1135,6 +1191,17 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if let groupID = textStorage.attribute(.agentChatHistoryProcessGroupID, at: charIndex, effectiveRange: nil) as? String {
+            if expandedProcessGroupIDs.contains(groupID) {
+                expandedProcessGroupIDs.remove(groupID)
+            } else {
+                expandedProcessGroupIDs.insert(groupID)
+            }
+            lastContentHash = nil
+            renderCurrentMessages()
+            return true
+        }
+
         if let groupID = textStorage.attribute(.agentChatHistoryToolGroupID, at: charIndex, effectiveRange: nil) as? String {
             if expandedToolGroupIDs.contains(groupID) {
                 expandedToolGroupIDs.remove(groupID)
@@ -1246,6 +1313,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryAttachmentCitationLink.value,
             AgentChatHistoryScheduledTaskLink.value,
             "agent-chat-history-tool-group",
+            AgentTurnProcessPresentation.linkValue,
         ].contains(value)
     }
 

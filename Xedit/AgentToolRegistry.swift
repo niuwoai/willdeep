@@ -474,7 +474,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "open_image_editor",
-            description: "Open a local image file in WillDeep's right-side image mask editor so the user can draw a rectangle or brush mask and submit Replicate/some.im inpaint or erase tasks. Optional short-drama shot or asset anchors are preserved on submitted media tasks.",
+            description: "Show an existing local image or screenshot to the USER in WillDeep's right-side image viewer/mask editor. Use this when the user asks to see, open, display, or preview an image; pass its saved local image_path instead of merely returning a path or claiming a tool-result attachment is visible. Opening only loads the existing file and does not generate, edit, or submit a media task. The user can optionally draw a rectangle or brush mask and submit Replicate/some.im inpaint or erase tasks later. Optional short-drama shot or asset anchors are preserved on those submitted tasks.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "image_path", type: .string, description: "Local image file path to open. Relative paths resolve from the workspace root when available.", required: true),

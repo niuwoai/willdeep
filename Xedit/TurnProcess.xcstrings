@@ -1,0 +1,7 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "turn-process.messages" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看过程 · %d 条消息" } } } }
+  },
+  "version" : "1.0"
+}

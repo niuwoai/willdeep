@@ -270,6 +270,8 @@ enum AgentChatHistoryRenderer {
         isAssistantTurnActive: Bool = false,
         expandedToolGroupIDs: Set<String> = [],
         expandedProgressBlockIDs: Set<String> = [],
+        foldsCompletedTurnProcess: Bool = false,
+        expandedProcessGroupIDs: Set<String> = [],
         hoveredUserMessageID: UUID? = nil,
         baseFontSize: CGFloat = NSFont.systemFontSize,
         fontID: String = AgentSettingsStore.chatFontIDDefault,
@@ -289,6 +291,8 @@ enum AgentChatHistoryRenderer {
         hasher.combine(isAssistantTurnActive)
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(expandedProgressBlockIDs.sorted())
+        hasher.combine(foldsCompletedTurnProcess)
+        hasher.combine(expandedProcessGroupIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         hasher.combine(latestTurnReportToolCount ?? -1)
         // 同一段文本在本地会话有「运行」按钮、在远端会话没有，两份结果
@@ -343,6 +347,8 @@ enum AgentChatHistoryRenderer {
             isAssistantTurnActive: isAssistantTurnActive,
             expandedToolGroupIDs: expandedToolGroupIDs,
             expandedProgressBlockIDs: expandedProgressBlockIDs,
+            foldsCompletedTurnProcess: foldsCompletedTurnProcess,
+            expandedProcessGroupIDs: expandedProcessGroupIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: clampedSize,
             fontID: fontID,
@@ -379,6 +385,8 @@ enum AgentChatHistoryRenderer {
         isAssistantTurnActive: Bool,
         expandedToolGroupIDs: Set<String>,
         expandedProgressBlockIDs: Set<String>,
+        foldsCompletedTurnProcess: Bool,
+        expandedProcessGroupIDs: Set<String>,
         hoveredUserMessageID: UUID?,
         baseFontSize: CGFloat,
         fontID: String,
@@ -446,20 +454,28 @@ enum AgentChatHistoryRenderer {
         let latestAssistantTerminalSummaryMessageID = messages.reversed().first {
             $0.role == .assistant && (!$0.content.isEmpty || !$0.toolCalls.isEmpty)
         }?.id
+        let processGroups = foldsCompletedTurnProcess
+            ? AgentTurnProcessPresentation.groups(in: messages, contextMessages: assistantTurnContextMessages,
+                                                   isLatestTurnActive: isAssistantTurnActive)
+            : []
+        let disclosures = Dictionary(uniqueKeysWithValues: processGroups.map { ($0.anchorID, $0) })
+        let hiddenProcessIDs = Set(processGroups.filter { !expandedProcessGroupIDs.contains($0.id) }
+            .flatMap { $0.processMessageIDs })
+        let displayedMessages = messages.filter { !hiddenProcessIDs.contains($0.id) }
         let assistantTurnPresentations = AgentAssistantTurnGrouping.presentations(
             in: assistantTurnContextMessages,
             visibleAssistantMessageIDs: Set(
-                messages.lazy
+                displayedMessages.lazy
                     .filter { $0.role == .assistant }
                     .map(\.id)
             )
         )
         let processToAnswerMessageIDs = processToAnswerMessageIDs(
             in: assistantTurnContextMessages,
-            visibleMessages: messages
+            visibleMessages: displayedMessages
         )
         let settledMessageToolGrouping = assistantMessageToolCallGrouping(
-            messages: messages,
+            messages: displayedMessages,
             latestAssistantTerminalSummaryMessageID: latestAssistantTerminalSummaryMessageID
         )
         let activeUserMessageID = isAssistantTurnActive
@@ -469,6 +485,14 @@ enum AgentChatHistoryRenderer {
         var index = 0
         while index < messages.count {
             let message = messages[index]
+            if let group = disclosures[message.id] {
+                appendTurnProcessDisclosure(group, expanded: expandedProcessGroupIDs.contains(group.id),
+                                            to: result, bodyFont: bodyFont, layoutWidth: layoutWidth)
+            }
+            if hiddenProcessIDs.contains(message.id) {
+                index += 1
+                continue
+            }
             if let event = message.transcriptEvent {
                 if result.length > 0 {
                     result.append(NSAttributedString(string: "\n\n"))
@@ -501,7 +525,8 @@ enum AgentChatHistoryRenderer {
                     continue
                 }
                 var groupMessages: [AgentMessage] = []
-                while index < messages.count, isToolCallOnly(messages[index]) {
+                while index < messages.count, !hiddenProcessIDs.contains(messages[index].id),
+                      isToolCallOnly(messages[index]) {
                     groupMessages.append(messages[index])
                     index += 1
                 }

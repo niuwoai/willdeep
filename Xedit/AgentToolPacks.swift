@@ -81,7 +81,7 @@ enum AgentToolPackCatalog {
         AgentToolPack(
             id: .media,
             title: "Media and visual QA",
-            summary: "Generate, edit, upscale, import, track, inspect, and present images or videos."
+            summary: "Generate, edit, upscale, import, track, inspect, and present images or videos. To show an existing local image or screenshot to the user, load this pack and call open_image_editor(image_path). A file path or a tool-result image alone is not proof that the user saw it; the Media Tasks panel lists tasks rather than arbitrary local files."
         ),
         AgentToolPack(
             id: .plugins,

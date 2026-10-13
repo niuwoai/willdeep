@@ -331,6 +331,7 @@ struct AgentChatTranscript: View {
                                 messages: history,
                                 assistantTurnContextMessages: appState.agentMessages,
                                 isAssistantTurnActive: appState.isAgentResponding,
+                                foldsCompletedTurnProcess: !searchingConversation,
                                 baseFontSize: appState.agentChatBaseFontSize,
                                 fontID: appState.agentChatFontID,
                                 lineHeightMultiple: appState.agentChatLineHeightMultiple,
@@ -979,26 +980,13 @@ private struct AgentScrollToLatestButton: View {
             guard message.role != .tool,
                   message.role != .system,
                   !message.isHostInstruction,
-                  !isEmptyThinkingPlaceholder(message),
-                  !isSettledToolCallOnlyMessage(message) else {
+                  !isEmptyThinkingPlaceholder(message) else {
                 return nil
             }
             return resultPresentationMessage(message, receipts: toolReceipts)
         }
-        let protectedAssistantMessageIDs = Set(
-            visible.lazy
-                .filter { message in
-                    message.role == .assistant
-                        && toolCalls(for: message.id).contains(where: isWorkingToolCall)
-                }
-                .map(\.id)
-        )
-        return AgentTranscriptModePresentation.projectedMessages(
-            from: visible,
-            isLatestTurnActive: appState.isAgentResponding,
-            revealsIntermediateMessages: isConversationSearchActive,
-            protectedAssistantMessageIDs: protectedAssistantMessageIDs
-        )
+        // Keep the public transcript complete; TextKit owns the reversible fold.
+        return visible
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy) {
@@ -1028,16 +1016,6 @@ private struct AgentScrollToLatestButton: View {
             && !message.toolCalls.isEmpty)
     }
 
-    private func isSettledToolCallOnlyMessage(_ message: AgentMessage) -> Bool {
-        guard message.role == .assistant,
-              !message.hasRenderableTextContent,
-              !message.toolCalls.isEmpty,
-              !appState.isAgentResponding else {
-            return false
-        }
-        return !toolCalls(for: message.id).contains(where: isWorkingToolCall)
-    }
-
     /// Collect the persisted terminal status of every finished tool call,
     /// keyed by its `toolCallID`. The `.tool` result messages own this
     /// truth (`toolCallStatus`); assistant intent lines reference the same
@@ -1063,6 +1041,13 @@ private struct AgentScrollToLatestButton: View {
         _ message: AgentMessage,
         receipts: [String: AgentToolCallStatus]
     ) -> AgentMessage {
+        let pendingCalls = toolCalls(for: message.id).filter(isWorkingToolCall)
+        if message.role == .assistant, !pendingCalls.isEmpty {
+            var copy = message
+            copy.settledToolReceipts = Dictionary(pendingCalls.map { ($0.externalID, $0.status) },
+                                                 uniquingKeysWith: { _, latest in latest })
+            return copy
+        }
         guard message.role == .assistant,
               !message.toolCalls.isEmpty,
               !appState.isAgentResponding,
