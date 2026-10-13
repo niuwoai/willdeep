@@ -282,6 +282,8 @@ struct AgentMobileGatewayCapabilitiesSnapshot: Equatable {
     var plugins: [AgentMobileGatewayCapabilityOptionSnapshot]
     var activeProviderID: String?
     var activeModelID: String?
+    var activeApprovalMode: String? = nil
+    var supportsConfiguration: Bool = false
 }
 
 struct AgentMobileGatewayWorktreeFileSnapshot: Equatable {
@@ -329,6 +331,7 @@ protocol AgentMobileGatewayControlling: AnyObject {
         expertIDs: [String],
         pluginIDs: [String]
     ) throws -> AgentMobileGatewayCommandResult
+    func mobileGatewayConfigure(sessionID: UUID?, patch: [String: AgentMobileGatewayJSON]) throws -> AgentMobileGatewayCommandResult
     func mobileGatewayStopTurn(sessionID: UUID?) throws -> AgentMobileGatewayCommandResult
     var mobileGatewayWorkspaceList: [AgentMobileGatewayWorkspaceSnapshot] { get }
     var mobileGatewayCapabilities: AgentMobileGatewayCapabilitiesSnapshot { get }
@@ -468,5 +471,11 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
         case .invalidImagePayload(let reason):
             return "Invalid mobile image payload: \(reason)."
         }
+    }
+}
+
+extension AgentMobileGatewayControlling {
+    func mobileGatewayConfigure(sessionID: UUID?, patch: [String: AgentMobileGatewayJSON]) throws -> AgentMobileGatewayCommandResult {
+        throw AgentMobileGatewayCommandError.invalidAction("configuration unavailable")
     }
 }

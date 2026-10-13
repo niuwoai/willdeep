@@ -135,6 +135,7 @@ var mobileCommandTypes = map[string]struct{}{
 	"job.kill":         {},
 	"workspace.list":   {},
 	"capabilities.get": {},
+	"session.configure": {},
 	"push.register":    {},
 }
 

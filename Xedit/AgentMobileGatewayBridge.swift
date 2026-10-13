@@ -55,7 +55,17 @@ enum AgentMobileGatewayCommandRouter {
                     controller: controller,
                     now: now
                 )
+            case "session.configure":
+                let result = try controller.mobileGatewayConfigure(
+                    sessionID: try optionalSessionID(from: envelope), patch: envelope.payload
+                )
+                return ackEnvelope(for: envelope, sessionID: result.sessionID, now: now)
             case "capabilities.get":
+                if let sessionID = try optionalSessionID(from: envelope), controller.mobileGatewayActiveSessionID != sessionID {
+                    guard controller.mobileGatewaySelectSession(id: sessionID) else {
+                        throw AgentMobileGatewayCommandError.sessionNotFound(sessionID)
+                    }
+                }
                 return capabilitiesEnvelope(
                     id: envelope.id,
                     controller: controller,
@@ -256,12 +266,17 @@ enum AgentMobileGatewayCommandRouter {
     ) -> AgentMobileGatewayEnvelope {
         let capabilities = controller.mobileGatewayCapabilities
         var payload: [String: AgentMobileGatewayJSON] = [
+            "supports_configuration": .bool(capabilities.supportsConfiguration),
+            "approval_modes": .array(["strict", "smart", "workspace-write", "full-access"].map(AgentMobileGatewayJSON.string)),
             "providers": .array(capabilities.providers.map(capabilityOptionJSON)),
             "models": .array(capabilities.models.map(capabilityOptionJSON)),
             "skills": .array(capabilities.skills.map(capabilityOptionJSON)),
             "experts": .array(capabilities.experts.map(capabilityOptionJSON)),
             "plugins": .array(capabilities.plugins.map(capabilityOptionJSON))
         ]
+        if let mode = capabilities.activeApprovalMode {
+            payload["active_approval_mode"] = .string(mode)
+        }
         if let activeProviderID = capabilities.activeProviderID {
             payload["active_provider_id"] = .string(activeProviderID)
         }
@@ -271,6 +286,7 @@ enum AgentMobileGatewayCommandRouter {
         return AgentMobileGatewayEnvelope(
             id: id,
             type: "capabilities.updated",
+            sessionID: controller.mobileGatewayActiveSessionID?.uuidString,
             payload: payload,
             timestamp: isoTimestamp(now)
         )

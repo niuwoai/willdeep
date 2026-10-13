@@ -1173,6 +1173,58 @@ struct AgentMobileGatewayBridgeTests {
     }
 }
 
+@Suite("手机运行配置实际生效", .serialized)
+struct MobileRunContextTests {
+    @Test @MainActor
+    func configurationChangesActualSessionAndRejectsInvalidPatch() throws {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        let workspace = FileManager.default.temporaryDirectory.appendingPathComponent("mobile-context-\(UUID())")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let state = AppState(rootDirectory: workspace, loadSessionCatalog: false)
+        let firstProvider = AgentProviderEntry(providerID: AgentProviderPreset.ollamaID, baseURL: "http://127.0.0.1:1/v1", flashPrimary: "fixture-default", proPrimary: "fixture-pro")
+        let secondProvider = AgentProviderEntry(providerID: AgentProviderPreset.ollamaID, baseURL: "http://127.0.0.1:2/v1", flashPrimary: "fixture-second", proPrimary: "fixture-pro")
+        state.agentProviderLibrary = AgentProviderLibrary(entries: [firstProvider, secondProvider], activeID: firstProvider.id)
+        let session = state.startNewAgentSession()
+        defer {
+            AgentSessionStore.delete(id: session.id)
+            try? FileManager.default.removeItem(at: workspace)
+        }
+        for (wire, expected) in [("strict", AgentApprovalMode.requestEveryTime), ("smart", .smart), ("workspace-write", .workspaceAccess), ("full-access", .fullAccess)] {
+            let reply = AgentMobileGatewayCommandRouter.handle(AgentMobileGatewayEnvelope(
+                id: UUID().uuidString, type: "session.configure", sessionID: session.id.uuidString,
+                payload: ["provider_id": .string(secondProvider.id.uuidString), "approval_mode": .string(wire), "model": .string("mobile-fixture-model")]
+            ), controller: state)
+            #expect(reply.type == "ack")
+            #expect(state.activeRuntime?.approvalMode == expected)
+            #expect(state.agentSessionModelOverride == "mobile-fixture-model")
+            #expect(state.activeAgentProviderEntry?.id == secondProvider.id)
+            #expect(state.agentProviderLibrary.activeID == firstProvider.id)
+            let catalog = AgentMobileGatewayCommandRouter.capabilitiesEnvelope(controller: state)
+            #expect(catalog.sessionID == session.id.uuidString)
+            #expect(catalog.payload["active_approval_mode"]?.stringValue == wire)
+            #expect(catalog.payload["supports_configuration"]?.boolValue == true)
+            #expect(catalog.payload["active_provider_id"]?.stringValue == secondProvider.id.uuidString)
+            if wire == "full-access", let path = ProcessInfo.processInfo.environment["WILLDEEP_MOBILE_MAC_FIXTURE"] {
+                try JSONEncoder().encode(catalog).write(to: URL(fileURLWithPath: path))
+            }
+        }
+        if let skill = AgentSkillDirectory.list(includeDisabled: false).first(where: { $0.source != .plugin }) {
+            _ = try state.mobileGatewayConfigure(sessionID: session.id, patch: ["skills": .array([.string(skill.identifier)])])
+            #expect(state.agentPendingSkills.contains(where: { $0.identifier == skill.identifier }))
+            _ = try state.mobileGatewayConfigure(sessionID: session.id, patch: ["skills": .array([])])
+            #expect(state.agentPendingSkills.isEmpty)
+        }
+        let rejected = AgentMobileGatewayCommandRouter.handle(AgentMobileGatewayEnvelope(
+            id: UUID().uuidString, type: "session.configure", sessionID: session.id.uuidString,
+            payload: ["approval_mode": .string("strict"), "skills": .array([.string("unknown-fixture")])]
+        ), controller: state)
+        #expect(rejected.type == "command.error")
+        #expect(state.activeRuntime?.approvalMode == .fullAccess)
+        #expect(state.activeRuntime?.isResponding == false)
+    }
+}
+
 @MainActor
 private final class FakeMobileGatewayController: AgentMobileGatewayControlling {
     struct SentMessage: Equatable {

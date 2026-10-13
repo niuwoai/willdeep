@@ -306,12 +306,12 @@ extension AppState: AgentMobileGatewayControlling {
     }
 
     var mobileGatewayCapabilities: AgentMobileGatewayCapabilitiesSnapshot {
-        let activeProvider = agentProviderLibrary.active
-        let activeProviderID = agentProviderLibrary.activeID?.uuidString
+        let activeProvider = activeAgentProviderEntry
+        let activeProviderID = activeProvider?.id.uuidString
         let overrideModel = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
         let activeModelID = overrideModel?.isEmpty == false
             ? overrideModel!
-            : agentConfiguration.normalized.model(for: .interactive)
+            : activeAgentModelID
 
         let providers = agentProviderLibrary.entries.map { entry in
             let presetName = AgentProviderPreset.preset(id: entry.providerID)?.displayName ?? entry.providerID
@@ -319,7 +319,7 @@ extension AppState: AgentMobileGatewayControlling {
                 id: entry.id.uuidString,
                 title: entry.displayName,
                 subtitle: presetName,
-                isActive: entry.id == agentProviderLibrary.activeID
+                isActive: entry.id == activeProvider?.id
             )
         }
 
@@ -329,11 +329,12 @@ extension AppState: AgentMobileGatewayControlling {
             agentRecentlyUsedModelIDs +
             agentKnownModelIDs +
             [
+                activeModelID,
                 agentConfiguration.normalized.model(for: .interactive),
                 agentConfiguration.normalized.flashModel,
                 agentConfiguration.normalized.proModel
             ]
-        )
+        ).filter { agentModelIsCompatibleWithActiveProvider($0) }
         let models = modelCandidates.map { model in
             AgentMobileGatewayCapabilityOptionSnapshot(
                 id: model,
@@ -347,7 +348,7 @@ extension AppState: AgentMobileGatewayControlling {
         let skillEntries = AgentSkillDirectory.list(includeDisabled: false)
         let skills = skillEntries
             .filter { $0.source != .plugin }
-            .prefix(80)
+
             .map { entry in
                 AgentMobileGatewayCapabilityOptionSnapshot(
                     id: entry.identifier,
@@ -388,7 +389,9 @@ extension AppState: AgentMobileGatewayControlling {
             experts: experts,
             plugins: plugins,
             activeProviderID: activeProviderID,
-            activeModelID: activeModelID
+            activeModelID: activeModelID,
+            activeApprovalMode: Self.mobileGatewayCanonicalApprovalMode(agentApprovalMode),
+            supportsConfiguration: true
         )
     }
 
@@ -553,14 +556,14 @@ extension AppState: AgentMobileGatewayControlling {
                 pluginIDs: pluginIDs
             )
         }
-        applyMobileGatewayRunContext(
-            providerID: providerID,
-            modelID: modelID,
-            approvalModeID: approvalModeID,
-            skillIDs: skillIDs,
-            expertIDs: expertIDs,
-            pluginIDs: pluginIDs
-        )
+        var patch: [String: AgentMobileGatewayJSON] = [:]
+        if let providerID { patch["provider_id"] = .string(providerID) }
+        if let modelID { patch["model"] = .string(modelID) }
+        if let approvalModeID { patch["approval_mode"] = .string(approvalModeID) }
+        if !skillIDs.isEmpty { patch["skills"] = .array(skillIDs.map(AgentMobileGatewayJSON.string)) }
+        if !expertIDs.isEmpty { patch["experts"] = .array(expertIDs.map(AgentMobileGatewayJSON.string)) }
+        if !pluginIDs.isEmpty { patch["plugins"] = .array(pluginIDs.map(AgentMobileGatewayJSON.string)) }
+        if !patch.isEmpty { _ = try mobileGatewayConfigure(sessionID: runtime.id, patch: patch) }
         runtime.input = text
         runtime.pendingImages = images
         sendAgentMessage()
@@ -577,15 +580,13 @@ extension AppState: AgentMobileGatewayControlling {
     ) {
         if let rawProviderID = providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
            let providerUUID = UUID(uuidString: rawProviderID),
-           agentProviderLibrary.entries.contains(where: { $0.id == providerUUID }) {
-            setActiveProviderLibraryEntry(id: providerUUID)
-        }
-        if let rawModelID = modelID?.trimmingCharacters(in: .whitespacesAndNewlines), !rawModelID.isEmpty {
+           let entry = agentProviderLibrary.entries.first(where: { $0.id == providerUUID }) {
+            selectAgentEntryAndModel(entryID: providerUUID, model: modelID ?? entry.makeConfiguration().normalized.model(for: .interactive))
+        } else if let rawModelID = modelID?.trimmingCharacters(in: .whitespacesAndNewlines), !rawModelID.isEmpty {
             setAgentSessionModel(rawModelID)
         }
         if let mode = Self.mobileGatewayApprovalMode(from: approvalModeID) {
-            agentApprovalMode = mode
-            persistActiveAgentSession()
+            setAgentApprovalMode(mode)
         }
 
         let entries = AgentSkillDirectory.list(includeDisabled: false)
@@ -631,17 +632,101 @@ extension AppState: AgentMobileGatewayControlling {
             .lowercased()
             .replacingOccurrences(of: "-", with: "_")
         switch value {
-        case "ask_every_time", "request_every_time", "requesteverytime":
+        case "strict", "ask_every_time", "request_every_time", "requesteverytime":
             return .requestEveryTime
         case "smart", "smart_approval":
             return .smart
         case "silent", "silent_mode", "silentmode", "full_access", "fullaccess":
             return .fullAccess
-        case "workspace_access", "workspace_writable", "workspaceaccess":
+        case "workspace_write", "workspace_access", "workspace_writable", "workspaceaccess":
             return .workspaceAccess
         default:
             return nil
         }
+    }
+
+    static func mobileGatewayCanonicalApprovalMode(_ mode: AgentApprovalMode) -> String {
+        switch mode {
+        case .requestEveryTime: return "strict"
+        case .smart: return "smart"
+        case .workspaceAccess: return "workspace-write"
+        case .fullAccess: return "full-access"
+        }
+    }
+
+    func mobileGatewayConfigure(sessionID: UUID?, patch: [String: AgentMobileGatewayJSON]) throws -> AgentMobileGatewayCommandResult {
+        if let sessionID, !mobileGatewaySelectSession(id: sessionID) {
+            throw AgentMobileGatewayCommandError.sessionNotFound(sessionID)
+        }
+        guard let runtime = activeRuntime else { throw AgentMobileGatewayCommandError.missingID("session.configure") }
+        let allowed = Set(["provider_id", "model", "approval_mode", "skills", "experts", "plugins"])
+        guard Set(patch.keys).isSubset(of: allowed) else { throw AgentMobileGatewayCommandError.invalidAction("configuration field") }
+        let entries = AgentSkillDirectory.list(includeDisabled: false)
+        let stringFields = ["provider_id", "model", "approval_mode"]
+        for key in stringFields where patch[key] != nil {
+            guard let value = patch[key]?.stringValue, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AgentMobileGatewayCommandError.invalidAction(key)
+            }
+        }
+        if let provider = patch["provider_id"]?.stringValue {
+            guard let id = UUID(uuidString: provider), agentProviderLibrary.entries.contains(where: { $0.id == id }) else {
+                throw AgentMobileGatewayCommandError.invalidAction("provider_id")
+            }
+        }
+        if let mode = patch["approval_mode"]?.stringValue, Self.mobileGatewayApprovalMode(from: mode) == nil {
+            throw AgentMobileGatewayCommandError.invalidAction("approval_mode")
+        }
+        if let model = patch["model"]?.stringValue, model.count > 256 || model.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) {
+            throw AgentMobileGatewayCommandError.invalidAction("model")
+        }
+        if patch["provider_id"] != nil || patch["model"] != nil {
+            let candidateID = patch["provider_id"]?.stringValue.flatMap(UUID.init(uuidString:)) ?? activeAgentProviderEntry?.id
+            if let candidateID { materializeProviderLibraryEntryAPIKey(id: candidateID) }
+            guard let candidate = agentProviderLibrary.entries.first(where: { $0.id == candidateID }),
+                  candidate.isUsableForChatSelection(isSomeIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()) else {
+                throw AgentMobileGatewayCommandError.invalidAction("provider is not configured for chat")
+            }
+            if let model = patch["model"]?.stringValue, let preset = AgentProviderPreset.preset(id: candidate.providerID),
+               preset.id != AgentProviderPreset.customID, !preset.recognizesModelID(model) {
+                throw AgentMobileGatewayCommandError.invalidAction("model is incompatible with provider")
+            }
+        }
+        func ids(_ key: String) throws -> [String]? {
+            guard let value = patch[key] else { return nil }
+            guard case .array(let values) = value else { throw AgentMobileGatewayCommandError.invalidAction(key) }
+            let strings = values.compactMap(\.stringValue)
+            guard strings.count == values.count else { throw AgentMobileGatewayCommandError.invalidAction(key) }
+            return strings
+        }
+        let skills = try ids("skills")
+        let experts = try ids("experts")
+        let plugins = try ids("plugins")
+        if let skills, skills.count > 16 || skills.contains(where: { id in !entries.contains { $0.identifier == id && $0.source != .plugin } }) {
+            throw AgentMobileGatewayCommandError.invalidAction("skills")
+        }
+        if let experts, experts.contains(where: { AgentExpert(rawValue: $0) == nil }) {
+            throw AgentMobileGatewayCommandError.invalidAction("experts")
+        }
+        if let experts, !canDeactivateAgentExperts(), !agentActiveExperts.isSubset(of: Set(experts.compactMap(AgentExpert.init(rawValue:)))) {
+            throw AgentMobileGatewayCommandError.invalidAction("experts cannot be removed after the conversation has started")
+        }
+        let pluginIDs = Set(mobileGatewayCapabilities.plugins.map(\.id))
+        if let plugins, !Set(plugins).isSubset(of: pluginIDs) { throw AgentMobileGatewayCommandError.invalidAction("plugins") }
+        // 用替换语义处理多选，取消勾选也必须落到真实 composer 上。
+        if skills != nil || plugins != nil {
+            for entry in agentPendingSkills where (entry.source == .plugin ? plugins != nil : skills != nil) {
+                detachAgentSkill(identifier: entry.identifier)
+            }
+        }
+        if let experts {
+            for expert in agentActiveExperts where !experts.contains(expert.rawValue) { _ = deactivateAgentExpert(expert) }
+        }
+        applyMobileGatewayRunContext(
+            providerID: patch["provider_id"]?.stringValue, modelID: patch["model"]?.stringValue,
+            approvalModeID: patch["approval_mode"]?.stringValue, skillIDs: skills ?? [], expertIDs: experts ?? [], pluginIDs: plugins ?? []
+        )
+        persistActiveAgentSession()
+        return .ok(sessionID: runtime.id)
     }
 
     func mobileGatewayStopTurn(sessionID: UUID?) throws -> AgentMobileGatewayCommandResult {

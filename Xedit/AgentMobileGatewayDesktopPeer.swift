@@ -79,7 +79,7 @@ struct AgentMobileGatewayPhonePresence {
     /// (a relay echo of our own `state.snapshot`, a stray event) is not proof of
     /// a phone and must not keep the snapshot tick alive.
     static let phoneCommandTypes: Set<String> = [
-        "session.list", "session.create", "workspace.list", "capabilities.get",
+        "session.list", "session.create", "session.configure", "workspace.list", "capabilities.get",
         "push.register", "session.select", "message.send", "turn.stop",
         "tool.decide", "patch.decide", "diff.get", "job.kill", "file.read",
         "queue.update"
