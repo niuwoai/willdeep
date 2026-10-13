@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct AgentFeedbackReviewView: View {
     @EnvironmentObject private var appState: AppState
@@ -9,47 +8,44 @@ struct AgentFeedbackReviewView: View {
     var body: some View {
         AgentFeedbackReviewCard(
             review: runtime.isResponding || runtime.feedbackReview?.disposition != nil ? nil : runtime.feedbackReview,
-            parameters: runtime.runtimeParameters,
             onDisposition: { runtime.recordHumanDisposition($0) },
-            onAssess: { appState.assessFeedbackReview(for: runtime) },
-            onExport: { export($0) }
+            onAssess: { appState.assessFeedbackReview(for: runtime) }
         )
         .id(runtime.session.id)
-    }
-
-    private func export(_ parameters: AgentRuntimeParameters) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = AgentRuntimeParameters.fileName
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try Data(parameters.canonical.utf8).write(to: url, options: .atomic) }
-        catch { runtime.errorMessage = L10n.RSI.exportFailed }
     }
 }
 
 /// Presentation stays independent of the runtime so every state can be previewed.
 struct AgentFeedbackReviewCard: View {
     let review: AgentFeedbackReview?
-    let parameters: AgentRuntimeParameters?
     let onDisposition: (AgentFeedbackReview.Disposition) -> Void
     let onAssess: () -> Void
-    let onExport: (AgentRuntimeParameters) -> Void
-    @State private var configurationExpanded = false
+    @State private var detailsExpanded: Bool
+
+    init(review: AgentFeedbackReview?, initiallyExpanded: Bool = false,
+         onDisposition: @escaping (AgentFeedbackReview.Disposition) -> Void,
+         onAssess: @escaping () -> Void) {
+        self.review = review
+        self.onDisposition = onDisposition
+        self.onAssess = onAssess
+        _detailsExpanded = State(initialValue: initiallyExpanded)
+    }
 
     var body: some View {
-        if review != nil || parameters != nil {
+        cardContent
+            .onCompatibleChange(of: review?.id) { _, _ in detailsExpanded = false }
+    }
+
+    @ViewBuilder private var cardContent: some View {
+        if let review {
             VStack(alignment: .leading, spacing: 0) {
-                if let review {
+                compactFeedback
+                    .padding(.horizontal, FeedbackDesign.compactHorizontalInset)
+                    .padding(.vertical, FeedbackDesign.compactVerticalInset)
+                if detailsExpanded {
+                    Divider().opacity(FeedbackDesign.dividerOpacity)
                     feedbackContent(review)
                         .padding(FeedbackDesign.cardInset)
-                }
-                if let parameters {
-                    if review != nil {
-                        Divider().opacity(FeedbackDesign.dividerOpacity)
-                    }
-                    configuration(parameters)
-                        .padding(.horizontal, FeedbackDesign.cardInset)
-                        .padding(.vertical, FeedbackDesign.footerInset)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -68,6 +64,41 @@ struct AgentFeedbackReviewCard: View {
             .clipShape(RoundedRectangle(cornerRadius: FeedbackDesign.cardRadius, style: .continuous))
             .accessibilityIdentifier("agent.rsi.feedback-review")
         }
+    }
+
+    private var compactFeedback: some View {
+        HStack(spacing: FeedbackDesign.actionSpacing) {
+            Text(L10n.RSI.feedbackTitle)
+                .font(.system(size: FeedbackDesign.textSize, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            compactDispositionButton(.accepted, symbol: "hand.thumbsup", title: L10n.RSI.accepted)
+            compactDispositionButton(.needsChanges, symbol: "hand.thumbsdown", title: L10n.RSI.needsChanges)
+            Button { detailsExpanded.toggle() } label: {
+                Image(systemName: detailsExpanded ? "chevron.up" : "chevron.down")
+                    .frame(width: FeedbackDesign.compactButtonSize, height: FeedbackDesign.compactButtonSize)
+            }
+            .help(detailsExpanded ? L10n.RSI.collapseFeedback : L10n.RSI.expandFeedback)
+            .accessibilityLabel(detailsExpanded ? L10n.RSI.collapseFeedback : L10n.RSI.expandFeedback)
+            .accessibilityValue(detailsExpanded ? L10n.PlanCard.expanded : L10n.PlanCard.collapsed)
+            .accessibilityIdentifier("agent.rsi.feedback-toggle")
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: FeedbackDesign.textSize, weight: .medium))
+        .foregroundStyle(.secondary)
+    }
+
+    private func compactDispositionButton(_ disposition: AgentFeedbackReview.Disposition,
+                                          symbol: String, title: String) -> some View {
+        Button { onDisposition(disposition) } label: {
+            Image(systemName: symbol)
+                .frame(width: FeedbackDesign.compactButtonSize, height: FeedbackDesign.compactButtonSize)
+                .contentShape(Rectangle())
+        }
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("agent.rsi.\(disposition.rawValue)-compact")
     }
 
     private func feedbackContent(_ review: AgentFeedbackReview) -> some View {
@@ -90,15 +121,10 @@ struct AgentFeedbackReviewCard: View {
     }
 
     private func feedbackHeading(_ review: AgentFeedbackReview) -> some View {
-        VStack(alignment: .leading, spacing: FeedbackDesign.labelSpacing) {
-            Text(L10n.RSI.feedbackTitle)
-                .font(.system(size: FeedbackDesign.titleSize, weight: .semibold))
-                .foregroundStyle(.primary)
-            AgentFeedbackFlowLayout(spacing: FeedbackDesign.labelSpacing) {
-                evidenceBadge(L10n.RSI.successes(review.toolSuccesses), symbol: "checkmark.circle")
-                evidenceBadge(L10n.RSI.failures(review.toolFailures), symbol: "xmark.circle")
-                evidenceBadge(L10n.RSI.unverified, symbol: "info.circle")
-            }
+        AgentFeedbackFlowLayout(spacing: FeedbackDesign.labelSpacing) {
+            evidenceBadge(L10n.RSI.successes(review.toolSuccesses), symbol: "checkmark.circle")
+            evidenceBadge(L10n.RSI.failures(review.toolFailures), symbol: "xmark.circle")
+            evidenceBadge(L10n.RSI.unverified, symbol: "info.circle")
         }
     }
 
@@ -171,88 +197,6 @@ struct AgentFeedbackReviewCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
-
-    private func configuration(_ parameters: AgentRuntimeParameters) -> some View {
-        VStack(alignment: .leading, spacing: FeedbackDesign.detailSpacing) {
-            Button {
-                configurationExpanded.toggle()
-            } label: {
-                HStack(spacing: FeedbackDesign.disclosureSpacing) {
-                    Spacer(minLength: 0)
-                    Image(systemName: configurationExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: FeedbackDesign.chevronSize, weight: .semibold))
-                        .frame(width: FeedbackDesign.chevronWidth)
-                    Label(L10n.RSI.runtimeConfiguration, systemImage: "slider.horizontal.3")
-                        .font(.system(size: FeedbackDesign.textSize))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .accessibilityIdentifier("agent.rsi.configuration-toggle")
-            .accessibilityValue(configurationExpanded ? L10n.PlanCard.expanded : L10n.PlanCard.collapsed)
-
-            if configurationExpanded {
-                configurationDetails(parameters)
-            }
-        }
-    }
-
-    private func configurationDetails(_ parameters: AgentRuntimeParameters) -> some View {
-        VStack(alignment: .leading, spacing: FeedbackDesign.detailSpacing) {
-            ScrollView([.horizontal, .vertical]) {
-                Text(parameters.canonical)
-                    .font(.system(size: FeedbackDesign.codeSize, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(FeedbackDesign.codeInset)
-            }
-            .frame(height: FeedbackDesign.configurationHeight)
-            .background(Color.primary.opacity(FeedbackDesign.codeBackgroundOpacity), in: RoundedRectangle(cornerRadius: FeedbackDesign.codeRadius))
-            HStack(spacing: FeedbackDesign.actionSpacing) {
-                AgentConfigurationCopyButton(text: parameters.canonical)
-                Button { onExport(parameters) } label: {
-                    Label(L10n.RSI.exportConfiguration, systemImage: "square.and.arrow.up")
-                }
-            }
-            .buttonStyle(AgentFeedbackButtonStyle())
-        }
-    }
-}
-
-private struct AgentConfigurationCopyButton: View {
-    let text: String
-    @State private var copySucceeded: Bool?
-    @State private var attemptID = UUID()
-    private static let feedbackDuration: Duration = .seconds(2)
-
-    var body: some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            copySucceeded = NSPasteboard.general.setString(text, forType: .string)
-            attemptID = UUID()
-        } label: {
-            Label(title, systemImage: copySucceeded == true ? "checkmark" : copySucceeded == false ? "exclamationmark.circle" : "doc.on.doc")
-        }
-        .accessibilityIdentifier("agent.rsi.copy-configuration")
-        .task(id: attemptID) {
-            guard copySucceeded == true else { return }
-            do { try await Task.sleep(for: Self.feedbackDuration) }
-            catch { return }
-            copySucceeded = nil
-        }
-        .onChange(of: text) { _ in
-            copySucceeded = nil
-            attemptID = UUID()
-        }
-    }
-
-    private var title: String {
-        switch copySucceeded {
-        case true: L10n.RSI.configurationCopied
-        case false: L10n.RSI.configurationCopyFailed
-        case nil: L10n.RSI.copyConfiguration
-        }
-    }
 }
 
 private struct AgentFeedbackButtonStyle: ButtonStyle {
@@ -279,7 +223,9 @@ private struct AgentFeedbackButtonStyle: ButtonStyle {
 
 private enum FeedbackDesign {
     static let cardInset: CGFloat = 14
-    static let footerInset: CGFloat = 10
+    static let compactHorizontalInset: CGFloat = 12
+    static let compactVerticalInset: CGFloat = 4
+    static let compactButtonSize: CGFloat = 26
     static let cardRadius: CGFloat = 8
     static let railWidth: CGFloat = 3
     static let railOpacity = 0.35
@@ -289,25 +235,16 @@ private enum FeedbackDesign {
     static let headerSpacing: CGFloat = 16
     static let actionSpacing: CGFloat = 8
     static let labelSpacing: CGFloat = 5
-    static let disclosureSpacing: CGFloat = 6
-    static let detailSpacing: CGFloat = 10
-    static let titleSize: CGFloat = 12
     static let textSize: CGFloat = 11
-    static let codeSize: CGFloat = 10
-    static let chevronSize: CGFloat = 9
-    static let chevronWidth: CGFloat = 10
     static let skipInset: CGFloat = 6
     static let buttonVerticalInset: CGFloat = 7
     static let buttonHorizontalInset: CGFloat = 10
-    static let codeInset: CGFloat = 10
-    static let configurationHeight: CGFloat = 140
     static let codeRadius: CGFloat = 6
     static let buttonRadius: CGFloat = 7
     static let borderWidth: CGFloat = 1
     static let surfaceOpacity = 0.65
     static let cardBorderOpacity = 0.07
     static let buttonTextOpacity = 0.75
-    static let codeBackgroundOpacity = 0.035
     static let buttonBackgroundOpacity = 0.04
     static let buttonBorderOpacity = 0.06
     static let dividerOpacity = 0.5

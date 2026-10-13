@@ -79,7 +79,8 @@ enum AgentGitReviewLoader {
         if change.kind == .untracked {
             switch AppState.loadUntrackedDiffPreviewSection(
                 change,
-                repositoryRoot: repositoryRoot
+                repositoryRoot: repositoryRoot,
+                maximumBytes: AgentLocalFilePreview.maximumHTMLBytes
             ) {
             case .diff(let diff):
                 return .text(diff)

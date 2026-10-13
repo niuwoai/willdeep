@@ -33,6 +33,7 @@ struct AgentSidePanelDiffView: View {
     @State private var commitState: CommitState = .idle
     @State private var collapsedPaths: Set<String> = []
     @State private var refreshTick = 0
+    @State private var showsHTMLPreview = true
 
     private enum LoadState {
         case idle
@@ -60,6 +61,10 @@ struct AgentSidePanelDiffView: View {
         VStack(spacing: 0) {
             toolbar
             Divider().opacity(0.5)
+            if canPreviewSelectedHTML {
+                previewModeBar
+                Divider().opacity(0.35)
+            }
             content
             if canShowCommitBar {
                 Divider().opacity(0.5)
@@ -69,7 +74,7 @@ struct AgentSidePanelDiffView: View {
         .task(id: "\(scope.rawValue)-\(refreshTick)") {
             await reloadFileList()
         }
-        .task(id: selectedPath) {
+        .task(id: "\(selectedPath ?? "")|\(showsHTMLPreview)") {
             await reloadSelectedDiff()
         }
         .onCompatibleChange(of: panelScope.sessionID) { _, _ in
@@ -197,6 +202,29 @@ struct AgentSidePanelDiffView: View {
         .frame(height: 30)
     }
 
+    private var previewModeBar: some View {
+        HStack(spacing: 8) {
+            Picker(L10n.FilePreview.page, selection: $showsHTMLPreview) {
+                Text(L10n.FilePreview.page).tag(true)
+                Text(L10n.FilePreview.changes).tag(false)
+            }
+            .pickerStyle(.segmented)
+            .fixedSize()
+            Spacer(minLength: 0)
+            if let selectedFileURL {
+                Button {
+                    appState.revealInFinder(selectedFileURL)
+                } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.Plugins.openInFinder)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
     @ViewBuilder
     private var content: some View {
         switch state {
@@ -294,6 +322,16 @@ struct AgentSidePanelDiffView: View {
 
     @ViewBuilder
     private var diffDetail: some View {
+        if canPreviewSelectedHTML, showsHTMLPreview, let selectedFileURL {
+            AgentHTMLFilePreviewView(fileURL: selectedFileURL, revision: String(refreshTick))
+                .id(selectedFileURL)
+        } else {
+            selectedDiffBody
+        }
+    }
+
+    @ViewBuilder
+    private var selectedDiffBody: some View {
         switch detailState {
         case .idle, .loading:
             progress
@@ -305,7 +343,11 @@ struct AgentSidePanelDiffView: View {
                 palette: palette
             )
         case .unavailable(let message):
-            placeholder(systemImage: "doc.questionmark", text: message)
+            if let selectedFileURL {
+                AgentFilePreviewUnavailableView(fileURL: selectedFileURL, reason: message)
+            } else {
+                placeholder(systemImage: "doc.questionmark", text: message)
+            }
         }
     }
 
@@ -334,6 +376,17 @@ struct AgentSidePanelDiffView: View {
     private var selectedChange: AgentFileChangeSummary? {
         guard case .loaded(let snapshot) = state, let selectedPath else { return nil }
         return snapshot.changes.change(for: selectedPath)
+    }
+
+    private var selectedFileURL: URL? {
+        guard case .loaded(let snapshot) = state, let selectedPath else { return nil }
+        return AgentLocalFilePreview.fileURL(path: selectedPath, repositoryRoot: snapshot.repositoryRoot)
+    }
+
+    private var canPreviewSelectedHTML: Bool {
+        guard scope == .uncommitted || scope == .unstaged,
+              selectedChange?.kind != .deleted, let selectedFileURL else { return false }
+        return AgentLocalFilePreview.supportsHTML(selectedFileURL)
     }
 
     private var isLoading: Bool {
@@ -380,6 +433,10 @@ struct AgentSidePanelDiffView: View {
             return
         }
         let requestedPath = change.path
+        if canPreviewSelectedHTML, showsHTMLPreview {
+            detailState = .idle
+            return
+        }
         detailState = .loading
         let requestedScope = scope
 
@@ -417,6 +474,7 @@ struct AgentSidePanelDiffView: View {
     }
 
     private func selectRequestedFile(_ file: URL?, in snapshot: AgentGitReviewSnapshot) {
+        showsHTMLPreview = true
         selectedPath = file.flatMap {
             AgentSidePanelDiffSelection.relativePath(for: $0, changes: snapshot.changes)
         }
@@ -424,6 +482,7 @@ struct AgentSidePanelDiffView: View {
     }
 
     private func select(change: AgentFileChangeSummary, in snapshot: AgentGitReviewSnapshot) {
+        showsHTMLPreview = true
         selectedPath = change.path
         showsFileList = false
         panelScope.selectedFile = snapshot.repositoryRoot

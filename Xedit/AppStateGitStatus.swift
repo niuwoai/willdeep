@@ -1153,7 +1153,8 @@ extension AppState {
     /// files are summarized before any expensive diff rendering begins.
     nonisolated static func loadUntrackedDiffPreviewSection(
         _ change: AgentFileChangeSummary,
-        repositoryRoot: URL
+        repositoryRoot: URL,
+        maximumBytes: Int = worktreeDiffPreviewMaxUntrackedFileBytes
     ) -> AgentUntrackedDiffPreviewSection {
         let fileURL = repositoryRoot.appendingPathComponent(change.path).standardizedFileURL
         let rootPath = repositoryRoot.standardizedFileURL.path
@@ -1167,9 +1168,9 @@ extension AppState {
               let fileSize = values.fileSize else {
             return .summaryReason("未跟踪文件 \(change.path) 不是可安全预览的普通文件。")
         }
-        guard fileSize <= worktreeDiffPreviewMaxUntrackedFileBytes else {
+        guard fileSize <= maximumBytes else {
             return .summaryReason(
-                "未跟踪文件 \(change.path) 超过 \(worktreeDiffPreviewMaxUntrackedFileBytes / 1024)KB，已跳过完整内容。"
+                "未跟踪文件 \(change.path) 超过 \(maximumBytes / 1024)KB，已跳过完整内容。"
             )
         }
 
@@ -1177,11 +1178,11 @@ extension AppState {
         do {
             let handle = try FileHandle(forReadingFrom: fileURL)
             defer { try? handle.close() }
-            data = try handle.read(upToCount: worktreeDiffPreviewMaxUntrackedFileBytes + 1) ?? Data()
+            data = try handle.read(upToCount: maximumBytes + 1) ?? Data()
         } catch {
             return .summaryReason("未跟踪文件 \(change.path) 无法读取，已跳过完整内容。")
         }
-        guard data.count <= worktreeDiffPreviewMaxUntrackedFileBytes else {
+        guard data.count <= maximumBytes else {
             return .summaryReason("未跟踪文件 \(change.path) 在读取时变大，已跳过完整内容。")
         }
         guard !data.contains(0), let text = String(data: data, encoding: .utf8) else {

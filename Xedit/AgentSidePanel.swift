@@ -1583,9 +1583,16 @@ struct AgentSidePanelPreviewView: View {
     @ViewBuilder
     private var previewBody: some View {
         if let loadError {
-            placeholder(systemImage: "exclamationmark.triangle", text: loadError)
+            if let loadedURL {
+                AgentFilePreviewUnavailableView(fileURL: loadedURL, reason: loadError)
+            } else {
+                placeholder(systemImage: "exclamationmark.triangle", text: loadError)
+            }
         } else if loadedURL == nil {
             placeholderWithPicker
+        } else if let loadedURL, AgentLocalFilePreview.supportsHTML(loadedURL) {
+            AgentHTMLFilePreviewView(fileURL: loadedURL)
+                .id(loadedURL)
         } else if PreviewPaneCompatibility.supports(language) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
@@ -1706,6 +1713,13 @@ struct AgentSidePanelPreviewView: View {
 
     private func load(url: URL) {
         loadError = nil
+        if AgentLocalFilePreview.supportsHTML(url) {
+            loadedURL = url
+            language = .html
+            content = ""
+            previewBlocks = []
+            return
+        }
         do {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             if Self.looksBinary(data) {

@@ -1,0 +1,14 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "file-preview.changes" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "变更" } } } },
+    "file-preview.html-too-large" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此 HTML 文件超过 1 MB 预览上限。你仍可在 Finder 中定位并打开完整文件。" } } } },
+    "file-preview.invalid-text" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此文件是二进制文件或不是 UTF-8 文本。" } } } },
+    "file-preview.location" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文件位置" } } } },
+    "file-preview.page" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "页面预览" } } } },
+    "file-preview.render-failed" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "页面渲染器已停止。你仍可通过 Finder 打开原始文件。" } } } },
+    "file-preview.unavailable" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂时无法预览" } } } },
+    "file-preview.unreadable" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此文件无法作为普通本地文档读取。" } } } }
+  },
+  "version" : "1.0"
+}
