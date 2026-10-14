@@ -29,6 +29,7 @@ nonisolated enum AgentRoutineRunOutcome: String, Codable, Equatable, Sendable {
     /// Written before outcomes were recorded. Rendered without a verdict
     /// rather than guessed at.
     case unknown
+    case skipped
 }
 
 nonisolated struct AgentRoutineRunRecord: Codable, Equatable, Identifiable, Sendable {

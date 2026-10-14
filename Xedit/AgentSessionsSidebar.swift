@@ -1207,7 +1207,9 @@ struct AgentSessionsSidebar: View {
         }
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         for routine in appState.agentRoutines where routine.originSessionID == session.id {
-            appState.deleteAgentRoutine(id: routine.id)
+            var paused = routine
+            paused.isEnabled = false
+            appState.saveAgentRoutine(paused)
         }
         appState.toggleAgentSessionArchived(id: session.id)
     }

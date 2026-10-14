@@ -181,6 +181,9 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
     /// so the inline card can trace back to where it was created. Nil for
     /// routines created from the sidebar.
     var originSessionID: UUID?
+    /// New chat tasks resume their owner; legacy tasks keep independent runs.
+    var continueInSession: Bool
+    var completedAt: Date?
     /// Natural-language goal for a self-completing task. When set, each fired
     /// run is told to evaluate whether the goal is met and, if so, call
     /// `complete_scheduled_task` to remove itself. Nil = plain recurring routine.
@@ -200,6 +203,8 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         lastRunAt: Date? = nil,
         lastSessionID: UUID? = nil,
         originSessionID: UUID? = nil,
+        continueInSession: Bool = false,
+        completedAt: Date? = nil,
         goal: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -215,6 +220,8 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         self.lastRunAt = lastRunAt
         self.lastSessionID = lastSessionID
         self.originSessionID = originSessionID
+        self.continueInSession = continueInSession
+        self.completedAt = completedAt
         self.goal = goal
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -237,7 +244,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
     /// `lastRunAt` (or `createdAt` if it never ran). Returns nil if the
     /// schedule is degenerate or the routine is disabled.
     func nextFireDate(now: Date = Date(), calendar: Calendar = .current) -> Date? {
-        guard isEnabled else { return nil }
+        guard isEnabled, completedAt == nil else { return nil }
         let reference = lastRunAt ?? createdAt
         return schedule.nextFireDate(after: reference, calendar: calendar)
     }
@@ -247,6 +254,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, name, prompt, workspaceRootPath, modelID, approvalMode, schedule
         case isEnabled, lastRunAt, lastSessionID, originSessionID, goal, createdAt, updatedAt
+        case continueInSession, completedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -262,6 +270,8 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         self.lastRunAt = try c.decodeIfPresent(Date.self, forKey: .lastRunAt)
         self.lastSessionID = try c.decodeIfPresent(UUID.self, forKey: .lastSessionID)
         self.originSessionID = try c.decodeIfPresent(UUID.self, forKey: .originSessionID)
+        self.continueInSession = try c.decodeIfPresent(Bool.self, forKey: .continueInSession) ?? false
+        self.completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
         self.goal = try c.decodeIfPresent(String.self, forKey: .goal)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)

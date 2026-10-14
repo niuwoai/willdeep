@@ -343,8 +343,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// immediately and the human clicks 重试 within seconds, while an
     /// unattended run has to recover on its own or not at all.
     var isUnattendedRun: Bool {
-        isUnattendedDispatchTask || session.originRoutineID != nil
+        isUnattendedDispatchTask || session.originRoutineID != nil || activeScheduledRoutineID != nil
     }
+    var activeScheduledRoutineID: UUID?
     /// Most recent media task completion surfaced to this runtime. This keeps
     /// async image/video outputs actionable in the same turn that drains the
     /// completion queue.

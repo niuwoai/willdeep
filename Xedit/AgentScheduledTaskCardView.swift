@@ -34,7 +34,15 @@ struct AgentScheduledTaskCardView: View {
     @EnvironmentObject private var appState: AppState
 
     private var isActive: Bool {
-        appState.agentRoutines.contains { $0.id == card.id }
+        appState.agentRoutines.contains { $0.id == card.id && $0.isEnabled && $0.completedAt == nil }
+    }
+
+    private var currentStatus: String {
+        guard let routine = appState.agentRoutines.first(where: { $0.id == card.id }) else {
+            return L10n.ScheduledTaskCard.completed
+        }
+        if routine.completedAt != nil { return L10n.ScheduledTaskCard.completed }
+        return routine.isEnabled ? routine.schedule.summary : L10n.SessionSchedules.paused
     }
 
     private var helpText: String {
@@ -94,7 +102,7 @@ struct AgentScheduledTaskCardView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(palette.primaryText)
                     .lineLimit(1)
-                Text(card.scheduleSummary)
+                Text(currentStatus)
                     .font(.system(size: 12))
                     .foregroundStyle(palette.secondaryText)
                     .lineLimit(1)
@@ -103,7 +111,7 @@ struct AgentScheduledTaskCardView: View {
 
             Spacer(minLength: 8)
 
-            if isActive {
+            if appState.agentRoutines.contains(where: { $0.id == card.id }) {
                 Button(action: openTask) {
                     Text(L10n.ScheduledTaskCard.open)
                         .font(.system(size: 12, weight: .medium))

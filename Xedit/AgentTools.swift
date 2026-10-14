@@ -779,6 +779,8 @@ enum AgentToolRunner {
                 result = try await runWorkflow(arguments: activeArguments, context: activeContext)
             case "schedule_task":
                 result = try await scheduleTask(arguments: activeArguments, context: activeContext)
+            case "manage_scheduled_task", "list_scheduled_tasks":
+                result = try await manageScheduledTask(arguments: activeArguments, context: activeContext)
             case "declare_environment_trust":
             result = try await declareEnvironmentTrust(arguments: arguments, context: context)
             case "update_plan":

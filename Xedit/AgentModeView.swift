@@ -222,6 +222,7 @@ struct AgentModeView: View {
                         sessionsSidebarVisible: $sessionsSidebarVisible
                     )
                     Divider().opacity(0.5)
+                    AgentSessionSchedulesView()
                     AgentChatTranscript()
                     AgentChatComposer()
                     AgentChatStatusBar()

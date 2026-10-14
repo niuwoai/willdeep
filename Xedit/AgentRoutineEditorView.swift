@@ -81,9 +81,13 @@ struct AgentRoutineEditorView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     nameField
                     promptField
-                    workspaceField
-                    modelField
-                    approvalModeField
+                    if draft.continueInSession {
+                        Text(L10n.SessionSchedules.inherit).foregroundStyle(.secondary)
+                    } else {
+                        workspaceField
+                        modelField
+                        approvalModeField
+                    }
                     scheduleField
                     enabledField
                 }

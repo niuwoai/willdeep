@@ -47,6 +47,7 @@ extension AppState {
     func toggleAgentRoutineEnabled(id: AgentRoutine.ID) {
         guard let index = agentRoutines.firstIndex(where: { $0.id == id }) else { return }
         agentRoutines[index].isEnabled.toggle()
+        if agentRoutines[index].isEnabled { agentRoutines[index].completedAt = nil }
         agentRoutines[index].updatedAt = Date()
         AgentRoutineStore.save(agentRoutines[index])
         agentRoutineScheduler.routinesChanged(agentRoutines)
@@ -88,20 +89,40 @@ extension AppState {
 
         guard let index = agentRoutines.firstIndex(where: { $0.id == id }) else { return nil }
         let routine = agentRoutines[index]
+        guard force || (routine.isEnabled && routine.completedAt == nil) else { return nil }
         let prompt = routine.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return nil }
 
         // Build the session and its runtime, but DO NOT touch
         // activeAgentSessionID or appMode — that would yank the user
         // out of whatever they're reading.
-        let session = makeRoutineRunSession(for: routine)
-        agentSessions.insert(session, at: 0)
+        let session: AgentSession
+        let runtime: AgentRuntime
+        if routine.continueInSession {
+            guard let origin = routine.originSessionID,
+                  let source = self.runtime(for: origin) else {
+                recordSkippedRoutine(routine, reason: L10n.SessionSchedules.sourceMissing)
+                return nil
+            }
+            guard !source.session.isArchived,
+                  !source.isResponding, !source.isAwaitingProviderSlot,
+                  source.activeScheduledRoutineID == nil else {
+                recordSkippedRoutine(routine, reason: L10n.SessionSchedules.sourceBusy)
+                return nil
+            }
+            session = source.session
+            runtime = source
+        } else {
+            session = makeRoutineRunSession(for: routine)
+            runtime = AgentRuntime(session: session)
+            agentSessions.insert(session, at: 0)
+            agentRuntimes[session.id] = runtime
+        }
         // saveAsync, not save: sync save can beachball behind another
         // instance's NSFileCoordinator hold on the session directory.
         AgentSessionStore.saveAsync(session)
         upsertAgentUsageSnapshot(for: session)
-        let runtime = AgentRuntime(session: session)
-        agentRuntimes[session.id] = runtime
+        runtime.activeScheduledRoutineID = routine.id
         let startedAt = Date()
         publishAgentKernelEvent(
             AgentKernelEvent(
@@ -122,7 +143,7 @@ extension AppState {
         )
         // Routine session stays a background runtime — no activeRuntime
         // forward subscription. Sidebar status dot observes it directly.
-        if let modelID = routine.modelID, !modelID.isEmpty {
+        if !routine.continueInSession, let modelID = routine.modelID, !modelID.isEmpty {
             runtime.sessionModelOverride = modelID
         }
         agentRoutines[index].lastRunAt = startedAt
@@ -170,7 +191,7 @@ extension AppState {
             [定时任务 · 自完成判定] 本次运行来自定时任务「\(routine.name)」(task_id: \(routine.id.uuidString))。
             目标:\(goal)
             完成上述工作后,判断该目标是否已达成:
-            - 已达成 → 调用 complete_scheduled_task 工具(task_id 传 \(routine.id.uuidString)),移除这个定时任务;它将不再运行,卡片也会消失。
+            - 已达成 → 调用 complete_scheduled_task 工具(task_id 传 \(routine.id.uuidString)),停止未来触发并保留任务和历史。
             - 未达成 → 正常简短汇报当前进展即可,不要调用 complete_scheduled_task。
             """
         } else {
@@ -240,7 +261,8 @@ extension AppState {
     /// does not rewrite history, because what the page reports is how the
     /// *scheduled* run went.
     func recordRoutineRunCompletionIfNeeded(for runtime: AgentRuntime) {
-        guard runtime.session.originRoutineID != nil else { return }
+        guard runtime.session.originRoutineID != nil || runtime.activeScheduledRoutineID != nil else { return }
+        defer { runtime.activeScheduledRoutineID = nil }
         guard let index = agentRoutineRuns.firstIndex(where: {
             $0.sessionID == runtime.id && $0.finishedAt == nil && $0.outcome == .running
         }) else { return }
@@ -249,7 +271,8 @@ extension AppState {
         let outcome: AgentRoutineRunOutcome
         if failure != nil {
             outcome = .failed
-        } else if runtime.messages.last(where: { $0.role == .assistant })?.content.isEmpty == false {
+        } else if let userIndex = runtime.messages.lastIndex(where: { $0.role == .user }),
+                  runtime.messages.dropFirst(userIndex + 1).contains(where: { $0.role == .assistant && !$0.content.isEmpty }) {
             outcome = .succeeded
         } else {
             // No error and no reply: a user Stop, or a turn that unwound
@@ -269,5 +292,21 @@ extension AppState {
                 reason: failure.message
             )
         }
+    }
+
+    private func recordSkippedRoutine(_ routine: AgentRoutine, reason: String) {
+        let now = Date()
+        guard let index = agentRoutines.firstIndex(where: { $0.id == routine.id }) else { return }
+        agentRoutines[index].lastRunAt = now
+        agentRoutines[index].updatedAt = now
+        AgentRoutineStore.save(agentRoutines[index])
+        agentRoutineScheduler.routinesChanged(agentRoutines)
+        agentRoutineRuns.insert(AgentRoutineRunRecord(
+            routineID: routine.id, routineName: routine.name,
+            sessionID: routine.originSessionID ?? routine.id, startedAt: now,
+            finishedAt: now, outcome: .skipped, failureMessage: reason
+        ), at: 0)
+        agentRoutineRuns = AgentRoutineRunHistory.recent(agentRoutineRuns, limit: AgentRoutineRunHistory.maximumStoredRuns)
+        AgentRoutineRunStore.save(agentRoutineRuns)
     }
 }

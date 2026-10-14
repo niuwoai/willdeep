@@ -48,6 +48,34 @@ extension AgentToolRunner {
 
     // MARK: scheduled tasks
 
+    static func manageScheduledTask(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
+        guard let runtimeID = context.runtimeID else {
+            throw AgentToolError.invalidArgument("Scheduled tasks require a conversation.")
+        }
+        let payload = try await MainActor.run { () throws -> String in
+            guard let state = EditorAppStateRegistry.shared.appState(forRuntime: runtimeID) else {
+                throw AgentToolError.invalidArgument("Conversation not found.")
+            }
+            let tasks = state.agentRoutines.filter { $0.originSessionID == runtimeID }
+            if let action = arguments["action"]?.stringValue() {
+                guard let id = arguments["task_id"]?.stringValue().flatMap(UUID.init(uuidString:)),
+                      var task = tasks.first(where: { $0.id == id }),
+                      ["pause", "resume"].contains(action) else {
+                    throw AgentToolError.invalidArgument("Use pause/resume with a task belonging to this conversation.")
+                }
+                task.isEnabled = action == "resume"
+                if task.isEnabled { task.completedAt = nil }
+                state.saveAgentRoutine(task)
+                return "Scheduled task \(id) \(action); history retained."
+            }
+            let data = try JSONEncoder().encode(tasks)
+            let runs = state.agentRoutineRuns.filter { run in tasks.contains { $0.id == run.routineID } }
+            let history = try JSONEncoder().encode(runs)
+            return "Tasks: \(String(decoding: data, as: UTF8.self))\nRun history: \(String(decoding: history, as: UTF8.self))"
+        }
+        return AgentToolResult(summary: "Conversation scheduled tasks", payload: payload)
+    }
+
     /// `schedule_task` — create a scheduled task (backed by an AgentRoutine)
     /// from within the conversation and drop an inline card into the transcript.
     static func scheduleTask(
@@ -92,6 +120,7 @@ extension AgentToolRunner {
                 workspaceRootPath: appState.agentRuntimes[runtimeID]?.workspaceRootPath,
                 schedule: schedule,
                 originSessionID: runtimeID,
+                continueInSession: true,
                 goal: goal
             )
             appState.saveAgentRoutine(routine)
@@ -114,7 +143,7 @@ extension AgentToolRunner {
         let goalLine = goal.map { "\nGoal (task self-completes when met): \($0)" } ?? ""
         return AgentToolResult(
             summary: "Scheduled task: \(name) · \(schedule.summary)",
-            payload: "Scheduled task \"\(name)\" created (task_id: \(routine.id.uuidString)); it will run \(schedule.summary). Each run receives this prompt: \(prompt)\(goalLine)"
+            payload: "Scheduled task \"\(name)\" created (task_id: \(routine.id.uuidString)); it will run \(schedule.summary). Each run continues this conversation, inherits its permissions, and receives this prompt: \(prompt)\(goalLine)"
         )
     }
 
@@ -139,7 +168,14 @@ extension AgentToolRunner {
                 return false
             }
             let found = appState.agentRoutines.contains { $0.id == taskID }
-            appState.deleteAgentRoutine(id: taskID)
+            guard appState.agentRoutines.contains(where: {
+                $0.id == taskID && ($0.originSessionID == runtimeID || appState.agentRuntimes[runtimeID]?.session.originRoutineID == taskID)
+            }) else { return false }
+            if var routine = appState.agentRoutines.first(where: { $0.id == taskID }) {
+                routine.isEnabled = false
+                routine.completedAt = Date()
+                appState.saveAgentRoutine(routine)
+            }
             return found
         }
 
@@ -147,7 +183,7 @@ extension AgentToolRunner {
         if existed {
             return AgentToolResult(
                 summary: "Completed scheduled task",
-                payload: "Scheduled task \(taskID.uuidString) marked complete and removed.\(reasonLine)"
+                payload: "Scheduled task \(taskID.uuidString) completed; future triggers stopped and history retained.\(reasonLine)"
             )
         }
         return AgentToolResult(

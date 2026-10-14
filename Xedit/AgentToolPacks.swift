@@ -265,7 +265,7 @@ enum AgentToolPackCatalog {
         "list_projects", "list_project_sessions", "manage_sessions",
         "list_workspace_sessions", "send_session_message", "search_sessions", "suggest_session_title",
         "rename_session", "change_workspace", "run_workflow", "schedule_task",
-        "declare_environment_trust", "complete_scheduled_task"
+        "declare_environment_trust", "complete_scheduled_task", "manage_scheduled_task", "list_scheduled_tasks"
     ]
 
     private static let mediaToolNames: Set<String> = [

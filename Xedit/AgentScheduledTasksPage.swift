@@ -79,7 +79,7 @@ struct AgentRoutineRunOutcomePresentation: Equatable {
         case .running:
             systemImage = "clock.arrow.circlepath"
             label = L10n.Automation.runOutcomeRunning
-        case .succeeded, .failed, .interrupted, .unknown:
+        case .succeeded, .failed, .interrupted, .unknown, .skipped:
             systemImage = "clock"
             label = nil
         }

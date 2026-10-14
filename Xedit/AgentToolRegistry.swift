@@ -1914,8 +1914,23 @@ AgentToolDescriptor(
             ]
         ),
         AgentToolDescriptor(
+            name: "list_scheduled_tasks",
+            description: "Read tasks owned by this conversation and their actual run history. Execution completed does not mean verification passed.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "manage_scheduled_task",
+            description: "Pause or resume a task belonging to this conversation. Pause stops future triggers, preserves history and lets the active run continue.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "task_id", type: .string, description: "Task UUID from list_scheduled_tasks.", required: true),
+                AgentToolParameter(name: "action", type: .string, description: "pause or resume", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "schedule_task",
-            description: "Schedule a recurring task that runs on its own later, in a fresh background session, and shows an inline card in this transcript. Use when the user asks for something to happen repeatedly or to be watched over time (\"每30分钟看一下\", \"每天早上汇总\", \"盯着 X 直到 Y\"). Provide `prompt` (what each run should do). Give a schedule via either `interval_minutes` OR `daily_at` (HH:MM). Optionally give a `goal`: when set, each run is told to check whether the goal is met and, if so, call `complete_scheduled_task` to remove itself — so a watch task disappears once it's done. Returns a task_id; the card lets the user open the task's detail. This does NOT run anything now — use run_command / a workflow for immediate work.",
+            description: "Schedule a recurring task that runs on its own later, by continuing this conversation in the background, and shows an inline card in this transcript. Use when the user asks for something to happen repeatedly or to be watched over time (\"每30分钟看一下\", \"每天早上汇总\", \"盯着 X 直到 Y\"). Provide `prompt` (what each run should do). Give a schedule via either `interval_minutes` OR `daily_at` (HH:MM). Optionally give a `goal`: when set, each run is told to check whether the goal is met and, if so, call `complete_scheduled_task` to stop future triggers while retaining the task and its history. Returns a task_id; the card lets the user open the task's detail. This does NOT run anything now — use run_command / a workflow for immediate work.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "The instruction each scheduled run executes (as the first user message of a fresh session). Make it self-contained.", required: true),
@@ -1946,7 +1961,7 @@ AgentToolDescriptor(
         ),
         AgentToolDescriptor(
             name: "complete_scheduled_task",
-            description: "Remove a scheduled task by id, so it stops running and its card/sidebar entry disappears. The primary use is self-completion: when a scheduled run (see schedule_task with a goal) determines its goal is met, it calls this with its own task_id. Also usable to cancel a task the user no longer wants.",
+            description: "Complete a scheduled task by id: stop future triggers and retain its configuration and history. The primary use is self-completion: when a scheduled run (see schedule_task with a goal) determines its goal is met, it calls this with its own task_id. Also usable to cancel a task the user no longer wants.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "task_id", type: .string, description: "The scheduled task's id (UUID) returned by schedule_task or provided in the run's context.", required: true),
