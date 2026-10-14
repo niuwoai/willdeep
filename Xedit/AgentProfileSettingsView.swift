@@ -58,6 +58,7 @@ struct AgentProfileSettingsView: View {
     @State private var deleteTarget: AgentProfile?
     @State private var search = ""
     @State private var detailTab: DetailTab = .general
+    @State private var showsRegistry = false
 
     private let store = AgentProfileStore()
 
@@ -67,7 +68,8 @@ struct AgentProfileSettingsView: View {
 
     private var visibleProfiles: [AgentProfile] {
         let publicProfiles = profiles.filter { profile in
-            profile.origin != .builtIn
+            guard profile.registrySnapshot == nil else { return false }
+            return profile.origin != .builtIn
                 || !profile.usages.contains(.subagent)
                 || profile.usages.contains(.dispatch)
                 || AgentSubagentProfileCatalog.isPublic(id: profile.id)
@@ -97,6 +99,8 @@ struct AgentProfileSettingsView: View {
                     }
                 }
                 Divider()
+                Button(String(localized: "智能体版本库与同步", table: "AgentRegistry")) { showsRegistry = true }
+                    .buttonStyle(.plain)
                 Button(action: addProfile) { Label(L10n.AgentProfiles.addProfile, systemImage: "plus") }
                     .buttonStyle(.plain)
                 Toggle(String(localized: "显示旧工种兼容配置", table: "WorkerArchitecture"), isOn: $showsLegacyProfiles)
@@ -114,6 +118,9 @@ struct AgentProfileSettingsView: View {
         .onChange(of: filter) { _ in reconcileSelection() }
         .onChange(of: showsLegacyProfiles) { _ in reconcileSelection() }
         .onAppear(perform: reload)
+        .sheet(isPresented: $showsRegistry, onDismiss: reload) {
+            AgentRegistrySettingsView().environmentObject(appState)
+        }
         .alert(L10n.AgentProfiles.deleteTitle, isPresented: deleteAlertBinding) {
             Button(L10n.Automation.cancel, role: .cancel) { deleteTarget = nil }
             Button(L10n.SecretManager.deleteConfirm, role: .destructive) { commitDelete() }

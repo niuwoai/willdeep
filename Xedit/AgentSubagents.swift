@@ -58,6 +58,7 @@ struct AgentSubagentRun: Identifiable, Equatable {
     /// Trade this run executes. Carried on the run itself so the completion
     /// hook can attribute worker cost without re-reading the spawn arguments.
     var profileID: String = AgentSubagentProfileCatalog.deep.id
+    var registrySnapshot: AgentRevisionSnapshot? = nil
     /// Provider the child model ran on. Worker trades often bind a different
     /// provider than the parent, and pricing is per (provider, model).
     var providerID: String?
@@ -331,6 +332,7 @@ final class AgentSubagentRegistry: ObservableObject {
             model: configuration.model,
             startedAt: Date(),
             profileID: profile.id,
+            registrySnapshot: profile.registrySnapshot,
             providerID: configuration.providerID
         )
         runs.insert(run, at: 0)
@@ -535,7 +537,8 @@ final class AgentSubagentRegistry: ObservableObject {
                 startedAt: finishedRun.startedAt,
                 finishedAt: finishedRun.finishedAt,
                 didTruncate: didTruncate,
-                profileID: profileID
+                profileID: profileID,
+                registrySnapshot: finishedRun.registrySnapshot
             )
         )
 
@@ -1027,7 +1030,7 @@ enum AgentSubagentRunner {
             lines.append("Workspace root: \(workspaceURL.path)")
         }
         if let approvedCommand,
-           profile.id == AgentSubagentProfileCatalog.opsRunnerID {
+           profile.permissionRoleID == AgentSubagentProfileCatalog.opsRunnerID {
             let commandEncoder = JSONEncoder()
             commandEncoder.outputFormatting = [.withoutEscapingSlashes]
             let encodedCommand = (try? commandEncoder.encode(approvedCommand))
@@ -1113,6 +1116,7 @@ enum AgentSubagentRunner {
     /// fetching it. Unknown or disabled identifiers are skipped silently —
     /// a skill uninstalled after configuration must not break the spawn.
     static func skillPromptSection(for profile: AgentSubagentProfile) -> String? {
+        if let snapshot = profile.registrySnapshot { return snapshot.skillsPrompt }
         guard !profile.skillIdentifiers.isEmpty else { return nil }
         let available = AgentSkillDirectory.list(includeDisabled: false)
         var sections: [String] = []
@@ -1316,7 +1320,7 @@ enum AgentSubagentRunner {
                     // 会把每条被拒的命令当成偶发故障反复重试。
                     intelligentCommandReviewAvailable: commandReviewer != nil
                         && !AgentSubagentProfileCatalog
-                            .strictReadOnlyShellTradeIDs.contains(profile.id)
+                            .strictReadOnlyShellTradeIDs.contains(profile.permissionRoleID)
                 )
             ),
             AgentMessage(role: .user, content: prompt, images: openingImages),
@@ -2275,7 +2279,7 @@ enum AgentSubagentRunner {
             // routing mistake, not a capability gap — tell the parent how to
             // fix it instead of leaving it to guess.
             let available = permitted.sorted().joined(separator: ", ")
-            let redirect = profile.id == AgentSubagentProfileCatalog.deepID
+            let redirect = profile.permissionRoleID == AgentSubagentProfileCatalog.deepID
                 ? ""
                 : " If this task genuinely needs `\(call.toolName)`, the parent should re-spawn with `profile=\"deep\"`."
             return "Denied: tool `\(call.toolName)` is not available to the `\(profile.id)` subagent trade. Available tools: \(available).\(redirect)"
@@ -2322,7 +2326,7 @@ enum AgentSubagentRunner {
         // shell，seatbelt 管不到那里，所以危险与敏感命令绝不能交给模型越权。
         let isTerminalReadOnlySend: Bool = {
             guard call.toolName == "terminal_send_command",
-                  AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.id),
+                  AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.permissionRoleID),
                   let command = argsDict["command"]?.stringValue() else { return false }
             return AgentSandboxPolicy.commandDecision(
                 command: command,
@@ -2345,7 +2349,7 @@ enum AgentSubagentRunner {
         // 不必再经过父会话裁判；一旦允许裁判为它们放行修改类命令，"只读
         // 工种"这个词就没有意义了，而这些工种恰恰跑在最小的模型上。
         let isStrictReadOnlyShellTrade = AgentSubagentProfileCatalog
-            .strictReadOnlyShellTradeIDs.contains(profile.id)
+            .strictReadOnlyShellTradeIDs.contains(profile.permissionRoleID)
         var isJudgeApprovedCommand = false
         if isReviewableCommandTool,
            Self.shouldRequestParentCommandReview(
@@ -2363,7 +2367,7 @@ enum AgentSubagentRunner {
         // Read calls never need this path; bounded file writes and terminal
         // commands keep their narrower, purpose-built gates above.
         var isParentApprovedGeneralistTool = false
-        if profile.id == AgentSubagentProfileCatalog.generalistID,
+        if profile.permissionRoleID == AgentSubagentProfileCatalog.generalistID,
            AgentSubagentProfileCatalog.generalistExtraToolNames.contains(call.toolName),
            risk != .read,
            let toolReviewer {
@@ -2375,7 +2379,7 @@ enum AgentSubagentRunner {
         try executionBudget?.checkCurrentOwner()
         let isApprovedCommandInvocation: Bool = {
             guard ["run_command", "terminal_send_command"].contains(call.toolName),
-                  profile.id == AgentSubagentProfileCatalog.opsRunnerID,
+                  profile.permissionRoleID == AgentSubagentProfileCatalog.opsRunnerID,
                   let approvedCommand,
                   let command = argsDict["command"]?.stringValue() else { return false }
             return approvedCommandMatches(command, approved: approvedCommand)
@@ -2387,7 +2391,7 @@ enum AgentSubagentRunner {
             || isParentApprovedGeneralistTool
             || isApprovedCommandInvocation else {
             if call.toolName == "terminal_send_command",
-               AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.id) {
+               AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.permissionRoleID) {
                 return "Denied: this command was neither statically read-only nor approved by intelligent safety review. Report the exact command to the parent. If it still needs to run, the parent must re-spawn `profile=\"ops_runner\"` with this exact `target_command`, which asks the operator for approval instead of silently discarding the request."
             }
             if call.toolName == "run_command", isStrictReadOnlyShellTrade {
@@ -2396,7 +2400,7 @@ enum AgentSubagentRunner {
             if call.toolName == "run_command" {
                 return "Denied: this subagent command was neither statically read-only nor approved by intelligent safety review. Report the exact command to the parent. If it still needs to run, the parent must request exact human approval, using `profile=\"ops_runner\"` with this `target_command` for an operations command."
             }
-            if profile.id == AgentSubagentProfileCatalog.generalistID,
+            if profile.permissionRoleID == AgentSubagentProfileCatalog.generalistID,
                AgentSubagentProfileCatalog.generalistExtraToolNames.contains(call.toolName) {
                 return "Denied: the generalist has this tool, but the exact `\(call.toolName)` call was not approved by the parent conversation's current approval mode or MCP trust policy. Report the intended action and arguments to the parent so it can request the user's decision."
             }
@@ -2419,7 +2423,7 @@ enum AgentSubagentRunner {
                 additionalWorkspaceRoots: additionalWorkspaceRoots
             )
             sandboxMode = Self.runCommandSandboxMode(
-                profileID: profile.id,
+                profileID: profile.permissionRoleID,
                 classifiedMode: decision.mode,
                 isCommandApproved: isApprovedCommandInvocation || isJudgeApprovedCommand
             )
@@ -2435,7 +2439,7 @@ enum AgentSubagentRunner {
             patchProposalSink: writeAccess == nil ? nil : patchProposalSink,
             // controller 随两个终端工种下发；执行闸门另行保证修改命令必须
             // 经过智能审核或匹配 ops_runner 的精确 target_command。
-            terminalController: AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.id)
+            terminalController: AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.permissionRoleID)
                 ? terminalController : nil
         )
         do {

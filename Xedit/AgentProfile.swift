@@ -113,6 +113,8 @@ nonisolated struct AgentProfile: Codable, Equatable, Identifiable, Sendable {
     var soul: AgentProfileSoul
     var runtime: AgentProfileRuntime
     var capability: AgentProfileCapability?
+    /// Present only on validated immutable exchange assets; legacy v2 records keep nil.
+    var registrySnapshot: AgentRevisionSnapshot? = nil
 
     /// Built-in subagent trades render under their localized names; everything
     /// else uses the stored name.
@@ -145,8 +147,9 @@ nonisolated struct AgentProfile: Codable, Equatable, Identifiable, Sendable {
             // per-file approval and a lock. A user-created profile that set
             // this flag in storage would otherwise hand any model a write
             // tool by editing a JSON blob.
-            requiresWriteAccess: origin == .builtIn && capability.requiresWriteAccess,
-            skillIdentifiers: soul.skillIdentifiers
+            requiresWriteAccess: (origin == .builtIn || registrySnapshot != nil) && capability.requiresWriteAccess,
+            skillIdentifiers: soul.skillIdentifiers,
+            registrySnapshot: registrySnapshot
         )
     }
 

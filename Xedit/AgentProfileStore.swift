@@ -62,7 +62,10 @@ nonisolated struct AgentProfileStore {
     func save(records: AgentProfileRecords) {
         var cleaned = records
         cleaned.overrides = records.overrides.filter { !$0.value.isEmpty }
-        cleaned.managed = records.managed.filter { $0.origin == .managed && !$0.name.isEmpty }
+        cleaned.managed = records.managed.filter {
+            $0.origin == .managed && !$0.name.isEmpty && $0.registrySnapshot == nil
+                && !$0.id.hasPrefix("official/") && !$0.id.hasPrefix("user/")
+        }
         guard let data = try? JSONEncoder().encode(cleaned) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
     }
@@ -89,7 +92,17 @@ nonisolated struct AgentProfileStore {
                 )) }
             : []
         var seen = Set<String>()
-        return (builtIns + records.managed + discovered)
+        let exchanged: [AgentProfile]
+        do { exchanged = try AgentDefinitionLibrary(defaults: defaults).profiles() }
+        catch {
+            // Corrupt/missing revisions never fall back to an unpinned or broader role.
+            NSLog("Agent registry unavailable: %@", String(describing: type(of: error)))
+            exchanged = []
+        }
+        let managed = records.managed.filter {
+            $0.registrySnapshot == nil && !$0.id.hasPrefix("official/") && !$0.id.hasPrefix("user/")
+        }
+        return (builtIns + managed + exchanged + discovered)
             .filter { seen.insert($0.id).inserted }
     }
 
@@ -109,6 +122,7 @@ nonisolated struct AgentProfileStore {
         let builtInsByID = Dictionary(uniqueKeysWithValues: AgentProfile.builtIns.map { ($0.id, $0) })
         var records = AgentProfileRecords()
         for profile in profiles {
+            guard profile.registrySnapshot == nil else { continue }
             switch profile.origin {
             case .builtIn:
                 guard let base = builtInsByID[profile.id] else { continue }

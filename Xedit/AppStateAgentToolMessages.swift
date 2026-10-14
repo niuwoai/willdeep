@@ -221,7 +221,7 @@ extension AppState {
         // Admission for the scarce 1M tier. Checked before write-scope and
         // runtime setup so a refused escalation costs nothing and does not
         // perform unnecessary worker setup.
-        if profile.id == AgentSubagentProfileCatalog.deepID {
+        if profile.permissionRoleID == AgentSubagentProfileCatalog.deepID {
             let ticket = AgentDeepAdmissionTicket.parse(arguments["escalation"])
             switch AgentDeepAdmission.authorize(
                 ticket: ticket,
@@ -321,12 +321,12 @@ extension AppState {
             rawTargets = values.compactMap { $0.stringValue() }
         } else if let single = arguments["target_file"]?.stringValue() {
             rawTargets = [single]
-        } else if profile.id != AgentSubagentProfileCatalog.editorID {
+        } else if profile.permissionRoleID != AgentSubagentProfileCatalog.editorID {
             // `write_files` when the packet declares it, else the legacy
             // combined set. Context in `read_files` never lands here.
             rawTargets = taskPacket?.requestedWriteFiles ?? []
         }
-        let optionalGeneralistWriteRequested = profile.id == AgentSubagentProfileCatalog.generalistID
+        let optionalGeneralistWriteRequested = profile.permissionRoleID == AgentSubagentProfileCatalog.generalistID
             && !rawTargets.isEmpty
         if profile.requiresWriteAccess || optionalGeneralistWriteRequested {
             guard !rawTargets.isEmpty,
@@ -342,7 +342,7 @@ extension AppState {
                 )
                 return
             }
-            if profile.id == AgentSubagentProfileCatalog.smallImplementerID,
+            if profile.permissionRoleID == AgentSubagentProfileCatalog.smallImplementerID,
                access.targetRelativePaths.count > AgentCodingTaskPlan.automaticMaximumWriteCount {
                 agentSpawnLog.error(
                     "spawn_agent rejected reason=write_scope_too_broad runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public) targetCount=\(access.targetRelativePaths.count, privacy: .public)"
@@ -364,7 +364,7 @@ extension AppState {
         if let targetCommand = arguments["target_command"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !targetCommand.isEmpty {
-            guard profile.id == AgentSubagentProfileCatalog.opsRunnerID else {
+            guard profile.permissionRoleID == AgentSubagentProfileCatalog.opsRunnerID else {
                 agentSpawnLog.error(
                     "spawn_agent rejected reason=target_command_misrouted runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public)"
                 )
@@ -385,7 +385,7 @@ extension AppState {
         // ops inspection alone does not unlock a mutating command: that route
         // must carry the exact approved command.
         if writeAccess != nil
-            || (profile.id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommand != nil) {
+            || (profile.permissionRoleID == AgentSubagentProfileCatalog.opsRunnerID && approvedCommand != nil) {
             runtime.currentTurnAttemptedWorkerProfiles.insert(profile.id)
         }
 
@@ -432,6 +432,11 @@ extension AppState {
             }
         }
 
+        if profile.registrySnapshot != nil && !subagentProfileBindingIsAvailable(profile) {
+            let message = "The pinned agent's local model binding is unavailable. Configure a usable model or explicitly inherit the current session."
+            finishRecord(status: .failed, summary: "unavailable agent model", payload: message, errorMessage: message)
+            return
+        }
         let childConfiguration = resolvedSubagentConfiguration(
             for: profile,
             parentConfiguration: configuration,
@@ -449,11 +454,11 @@ extension AppState {
         // Decided on the final trade: operations Workers touch real servers,
         // so the user must be able to watch them in the chat's live card.
         let runInBackground = requestedBackground
-            && !AgentSubagentSchedulingPolicy.mustRunInForeground(profileID: profile.id)
+            && !AgentSubagentSchedulingPolicy.mustRunInForeground(profileID: profile.permissionRoleID)
         if requestedBackground, !runInBackground {
-            profileNotices.append(AgentSubagentSchedulingPolicy.foregroundOnlyNotice(profileID: profile.id))
+            profileNotices.append(AgentSubagentSchedulingPolicy.foregroundOnlyNotice(profileID: profile.permissionRoleID))
         }
-        if AgentOpsConvergencePolicy.shouldReturnToParent(profileID: profile.id,
+        if AgentOpsConvergencePolicy.shouldReturnToParent(profileID: profile.permissionRoleID,
             background: runInBackground, delegation: runtime.currentTurnDelegationPolicy,
             completed: runtime.completedForegroundOpsInspection) {
             finishRecord(status: .failed, summary: "continue in parent",
@@ -509,7 +514,7 @@ extension AppState {
             }
         }()
         let backgroundToolReviewer: AgentSubagentRunner.ToolReviewer? = {
-            guard profile.id == AgentSubagentProfileCatalog.generalistID,
+            guard profile.permissionRoleID == AgentSubagentProfileCatalog.generalistID,
                   !backgroundEffectiveTools.isDisjoint(
                     with: AgentSubagentProfileCatalog.generalistExtraToolNames
                   ) else {
@@ -677,7 +682,7 @@ extension AppState {
         // set and file locks have all passed. A spawn rejected for an
         // undeclared path never ran, and must not become the thing that
         // unlocks the 1M tier on the next call.
-        if profile.id != AgentSubagentProfileCatalog.deepID {
+        if profile.permissionRoleID != AgentSubagentProfileCatalog.deepID {
             runtime.deepAdmissionObservation.recordProfileAttempt(profile.id)
         }
 
@@ -770,7 +775,8 @@ extension AppState {
                     citationsUnverifiable: (outcome?.citationsChecked).flatMap {
                         $0 > 0 ? (outcome?.citationsUnverifiable ?? 0) : nil
                     },
-                    repoCommit: AppState.workspaceHeadCommitShortSHA(for: workspaceURL)
+                    repoCommit: AppState.workspaceHeadCommitShortSHA(for: workspaceURL),
+                    registrySnapshot: profile.registrySnapshot
                 )
             )
         }
@@ -863,7 +869,7 @@ extension AppState {
                 }
             }()
             let toolReviewer: AgentSubagentRunner.ToolReviewer? = {
-                guard profile.id == AgentSubagentProfileCatalog.generalistID,
+                guard profile.permissionRoleID == AgentSubagentProfileCatalog.generalistID,
                       !effectiveTools.isDisjoint(
                         with: AgentSubagentProfileCatalog.generalistExtraToolNames
                       ) else {
@@ -997,7 +1003,7 @@ extension AppState {
             }
 
             var stats = statsLine(outcome)
-            if profile.id == AgentSubagentProfileCatalog.opsRunnerID {
+            if profile.permissionRoleID == AgentSubagentProfileCatalog.opsRunnerID {
                 runtime.completedForegroundOpsInspection = true
                 runtime.currentTurnAttemptedWorkerProfiles.insert(profile.id)
                 stats += "\n" + AgentOpsConvergencePolicy.handoff

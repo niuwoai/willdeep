@@ -812,13 +812,15 @@ private struct ComposerCard: View {
 
         // Worker mentions lead the @ menu; workspace and file context follow.
         // A query still filters both groups independently.
-        let workers = AgentSubagentProfileCatalog.publicBuiltIn.filter { profile in
+        let names = Dictionary(uniqueKeysWithValues: AgentProfileStore().profiles(usage: .subagent).map { ($0.id, $0.localizedName) })
+        let workers = AgentSubagentProfileStore.resolvedProfiles().filter { profile in
             guard !q.isEmpty else { return true }
             return profile.id.lowercased().contains(q)
-                || profile.localizedDisplayName.lowercased().contains(q)
+                || (names[profile.id] ?? profile.localizedDisplayName).lowercased().contains(q)
         }
         let workerEntries: [AtPickerEntry] = workers.map {
-            .worker(id: $0.id, name: $0.localizedDisplayName, purpose: $0.localizedPurpose)
+            .worker(id: $0.id, name: names[$0.id] ?? $0.localizedDisplayName,
+                    purpose: $0.registrySnapshot == nil ? $0.localizedPurpose : $0.purpose)
         }
 
         let ordered = AtPickerEntry.workersFirst(

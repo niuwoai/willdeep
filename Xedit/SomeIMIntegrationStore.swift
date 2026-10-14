@@ -149,6 +149,7 @@ enum SomeIMIntegrationStore {
         #endif
         sharedSessionStore.configure(accessGroup: accessGroup)
         migrateLegacyIfNeeded()
+        AgentRegistrySessionGate.configure()
         guard sessionObservation == nil else { return }
         sessionObservation = sharedSessionStore.observe { _ in
             // Delivered on the main queue on every login/logout in this or any
@@ -190,6 +191,7 @@ enum SomeIMIntegrationStore {
         // synthesizes, so a settings change can invalidate a memoized session
         // even though no credential moved.
         invalidateSharedSessionCache()
+        AgentRegistrySessionGate.restore()
     }
 
     static func loadAccount() -> SomeIMAccount? {

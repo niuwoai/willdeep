@@ -92,6 +92,8 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// it never selects a model or suppresses local instructions. Built-ins
     /// leave it nil. Known old model bindings are normalized at request time.
     var hostedVirtualModel: String?
+    var registrySnapshot: AgentRevisionSnapshot? = nil
+    var permissionRoleID: String { registrySnapshot?.baseRole ?? id }
 
     init(
         id: String,
@@ -104,7 +106,8 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         escalation: EscalationPolicy = .none,
         requiresWriteAccess: Bool = false,
         skillIdentifiers: [String] = [],
-        hostedVirtualModel: String? = nil
+        hostedVirtualModel: String? = nil,
+        registrySnapshot: AgentRevisionSnapshot? = nil
     ) {
         self.id = id
         self.purpose = purpose
@@ -117,6 +120,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         self.requiresWriteAccess = requiresWriteAccess
         self.skillIdentifiers = skillIdentifiers
         self.hostedVirtualModel = hostedVirtualModel
+        self.registrySnapshot = registrySnapshot
     }
 
     /// The tools this trade may actually call.
@@ -134,7 +138,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         if requested.contains("read_file") {
             requested.insert(AgentBundledRules.readerToolName)
         }
-        if id == AgentSubagentProfileCatalog.generalistID {
+        if permissionRoleID == AgentSubagentProfileCatalog.generalistID {
             allowed.formUnion(AgentSubagentProfileCatalog.generalistExtraToolNames)
         }
         if supportsBoundedWrites, writeAccessGranted {
@@ -146,7 +150,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         // Smart/Goal 只把非敏感、非确定性危险命令交父安全裁判；其余必须
         // 通过 ops_runner 的精确 target_command 人工授权。工具可见性不能
         // 绑在 target_command 上，否则 ops_runner 连批准前的只读基线都查不了。
-        if AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(id) {
+        if AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(permissionRoleID) {
             allowed.formUnion(AgentSubagentProfileCatalog.terminalOperatorToolNames)
         }
         return requested.intersection(allowed)
@@ -156,7 +160,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// one when the router cannot identify a narrower writing trade, but does
     /// not require one for ordinary catch-all work.
     var supportsBoundedWrites: Bool {
-        requiresWriteAccess || id == AgentSubagentProfileCatalog.generalistID
+        requiresWriteAccess || permissionRoleID == AgentSubagentProfileCatalog.generalistID
     }
 
     var localizedDisplayName: String {

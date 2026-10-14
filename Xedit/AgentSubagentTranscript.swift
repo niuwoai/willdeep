@@ -113,6 +113,7 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
     /// Which trade ran (`scout` / `reader` / `deep` / `editor`). Nil for
     /// records written before profiles existed.
     var profileID: String?
+    var registrySnapshot: AgentRevisionSnapshot? = nil
     /// Set when a cheap trade stalled and the run was re-done on the
     /// parent's model; carries the model that was escalated away from.
     /// Escalation is recorded rather than silent — see AgentSubagentEscalation.
@@ -159,7 +160,8 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
         attemptCount: Int? = nil,
         citationsChecked: Int? = nil,
         citationsUnverifiable: Int? = nil,
-        repoCommit: String? = nil
+        repoCommit: String? = nil,
+        registrySnapshot: AgentRevisionSnapshot? = nil
     ) {
         self.runID = runID
         self.label = label
@@ -180,6 +182,7 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
         self.citationsChecked = citationsChecked
         self.citationsUnverifiable = citationsUnverifiable
         self.repoCommit = repoCommit
+        self.registrySnapshot = registrySnapshot
     }
 }
 

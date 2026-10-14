@@ -76,9 +76,11 @@ nonisolated struct AgentGoalTeamRole: Codable, Equatable, Identifiable, Sendable
         }
         if toolPolicy.deniesShell {
             trade.toolNames.remove("run_command")
+            trade.toolNames.remove("terminal_send_command")
         }
         if toolPolicy.deniesWrite {
             trade.requiresWriteAccess = false
+            trade.toolNames.subtract(AgentSubagentProfileCatalog.writeToolNames)
         }
         return trade
     }

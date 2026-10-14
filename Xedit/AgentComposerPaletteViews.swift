@@ -710,14 +710,18 @@ struct AgentComposerPinnedWorkerChip: View {
     let onRemove: () -> Void
 
     private var profile: AgentSubagentProfile? {
-        AgentSubagentProfileCatalog.builtIn.first { $0.id == profileID }
+        AgentSubagentProfileStore.allResolvedProfiles().first { $0.id == profileID }
+    }
+    private var displayName: String {
+        AgentProfileStore().profiles(usage: .subagent).first { $0.id == profileID }?.localizedName
+            ?? profile?.localizedDisplayName ?? profileID
     }
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "person.badge.shield.checkmark")
                 .font(.system(size: 11, weight: .medium))
-            Text(L10n.AgentDelegation.pinnedWorkerChip(profile?.localizedDisplayName ?? profileID))
+            Text(L10n.AgentDelegation.pinnedWorkerChip(displayName))
                 .font(.system(size: 11.5))
                 .lineLimit(1)
             Button(action: onRemove) {
