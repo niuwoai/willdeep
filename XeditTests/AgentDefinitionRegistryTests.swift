@@ -214,6 +214,41 @@ import Testing
         let client = try AgentRegistryService(baseURL: "https://some.im/v1")
         #expect(client.origin.absoluteString == "https://some.im")
     }
+    @Test func productionRegistryUsesLoginControlPlaneWithChinaInferenceRelay() async throws {
+        let (_, root, defaults, suite) = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite); RegistryTestURLProtocol.handler = nil }
+        let originalStore = SomeIMIntegrationStore._captureTestState()
+        defer { SomeIMIntegrationStore._restoreTestState(originalStore) }
+        SomeIMIntegrationStore._setTestDefaultsOverride(defaults)
+        let relay = SomeIMIntegrationSettings(baseURL: SomeIMRelayRegion.chinaBaseURL)
+        defaults.set(try JSONEncoder().encode(relay), forKey: "com.willdeep.someIM.integrationSettings.v1")
+        #expect(SomeIMIntegrationStore.loadSettings().baseURL == "https://api.niuwoai.com/v1")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RegistryTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let catalog = try AgentRegistryService.controlPlane(session: session)
+        let customer = try AgentRegistryService.controlPlane(token: "test-customer-session", session: session)
+        SomeIMIntegrationStore._restoreTestState(originalStore)
+        var routes: [String] = []
+        RegistryTestURLProtocol.handler = { request in
+            #expect(request.url?.host == "some.im")
+            routes.append(request.url!.path)
+            let data: Data
+            if request.url!.path.hasSuffix("agent-identity") {
+                #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-customer-session")
+                data = Data("{\"data\":{\"user_id\":\"user-a\",\"tenant_id\":\"tenant-a\"}}".utf8)
+            } else {
+                #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+                data = Data("{\"data\":{\"items\":[]}}".utf8)
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data)
+        }
+        _ = try await catalog.index()
+        _ = try await customer.identity()
+        #expect(routes == ["/api/v1/public/agents/index", "/api/v1/customer/agent-identity"])
+        #expect(catalog.origin == customer.origin)
+    }
     @Test func syncUsesCustomerIdentityAndConditionalWrite() async throws {
         let (library, root, defaults, suite) = try sandbox()
         defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite); RegistryTestURLProtocol.handler = nil }

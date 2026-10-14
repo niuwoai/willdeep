@@ -41,6 +41,11 @@ nonisolated struct AgentRegistryService: Sendable {
     let origin: URL
     let token: String
     let session: URLSession
+    /// Distribution and customer identity share the login control plane;
+    /// the selected model relay may only expose inference routes.
+    @MainActor static func controlPlane(token: String = "", session: URLSession? = nil) throws -> Self {
+        try Self(baseURL: SomeIMClient.controlPlaneOrigin, token: token, session: session)
+    }
     init(baseURL: String, token: String = "", session: URLSession? = nil) throws {
         guard var components = URLComponents(string: baseURL),
               components.user == nil, components.password == nil,

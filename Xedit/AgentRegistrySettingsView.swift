@@ -266,11 +266,11 @@ struct AgentRegistrySettingsView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         change { try library.package(revision: selected.selected, account: selected.account).encoded().write(to: url, options: .atomic) }
     }
-    private func service() throws -> AgentRegistryService { try AgentRegistryService(baseURL: SomeIMIntegrationStore.loadSettings().baseURL) }
+    private func service() throws -> AgentRegistryService { try AgentRegistryService.controlPlane() }
     private func authenticatedService() throws -> AgentRegistryService {
         let token = SomeIMIntegrationStore.loadSessionToken()
         guard !token.isEmpty else { throw AgentAssetError.authentication }
-        return try AgentRegistryService(baseURL: SomeIMIntegrationStore.loadSettings().baseURL, token: token)
+        return try AgentRegistryService.controlPlane(token: token)
     }
     private func synchronize() {
         perform {

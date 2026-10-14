@@ -25,7 +25,7 @@ extension AgentRegistryService {
         if SomeIMIntegrationStore.isRunningUnderXCTest { return }
         #endif
         let token = SomeIMIntegrationStore.loadSessionToken()
-        let origin = try? AgentRegistryService(baseURL: SomeIMIntegrationStore.loadSettings().baseURL).origin
+        let origin = try? AgentRegistryService.controlPlane().origin
         AgentDefinitionLibrary().restoreVerifiedActivation(origin: origin,
             sessionFingerprint: token.isEmpty ? nil : AgentPackageV1.hash(Data(token.utf8)))
     }
