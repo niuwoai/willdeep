@@ -89,7 +89,10 @@ import Foundation
                 }
             }
         } catch { failure = error }
-        trace.record("finished") { $0.status = failure == nil ? "unverified" : errorStatus(failure) }
+        let status = failure == nil ? outcome?.evidenceStatus ?? "infra_error" : errorStatus(failure)
+        trace.record("finished") {
+            $0.status = status; $0.terminationReason = outcome?.terminationReason.rawValue; $0.roundCount = outcome?.roundCount
+        }
         let events = try store.events(), worker = events.filter { $0.runID == workerID }
         let fixtureReads = Set((outcome?.rounds.flatMap(\.toolCalls) ?? []).compactMap { call -> String? in
             guard call.name == "read_file", let args = try? AgentRSIContract.raw(Data(call.argumentsJSON.utf8)),
@@ -115,7 +118,9 @@ import Foundation
             "fixture_sha256": .string(AgentPackageV1.hash(fixture)), "events_sha256": .string(AgentPackageV1.hash(eventBytes)),
             "effective_prompt_sha256": worker.first(where: { $0.kind == "prompt_prepared" })?.promptSHA256.map(AgentCanonicalJSON.string) ?? .null,
             "input_tokens": AgentRSIUsage.sum(worker, keyPath: \.inputTokens), "output_tokens": AgentRSIUsage.sum(worker, keyPath: \.outputTokens),
-            "status": .string(failure == nil ? "unverified" : errorStatus(failure)), "model": .string(AgentRSIApprovedBroker.model),
+            "status": .string(status), "model": .string(AgentRSIApprovedBroker.model),
+            "termination_reason": outcome.map { .string($0.terminationReason.rawValue) } ?? .null,
+            "round_count": outcome.map { .integer($0.roundCount) } ?? .null,
             "elapsed_ms": .integer(max(0, Int(Date().timeIntervalSince(started) * 1000))),
             "events": try AgentRSIContract.raw(eventBytes), "grading": .string("host_only_pending")]
         result["request_receipts"] = .array(broker.receipts)

@@ -49,7 +49,8 @@ extension AgentSubagentRunner {
                     toolReviewer: toolReviewer, interventionChannel: interventionChannel, openingImages: openingImages,
                     executionBudget: executionBudget, session: session, firstContactTimeout: firstContactTimeout, onProgress: onProgress)
                 trace.record("finished") {
-                    $0.status = outcome.verifierPassed == false ? "failed" : "unverified"
+                    $0.status = outcome.evidenceStatus
+                    $0.terminationReason = outcome.terminationReason.rawValue; $0.roundCount = outcome.roundCount
                     $0.verifierPassed = outcome.verifierPassed; $0.verifierAttempts = outcome.verifierAttempts
                     $0.usageTokens = outcome.usageTokens
                 }

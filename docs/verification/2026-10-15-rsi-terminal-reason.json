@@ -1,0 +1,61 @@
+{
+  "schema": "willdeep.verification.native-terminal-reason.v1",
+  "version": "1.420.0-rc3",
+  "build_number": 920,
+  "source_baseline": "5ba9c3c1dbf33e7c1e9266f983369c9724c9f5e2",
+  "passed": true,
+  "real_provider_requests": 0,
+  "mock_transport_only": true,
+  "production_type_tests": {"total": 6, "passed": 6},
+  "native_tests": {
+    "total": 9,
+    "passed": 9,
+    "failed": 0,
+    "suites": 2,
+    "cases_with_assertions": 8,
+    "host_control_entry": {
+      "passed": true,
+      "control_file_present": false,
+      "trial_executed": false,
+      "note": "The selected host-controlled entry returns without running a trial when no control file is present; it is counted as one test by Swift Testing."
+    },
+    "xcresult_and_log_agree": true,
+    "test_exit": 0,
+    "elapsed_seconds": 10.06
+  },
+  "terminal_observations": [
+    {"scenario": "four_tool_rounds", "status": "budget_exhausted", "termination_reason": "max_rounds", "round_count": 4, "receipts": 4, "fifth_request": false, "raw_model_content_null": true, "read_observed": true, "input_tokens": 400, "output_tokens": 80, "root_and_worker_finished_agree": true},
+    {"scenario": "final_response_on_fourth_round", "status": "unverified", "termination_reason": "final_response", "round_count": 4, "receipts": 4, "raw_model_content_null": false, "read_observed": true},
+    {"scenario": "missing_usage", "status": "infra_error", "termination_reason": null, "round_count": null, "requests": 1, "input_tokens": null, "output_tokens": null},
+    {"scenario": "normal_final_response", "status": "unverified", "termination_reason": "final_response", "round_count": 2, "receipts": 2},
+    {"scenario": "foreground_and_background_verifier_and_revision", "passed": true}
+  ],
+  "build": {
+    "strategy": "clonefile_only_no_copy_fallback_no_hardlinks",
+    "clone_elapsed_upper_bound_seconds": 16.14,
+    "cache_du_kib_including_shared_blocks": 14952268,
+    "cache_du_is_incremental_physical_charge": false,
+    "build_for_testing_exit": 0,
+    "build_for_testing_elapsed_seconds": 265.46,
+    "build_minimum_free_bytes": 9925398528,
+    "test_minimum_free_bytes": 9451130880,
+    "stop_threshold_bytes": 6442450944,
+    "threshold_interrupted": false,
+    "earlier_attempts": [
+      {"exit": 65, "elapsed_seconds": 239.27, "cause": "New worktree lacked the existing plugin runtime payload; identical payloads were cloned without Git metadata, credentials, or network updates."},
+      {"exit": 65, "elapsed_seconds": 16.08, "cause": "Cloned helper module cache embedded the original absolute path; only the independent cloned helper cache was set aside and regenerated."}
+    ],
+    "swiftpm_exception": "Standard system manifest diagnostics cache only; App, BuildDB, module outputs and dependency copies are isolated.",
+    "go_module_network_disabled": true,
+    "speedup_claimed": false
+  },
+  "frozen_inputs": {
+    "original_head_unchanged": true,
+    "original_worktree_clean": true,
+    "original_app_and_test_bundle_manifest_verified_before_and_after": true,
+    "original_two_adapter_scripts_unchanged": true,
+    "frozen_manifest_sha256": "de4d5a521b01c61f5750173924f921e6d45bb70073f3973e32d7be7c74a49714"
+  },
+  "release_or_install_performed": false,
+  "remaining": ["No merge, push, tag, release, installation, or replacement of the active experimental runner."]
+}

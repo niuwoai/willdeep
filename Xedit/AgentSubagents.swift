@@ -987,6 +987,12 @@ enum AgentSubagentRunner {
         var midRunEscalatedFromModel: String? = nil
         let roundCount: Int
         let toolInvocationCount: Int
+        /// A partial report returned at the round cap is a budget terminal,
+        /// even when a verifier happened to pass before the cap was reached.
+        var terminationReason: AgentSubagentTerminationReason = .finalResponse
+        var evidenceStatus: String {
+            terminationReason.evidenceStatus(verifierPassed: verifierPassed)
+        }
         /// Nil when the run had no verifier at all — distinct from `false`,
         /// which means the command ran and did not pass. "Not verified" must
         /// never be counted as a verified failure.
@@ -2050,6 +2056,7 @@ enum AgentSubagentRunner {
             midRunEscalatedFromModel: midRunEscalation?.from,
             roundCount: roundLimit,
             toolInvocationCount: toolInvocations,
+            terminationReason: .maxRounds,
             verifierPassed: verifierPassed,
             verifierAttempts: verifierAttempts,
             citationsChecked: cappedAudit.checked,

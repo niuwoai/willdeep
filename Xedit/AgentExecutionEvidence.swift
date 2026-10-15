@@ -26,6 +26,8 @@ nonisolated struct AgentExecutionEvidenceEvent: Codable, Equatable, Sendable {
     var toolSucceeded: Bool?
     var runtimeParameters: AgentRuntimeParameters?
     var maximumRounds: Int?
+    var roundCount: Int?
+    var terminationReason: String?
     var contextWindow: Int?
     var skillsSHA256: String?
     var executionDeadline: Date?
