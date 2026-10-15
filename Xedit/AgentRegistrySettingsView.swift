@@ -13,6 +13,8 @@ struct AgentRegistrySettingsView: View {
     @State private var message = ""
     @State private var busy = false
     @State private var advancedEditor = false
+    @State private var showExperiments = false
+    @State private var conflictVersion: String?
     private let library: AgentDefinitionLibrary
 
     init(library: AgentDefinitionLibrary = AgentDefinitionLibrary(), initialSelection: AgentDefinitionLibrary.Installation? = nil) {
@@ -36,6 +38,7 @@ struct AgentRegistrySettingsView: View {
                 Button(String(localized: "导入", table: "AgentRegistry"), action: importPackage)
                 Button(String(localized: "刷新官方目录", table: "AgentRegistry")) { perform { catalog = try await service().index().items } }
                 Button(String(localized: "同步私有智能体", table: "AgentRegistry")) { synchronize() }
+                Button(String(localized: "智能体实验", table: "AgentRSI")) { showExperiments = true }
             }.disabled(busy)
             HSplitView {
                 ScrollView {
@@ -92,8 +95,11 @@ struct AgentRegistrySettingsView: View {
             if busy { ProgressView().controlSize(.small) }
         }.padding(18).frame(minWidth: 850, minHeight: 600)
             .onAppear(perform: reload)
+            .sheet(isPresented: $showExperiments) {
+                AgentRSIExperimentsView(baseline: selected.flatMap { try? library.package(revision: $0.selected, account: $0.account) })
+            }
             .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.sessionDidChangeNotification)) { _ in
-                selected = nil; draft = ""; reload()
+                selected = nil; draft = ""; conflictVersion = nil; reload()
             }
     }
     private var definitionForm: some View {
@@ -203,9 +209,20 @@ struct AgentRegistrySettingsView: View {
                 })).frame(maxWidth: 240)
         }
         if installation.conflict != nil {
+            Text(String(localized: "保留本地需要新的版本号；原来的两份修改仍会保留在历史中。", table: "AgentRegistry"))
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Text(String(localized: "本地和远端修改均已保留", table: "AgentRegistry"))
-                Button(String(localized: "保留本地", table: "AgentRegistry")) { change { try library.resolve(installation, keepLocal: true) } }
+                TextField(String(localized: "冲突解决的新版本号", table: "AgentRegistry"), text: Binding(
+                    get: { conflictVersion ?? (try? library.suggestedConflictVersion(installation)) ?? "" },
+                    set: { conflictVersion = $0 })).frame(maxWidth: 160)
+                Button(String(localized: "保留本地", table: "AgentRegistry")) {
+                    change {
+                        let version = try conflictVersion ?? library.suggestedConflictVersion(installation)
+                        try library.resolve(installation, keepLocal: true, newVersion: version.trimmingCharacters(in: .whitespacesAndNewlines))
+                        conflictVersion = nil
+                    }
+                }
                 Button(String(localized: "保留远端", table: "AgentRegistry")) { change { try library.resolve(installation, keepLocal: false) } }
             }
         }
@@ -234,6 +251,7 @@ struct AgentRegistrySettingsView: View {
     }
     private func choose(_ installation: AgentDefinitionLibrary.Installation) {
         selected = installation
+        conflictVersion = nil
         do { draft = String(data: try library.package(revision: installation.selected, account: installation.account).definitionEditorData(), encoding: .utf8) ?? "" }
         catch { message = error.localizedDescription }
     }

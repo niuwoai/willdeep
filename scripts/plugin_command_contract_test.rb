@@ -29,6 +29,7 @@ require "json"
 require "fileutils"
 require "set"
 require "time"
+require_relative "lib/video_studio_reference_probe"
 
 Encoding.default_external = Encoding::UTF_8
 Encoding.default_internal = Encoding::UTF_8
@@ -233,12 +234,11 @@ video_studio_image_generation = File.read(
 )
 video_studio_character_plan = video_studio_image_generation[/def character_plan\b.*?\n  end\n/m].to_s
 
+reference_probe = VideoStudioReferenceProbe.call(plugin_root: File.join(repo_root, "PluginExamples/video-studio"))
 add_check.call(
   "video-studio sends reference images by filePath, not mediaURL",
-  video_studio_image_generation.include?('references = compiled["slots"].map { |slot| slot["filePath"] }') &&
-    video_studio_image_generation.include?('reference_paths: plan["references"]') &&
-    !video_studio_image_generation.match?(/references\s*(<<|=)[^\n]*mediaURL/),
-  "mediaURL is a willdeep-plugin:// URL the host cannot upload; the reference argument needs filePath."
+  reference_probe[:ok],
+  "Pinned frame planning and backend dispatch preserve two ordered filePath values through ReferenceLegend; one local stub request, no provider."
 )
 
 add_check.call(

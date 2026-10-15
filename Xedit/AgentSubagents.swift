@@ -148,6 +148,8 @@ nonisolated struct AgentSubagentStreamingTextOutcome: Equatable, Sendable {
 @MainActor
 final class AgentSubagentRegistry: ObservableObject {
     struct BackgroundExecutionContext {
+        var evidenceRunID: UUID?
+        var evidenceSessionID: UUID?
         var localSandboxDisabled = false
         var additionalWorkspaceRoots: [URL] = []
         var verifierCommand: String?
@@ -221,6 +223,9 @@ final class AgentSubagentRegistry: ObservableObject {
             interventionChannel: interventionChannel,
             openingImages: executionContext.openingImages,
             executionBudget: executionContext.executionBudget,
+            evidenceRunID: executionContext.evidenceRunID,
+            evidenceSessionID: executionContext.evidenceSessionID,
+            evidenceMode: "background_worker",
             session: AgentNetworkSupport.workerSession(),
             onProgress: onProgress
         )
@@ -323,6 +328,9 @@ final class AgentSubagentRegistry: ObservableObject {
         }
 
         let id = UUID()
+        var executionContext = executionContext
+        executionContext.evidenceRunID = id
+        executionContext.evidenceSessionID = parentRuntimeID
         let run = AgentSubagentRun(
             id: id,
             shortID: String(id.uuidString.prefix(6)).lowercased(),
@@ -417,7 +425,10 @@ final class AgentSubagentRegistry: ObservableObject {
                 toolInvocationCount: outcome.toolInvocationCount,
                 rounds: outcome.rounds,
                 didTruncate: outcome.didTruncate,
-                profileID: profile.id
+                profileID: profile.id,
+                verifierCommand: executionContext.verifierCommand,
+                verifierPassed: outcome.verifierPassed,
+                verifierAttempts: outcome.verifierAttempts
             )
         }
         return run
@@ -496,7 +507,10 @@ final class AgentSubagentRegistry: ObservableObject {
         rounds: [AgentSubagentTranscript.Round] = [],
         didTruncate: Bool = false,
         profileID: String? = nil,
-        requestStop: AgentAuxiliaryRequestStop? = nil
+        requestStop: AgentAuxiliaryRequestStop? = nil,
+        verifierCommand: String? = nil,
+        verifierPassed: Bool? = nil,
+        verifierAttempts: Int? = nil
     ) {
         tasks[id] = nil
         stopRequestedRunIDs.remove(id)
@@ -538,6 +552,9 @@ final class AgentSubagentRegistry: ObservableObject {
                 finishedAt: finishedRun.finishedAt,
                 didTruncate: didTruncate,
                 profileID: profileID,
+                verifierCommand: verifierCommand,
+                verifierPassed: verifierPassed,
+                attemptCount: verifierAttempts,
                 registrySnapshot: finishedRun.registrySnapshot
             )
         )
@@ -970,6 +987,12 @@ enum AgentSubagentRunner {
         var midRunEscalatedFromModel: String? = nil
         let roundCount: Int
         let toolInvocationCount: Int
+        /// A partial report returned at the round cap is a budget terminal,
+        /// even when a verifier happened to pass before the cap was reached.
+        var terminationReason: AgentSubagentTerminationReason = .finalResponse
+        var evidenceStatus: String {
+            terminationReason.evidenceStatus(verifierPassed: verifierPassed)
+        }
         /// Nil when the run had no verifier at all — distinct from `false`,
         /// which means the command ran and did not pass. "Not verified" must
         /// never be counted as a verified failure.
@@ -1240,7 +1263,7 @@ enum AgentSubagentRunner {
     /// long child loop never looks frozen. Background / workflow callers leave
     /// it nil.
     @MainActor
-    static func run(
+    static func runUnrecorded(
         prompt: String,
         configuration: AgentConfiguration,
         workspaceURL: URL?,
@@ -1358,6 +1381,10 @@ enum AgentSubagentRunner {
         if outputSchema != nil {
             toolList.append(structuredOutputDescriptor)
         }
+        AgentExecutionTrace.current?.record("prompt_prepared") {
+            $0.promptSHA256 = AgentPackageV1.hash(Data(transcript[0].content.utf8))
+            $0.effectiveTools = profile.effectiveToolNames(writeAccessGranted: writeAccess != nil).sorted()
+        }
         // This begins at the profile budget, but a user instruction accepted
         // at the final boundary must still receive one real provider round.
         // Extending only when an instruction is actually applied preserves
@@ -1460,6 +1487,7 @@ enum AgentSubagentRunner {
             if (try? AgentWorkerContextBudget.validate(
                 messages: transcript, tools: toolList, limit: inputLimit
             )) == nil {
+                if AgentRSIApprovedBroker.current != nil { throw AgentRSIError.quota }
                 if compressionsUsed < AgentWorkerTranscriptCompression.maximumCompressionsPerRun {
                     compressionsUsed += 1
                     publishProgress(round: round, activity: .thinking)
@@ -1935,6 +1963,10 @@ enum AgentSubagentRunner {
                     rawPayload = "Interrupted by the user's new instruction before this tool completed."
                 }
 
+                AgentExecutionTrace.current?.record("tool_completed") {
+                    $0.status = call.toolName
+                    $0.promptSHA256 = AgentPackageV1.hash(Data(rawPayload.utf8))
+                }
                 if interventionChannel?.hasPendingInterruption == true {
                     transcript.append(AgentMessage(
                         role: .tool,
@@ -2024,6 +2056,7 @@ enum AgentSubagentRunner {
             midRunEscalatedFromModel: midRunEscalation?.from,
             roundCount: roundLimit,
             toolInvocationCount: toolInvocations,
+            terminationReason: .maxRounds,
             verifierPassed: verifierPassed,
             verifierAttempts: verifierAttempts,
             citationsChecked: cappedAudit.checked,
@@ -2448,9 +2481,14 @@ enum AgentSubagentRunner {
                 arguments: argsDict,
                 context: context
             )
+            AgentExecutionTrace.current?.record("tool_receipt") {
+                $0.toolName = call.toolName; $0.toolSucceeded = true
+                $0.promptSHA256 = AgentPackageV1.hash(Data(result.payload.utf8))
+            }
             return result.payload
         } catch {
             if error is CancellationError || AgentAuxiliaryRequestStop(error) != nil { throw error }
+            AgentExecutionTrace.current?.record("tool_receipt") { $0.toolName = call.toolName; $0.toolSucceeded = false }
             return "Tool error: \(error.localizedDescription)"
         }
     }

@@ -924,6 +924,8 @@ extension AppState {
                 toolReviewer: toolReviewer,
                 interventionChannel: interventionChannel,
                 executionBudget: toolExecutionBudget(for: runtime),
+                evidenceRunID: runID,
+                evidenceSessionID: runtime.id,
                 // Shorter timeouts than the parent's own session: a Worker has
                 // no retry ladder and the parent is fenced while it waits.
                 session: AgentNetworkSupport.workerSession(),

@@ -79,6 +79,12 @@ extension AppState {
             let accepted = Set(candidate.criterionIDs)
             for index in goal.checklist.indices { goal.checklist[index].done = accepted.contains(goal.checklist[index].id) }
             runtime.currentGoal = goal
+            (runtime.executionEvidenceTrace ?? AgentExecutionTrace.current)?.record("goal_verified") {
+                $0.verifierPassed = true
+                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]; encoder.dateEncodingStrategy = .iso8601
+                $0.verifierInputSHA256 = (try? encoder.encode(after.digests)).map(AgentPackageV1.hash)
+                $0.verifierEvidenceSHA256 = (try? encoder.encode(packet.evidence)).map(AgentPackageV1.hash)
+            }
             persistAgentSession(runtime: runtime)
             return true
         } catch {
@@ -86,6 +92,7 @@ extension AppState {
             let diagnostic = Self.boundedSanitized(error.localizedDescription, limit: 4_000)
             runtime.currentGoal?.verification?.phase = .rejected
             runtime.currentGoal?.verification?.findings = [diagnostic]
+            (runtime.executionEvidenceTrace ?? AgentExecutionTrace.current)?.record("goal_verification_rejected") { $0.verifierPassed = false }
             persistAgentSession(runtime: runtime)
             if !Task.isCancelled {
                 runtime.messages.append(AgentMessage(role: .system, content: """

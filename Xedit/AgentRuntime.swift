@@ -121,6 +121,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     var feedbackAssessmentTask: Task<Void, Never>?
     var feedbackBudgetStopReason: String?
     var feedbackRunID: UUID?
+    var executionEvidenceTrace: AgentExecutionTrace?
     var feedbackTurnID: UUID?
     var feedbackPreviousTurnID: UUID?
     var feedbackProvider: String?

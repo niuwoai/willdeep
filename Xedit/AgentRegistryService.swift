@@ -60,9 +60,10 @@ nonisolated struct AgentRegistryService: Sendable {
         self.session = session ?? URLSession(configuration: configuration, delegate: AgentRegistryRedirectPolicy(), delegateQueue: nil)
     }
     func request(_ route: String, method: String = "GET", id: String? = nil,
-                 revision: String? = nil, body: Data? = nil, etag: String? = nil) async throws -> Data {
+                 revision: String? = nil, body: Data? = nil, etag: String? = nil, encodedPath: Bool = false) async throws -> Data {
         var components = URLComponents(url: origin, resolvingAgainstBaseURL: false)!
-        components.path = "/api/v1/" + route
+        if encodedPath { components.percentEncodedPath = "/api/v1/" + route }
+        else { components.path = "/api/v1/" + route }
         var query: [URLQueryItem] = []
         if let id { query.append(URLQueryItem(name: "definition_id", value: id)) }
         if let revision { query.append(URLQueryItem(name: "revision", value: revision)) }

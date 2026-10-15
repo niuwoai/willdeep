@@ -1,6 +1,18 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "保留本地需要新的版本号；原来的两份修改仍会保留在历史中。": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Keeping local changes requires a new version. Both original branches remain in history." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "保留本地需要新的版本号；原来的两份修改仍会保留在历史中。" } }
+      }
+    },
+    "冲突解决的新版本号": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New conflict resolution version" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "冲突解决的新版本号" } }
+      }
+    },
     "智能体定义无效": {
       "localizations": {
         "zh-Hans": {

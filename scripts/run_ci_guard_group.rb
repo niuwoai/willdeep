@@ -108,6 +108,9 @@ def guard_groups(output_dir)
         command("chrome_extension_agent_tab_test.rb", chrome_tab_md, chrome_tab_json)
       ],
       ["widget-side-panel", command("widget_side_panel_contract_test.rb", widget_md, widget_json)],
+      ["video-studio-reference-probe", command("video_studio_reference_probe_test.rb",
+        File.join(output_dir, "video_studio_reference_probe_report.md"),
+        File.join(output_dir, "video_studio_reference_probe_report.json"))],
       [
         "plugin-command",
         command("plugin_command_contract_test.rb", plugin_command_md, plugin_command_json)

@@ -1,0 +1,2400 @@
+# 历史变更记录 7
+
+[返回当前变更记录](../../CHANGELOG.md)
+
+## 1.152.0-rc9 - 2026-07-14
+
+### Fixed
+
+- **Agent 产物区目录聚合与 Finder 打开** —— 同目录下的多个文件产物会折叠成目录项展示，产物区点击文件会在 Finder 中显示，点击目录会在 Finder 中打开目录，避免长产物列表逐文件刷屏。
+
+### Changed
+
+- 版本号从 **1.152.0-rc8** 递增为 **1.152.0-rc9**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc8 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物输入电脑道具移除** —— Agent 输入时不再在桌宠前方显示像素笔记本和敲键盘手部叠层，只保留桌宠本体的轻微晃动反馈。
+
+### Changed
+
+- 版本号从 **1.152.0-rc7** 递增为 **1.152.0-rc8**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc7 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物输出卡片新鲜度** —— 左侧对话卡片只列出最近 1 分钟内仍有助手输出的会话，超过 1 分钟的旧输出不再继续展示或计入收起数字。
+
+### Changed
+
+- 版本号从 **1.152.0-rc6** 递增为 **1.152.0-rc7**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc6 - 2026-07-14
+
+### Fixed
+
+- **工作区空项目保留** —— Agent 侧边栏添加多个项目时，即使前一个项目还没有任何用户对话，也会保留该项目的一条空新对话占位，避免添加第二个项目后第一个项目看起来被替换。
+
+### Changed
+
+- 版本号从 **1.152.0-rc5** 递增为 **1.152.0-rc6**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc5 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物原地转圈轴向** —— 回复就绪后的转圈动画改为绕竖直轴原地转身，避免角色整张图在平面内翻滚到头朝下。
+
+### Changed
+
+- 版本号从 **1.152.0-rc4** 递增为 **1.152.0-rc5**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc4 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物拖动动画再降速** —— 拖动桌面宠物时的行走摆动与步态起伏频率继续降低，让拖动反馈更从容。
+
+### Changed
+
+- 版本号从 **1.152.0-rc3** 递增为 **1.152.0-rc4**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc3 - 2026-07-14
+
+### Fixed
+
+- **设置窗口焦点框禁用** —— 设置窗口根视图、左侧分类标签、二级分段标签与内容容器统一使用 `focusable(false)`，避免 tab 标签和设置内容出现键盘焦点高亮框。
+
+### Changed
+
+- 版本号从 **1.152.0-rc2** 递增为 **1.152.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc2 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物拖动动画节奏** —— 拖动桌面宠物时的行走摆动与步态频率放慢，保留拖动反馈但减少快速抖动感。
+
+### Changed
+
+- 版本号从 **1.152.0-rc1** 递增为 **1.152.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc1 - 2026-07-14
+
+### Fixed
+
+- **some.im 浏览器登录 Keychain 兜底** —— 浏览器登录拿到 some.im app API key 后，若共享 Keychain access group 写入失败，WillDeep 会退回本 App 私有 Keychain 保存并读回验证，避免网页已登录但客户端提示“已返回凭据但保存失败”后无法继续使用；只有共享 Keychain 与私有兜底都失败时才显示本地保存失败。
+
+### Changed
+
+- 版本号从 **1.152.0** 递增为 **1.152.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0 - 2026-07-14
+
+### Added
+
+- **桌面宠物多会话输出卡片** —— 桌面宠物旁的文字卡片现在最多展示 3 个最新有助手输出的会话，每条可点击回到对应会话；卡片右上角新增收起按钮，收起后在宠物旁显示带输出会话数的圆形入口，点击数字或圆圈即可展开。
+
+### Fixed
+
+- **暂时停用 AIPipe 上报** —— `AIPipeBootstrap` 当前直接跳过初始化，不再读取或使用 `AIPIPE_API_KEY` / `AIPipeAPIKey` 发起 AIPipe 上报；保留 SDK 接入代码，后续需要时可重新打开开关。
+
+### Changed
+
+- 版本号从 **1.151.0-rc1** 提升为 **1.152.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.151.0-rc1 - 2026-07-14
+
+### Fixed
+
+- **some.im 浏览器登录保存失败诊断** —— WillDeep 现在区分“some.im 没有返回凭据”和“some.im 已返回凭据但本地 Keychain/共享 session 保存失败”；后者会显示本地保存失败提示，不再误导为 web 端没有回传。
+- **some.im 当前返回结构覆盖测试** —— 补充 `status=connected`、`api_key`、`token` 与 `account` 的浏览器登录状态测试，覆盖当前 some.im 线上 payload。
+- **发布包签名前置自检** —— `scripts/release.sh` 导出 `.app` 后会立即校验 app 签名，并拒绝包含 `AIPipeAPIKey` 或 some.im 客户端登录密钥的 `Info.plist`；DMG 的 Gatekeeper 自检失败也会中止发布，不再被 `|| true` 吞掉。
+
+### Changed
+
+- 版本号从 **1.151.0** 递增为 **1.151.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.151.0 - 2026-07-14
+
+### Added
+
+- **桌面宠物双击跳跃** —— 双击桌面宠物本体会触发一次短跳动画；气泡点击继续用于打开当前会话，拖动摆放不受影响。
+
+### Changed
+
+- 版本号从 **1.150.0-rc3** 提升为 **1.151.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.150.0-rc3 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物右键菜单本地化与设置直达** —— 补齐「桌面宠物设置…」和「桌面宠物」标签的 `xcstrings` 中英文资源；右键入口改走稳定的设置 fallback 窗口并强制选中宠物设置，避免打开设置后停在上一次标签。
+- **Developer ID 证书选择约束** —— `scripts/release.sh` 不再依赖整段固定证书名，而是在钥匙串中强制解析唯一的 `Developer ID Application`、名称包含 `Beijing Alibaba`、Team ID 为 `ZH2S7D6PL6` 的证书；未找到或匹配多个都会停止发布。
+
+### Changed
+
+- **设置窗口左侧栏化** —— 设置窗口改为左侧一等分类、右侧内容页的两栏结构；桌面宠物提升到左侧独立入口，编辑器 / AI / 运行时 / 集成等分类继续保留二级分段切换。
+- **发布手册对齐 WillDeep** —— `docs/RELEASE.md` 的标题、产物路径和 notarytool profile 示例统一为 WillDeep / `willdeep-notary`。
+- 版本号从 **1.150.0-rc2** 递增为 **1.150.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.150.0-rc2 - 2026-07-13
+
+### Fixed
+
+- **Release helper 构建耗时可观测性** —— `Build WillDeep Computer Use Helper` Run Script 现在按阶段输出 `START` / `DONE` / `FAILED` 和秒级耗时，覆盖 bundle 准备、arm64/x86_64 编译、lipo、codesign 与 verify；签名失败时会补充 bundle 结构和 `codesign --display` 诊断，避免 release archive 十几分钟后只剩一个 `errSecInternalComponent`。
+
+### Changed
+
+- 版本号从 **1.150.0-rc1** 递增为 **1.150.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.150.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **Release archive 编译器崩溃规避** —— `WorkflowWatchdogRace` 新增显式空析构函数，绕开 Swift 6.3.1 在 Release 优化时对泛型类合成析构路径的 `SIL EarlyPerfInliner` 偶发崩溃；该修复需随工具链升级重新验证。
+
+### Changed
+
+- 版本号从 **1.150.0** 递增为 **1.150.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.150.0 - 2026-07-13
+
+### Added
+
+- **宠物输入动作** —— Agent 输入框含有内容时切换为“陪你敲字中”，显示打包的原创像素笔记本；宠物抬身、双手、键盘和屏幕光依节拍敲击/闪烁。拖动时的走路动画与位置记忆继续保留。
+
+### Changed
+
+- 版本号从 **1.149.0** 提升为 **1.150.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.149.0 - 2026-07-13
+
+### Added
+
+- **桌面宠物默认开启** —— 首次启动即陪伴。关闭状态仍会写回本地偏好，用户的显式选择不会被默认值覆盖。
+- **桌面宠物可拖动** —— 直接拖拽宠物即可摆放到屏幕任意位置，落点写回本地偏好、下次显示时恢复；若保存的位置落在已断开的显示器上则自动退回右下角默认位。
+- **宠物设置升为一等标签** —— 设置窗口新增独立的「桌面宠物」标签（爪印图标），不再挤在「AI Agents」里；宠物右键菜单新增「桌面宠物设置…」，一键跳转到该标签。
+
+### Changed
+
+- 版本号从 **1.148.0-rc2** 提升为 **1.149.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+### Fixed
+
+- **Agent 主窗口最小尺寸约束** —— 此前窗口可被拖成没法用的竖窄条（侧栏自动隐藏、右面板关闭时下限掉到只剩聊天舒适宽 ~320）。现在钉了绝对最小宽 720 / 最小高 480 的硬地板，并补齐了此前完全缺失的最小高度约束。
+
+## 1.148.0-rc2 - 2026-07-13
+
+### Fixed
+
+- **桌面宠物浮窗文字在深色壁纸上看不清** —— 宠物气泡背景用的是 `.ultraThinMaterial`，透明度太高，深色桌面壁纸会透上来，把「守望中」状态、会话标题（`.secondary`）等文字冲淡到几乎不可读。改为 `.regularMaterial`：材质本身足够不透明、自带对比衬底，语义色文字在任意深/浅壁纸下都清晰。
+
+### Changed
+
+- 版本号从 **1.148.0-rc1** 递增为 **1.148.0-rc2**。
+
+## 1.148.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **Composer 的「搜索技能」面板漏接 skill 本地化** —— 仓库早已有 `AgentSkillLocalization`（中英文 name/description/别名表 + 多语言召回池），设置页、`list_skills` 工具、移动网关都用了，唯独 composer 的 `$` 技能面板没接：说明直接显示英文原始 `description`，搜索只匹配英文 `identifier/name/description`，中文用户搜「日报」「浏览器」命中不了 `daily-report`/`browser`。现在：
+  - **展示**：面板每行的说明改走 `AgentSkillLocalization.displayDescription`，按用户语言本地化（`$identifier` 调用名保持原样，因为那是要输入的调用 token）。
+  - **搜索召回**：过滤改用 `AgentSkillLocalization.searchableText`，把 skill 的多语言 name/description/别名都纳入命中池；且 `searchableText` 现在**同时拼英文和中文两张表**（不再只拼当前语言那张），实现真正双向召回——中文关键词命中英文原文 skill，英文关键词对中文用户也照常命中。
+
+### Changed
+
+- 版本号从 **1.148.0** 递增为 **1.148.0-rc1**。
+
+## 1.148.0 - 2026-07-13
+
+### Added
+
+- **恢复六个宠物形象** —— 恢复天线植物学家、宇宙学者、爪痕硬汉、植能机器人、云锻工程师和红帽客服英雄六个原创像素宠物，设置页形象库从 16 个扩充为 22 个；所有形象继续复用待机、走路、跳跃、转圈、提醒和庆祝动画。
+
+### Changed
+
+- 版本号从 **1.147.0** 提升为 **1.148.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.147.0 - 2026-07-13
+
+### Added
+
+- **桌面宠物与会话浮窗** —— Agent 顶栏新增爪印开关；设置页可启用宠物并在 16 个打包的原创像素形象中选择。浮窗显示当前会话最新用户/助手消息，点击跳回相应会话；宠物会按真实会话状态待机、走路、跳跃、转圈、抖动提醒和任务完成庆祝。
+- **两张科幻梗新形象** —— 新增蓝色义体流浪者与蓝皮哨箭船长两个原创像素形象；只取科幻类型气质，不复刻特定电影角色、演员肖像、名称或标识。
+
+### Changed
+
+- 版本号从 **1.146.0-rc4** 提升为 **1.147.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.146.0-rc4 - 2026-07-13
+
+### Fixed
+
+- **会话落盘跨进程竞态导致数据丢失** —— 双开 App（或设置窗口第二个 AppState、routine 进程）读写同一会话目录时，此前的写入编排（串行写队列、合并/排序 ticket、metadata-only 追踪）全是进程内 `static`，对另一个进程零保证，存在两类隐患：
+  - **启动 prune 误删**：进程 B 启动扫描目录，把进程 A 刚 append 用户消息、还没落盘的会话判成“空占位”而删除，A 的真实历史随之丢失。现在 prune 的删除动作改走新的 `deleteIfStillEmpty(id:)`——在文件协调（`NSFileCoordinator`）下**重新读一次磁盘文件**，只有当磁盘副本此刻仍无用户消息才删，否则跳过并保留在会话列表里。
+  - **同 id 覆写（lost update）**：两进程写同一 `<uuid>.json` 是 last-writer-wins。现在 `save` / `saveAsync` / `delete` 的文件读写统一经 `NSFileCoordinator` 跨进程串行协调（协调失败时降级为原子写，不丢操作），并保留原有进程内串行写队列与 `.atomic` 语义。
+  - 额外加了 **90s 最近修改宽限窗口**：prune 会跳过 mtime 很新的会话文件（很可能是另一进程正在使用的活会话），确实被遗弃的空占位在后续启动超窗后照常清理。
+
+### Changed
+
+- 版本号从 **1.146.0-rc3** 递增为 **1.146.0-rc4**。
+
+## 1.146.0-rc3 - 2026-07-13
+
+### Fixed
+
+- **Workflow watchdog 真正按时返回** —— `/code-review` 等 workflow 的超时兜底改为非结构化竞速实现；当子 agent/provider stream 卡在不响应取消的网络读取里时，卡片会按 watchdog 转为失败并显示原因，不再被卡死子任务拖住。
+
+### Changed
+
+- 版本号从 **1.146.0-rc2** 递增为 **1.146.0-rc3**。
+
+## 1.146.0-rc2 - 2026-07-13
+
+### Fixed
+
+- **发消息后 AI 侧「无返回、无报错、界面像死了」不再静默** —— 修复两类静默无回应：
+  - **空流被当成功**：provider 返回 HTTP 2xx 但 SSE 流没有任何事件（中继 token 失效被回成空 body、上游抖动、限流表现为空流）时，四个流式适配器（OpenAI Chat / Anthropic / OpenAI Responses / Gemini）现在会抛出明确的 `emptyStream` 错误并弹出可「重试」的错误卡片，而不是悄悄丢掉整轮、删掉占位消息后一言不发。流正常结束但模型零输出的情况在主循环里也补了同款反馈。
+  - **排队等并发槽时全屏聊天无指示**：消息发出后没抢到 provider 并发槽（同一 provider 已跑满 `perProviderConcurrencyLimit`，如多会话/双开/routine 并发）时，`isResponding` 仍为 false，全屏 `AgentChatTranscript` 之前对这个状态没有任何渲染——用户只看到自己的消息、界面像死了，直到某个槽空出来才「又开始输出」。现在全屏主聊天也会显示「正在排队，等待空闲的并发槽位…」提示条（此前仅侧栏有）。
+
+### Changed
+
+- 版本号从 **1.146.0-rc1** 递增为 **1.146.0-rc2**。
+
+## 1.146.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **Workflow 超时不再被卡死子任务拖住** —— workflow watchdog 改为非结构化竞速实现；当 provider stream 或子 agent 网络请求不响应取消时，`/code-review` 等 workflow 会按超时转为失败卡片并给出原因，不再一直空转无返回。
+
+### Changed
+
+- 版本号从 **1.146.0** 递增为 **1.146.0-rc1**。
+
+## 1.146.0 - 2026-07-13
+
+### Added
+
+- **媒体任务产物生成中占位** —— 活跃的图片/视频媒体任务现在会显示横向产物条，即使暂时还没有文件落地也会给出与缩略图同尺寸的“生成中”占位卡；已有部分产物时，占位卡保留在列表末尾，提示后续产物仍在生成。
+
+### Changed
+
+- 版本号从 **1.145.0** 提升为 **1.146.0**。
+
+## 1.145.0 - 2026-07-13
+
+### Added
+
+- **Computer Use 最新画面悬浮预览** —— 当前任务执行 `computer_use_*` 工具并取得应用截图后，聊天区右上角显示响应式缩略图；后续动作会更新同一预览，任务停止后自动隐藏悬浮入口。
+- **Agent 全窗口截图蒙版查看** —— 点击缩略图可在 Agent 当前窗口内放大最新截图，支持右上角关闭按钮、点击背景与 Escape 退出；展开期间收到新截图时保持打开并实时更新。
+- **Agent 新对话工作进展页** —— 空白新对话中的统计面板升级为紧凑数据总览：展示任务轮次、工具调用、改动文件、交付物和当前连续使用天数，并保留活动热力图。
+- **真实工作数据与常用能力洞察** —— 统计会从持久化会话读取工作区、工作流、Agent 改动/交付物账本和实际工具名；工具按工作区、代码、终端、调研、浏览器、媒体、自动化与 MCP 等能力分组，避免把仅启用但未使用的 Skill/MCP 伪装成使用记录。
+- **本周工作台** —— 新对话概览增加“本周交付物”和“失败工具调用复盘”两张紧凑卡片：前者只读取本周有更新会话的交付物账本；后者只展示显式执行失败，不把用户拒绝或文案猜测误算为失败。
+
+### Changed
+
+- **截图状态限定在当前会话与执行轮次** —— 切换会话或开始新任务时重置 Computer Use 展示状态；截图继续使用本地文件附件和现有缩略图缓存，不扩大辅助功能、录屏、工具审批或永久授权边界。
+- **模型用量单独保留在模型页** —— Token、缓存与成本等诊断数据不再挤占新对话概览，仍可通过“模型”标签查看。
+- **工具失败结果结构化持久化** —— 工具结果会保存执行状态和脱敏错误摘要，让历史会话重开后仍能准确复盘失败原因。
+- 版本号从 **1.144.0** 提升为 **1.145.0**。
+
+## 1.144.0 - 2026-07-13
+
+### Added
+
+- **Agent 新对话工作台** —— 空白新对话以真实会话账本呈现任务、工具、文件、交付物与活动洞察，并增加“本周交付物”和“失败工具调用复盘”。
+
+### Changed
+
+- **失败调用结构化持久化** —— 工具结果保存执行状态及脱敏错误摘要；复盘只统计明确执行失败，不将用户拒绝误算为失败。
+- 版本号从 **1.140.0-rc6** 提升为 **1.144.0**。
+
+## 1.142.0-rc3 - 2026-07-13
+
+### Fixed
+
+- **侧边栏终端快照标明当前光标行** —— `terminal_snapshot` 现在返回当前光标行、光标行列以及带 `=>` 标记的可见屏幕；模型会明确区分“当前 prompt/input”和上方历史输出，避免把 SSH 前残留的本地目录误判为当前远端环境。本地 tab 也会提示可能存在手动嵌套 SSH，需要用 prompt、`hostname` 或 `pwd` 验证。
+- **终端录制/回放控制更清楚** —— 侧边栏顶部改为可读的录制按钮与计时状态，录制列表提供直接播放/停止和省略号更多操作；终端区域新增会话身份条，持续显示本地/SSH、目标与运行状态，降低回放中或远端操作时的误解成本。
+- 版本号从 **1.142.0-rc2** 递增为 **1.142.0-rc3**。
+
+## 1.142.0-rc2 - 2026-07-13
+
+### Fixed
+
+- **专家会诊议题可再次编辑** —— “多专家会诊 / 专家圆桌群聊”配置面板里的会诊议题从只读文本改为可编辑文本区，启动时使用用户在面板中修改后的讨论内容，不再只能回到 Composer 改原输入。
+- **专家模型改为下拉建议 + 手填兜底** —— Claude Code、Codex CLI、Cursor Agent 每行模型输入旁新增建议模型菜单，可直接选常用模型 ID；Cursor Agent 会异步尝试读取本机 CLI 的当前模型列表，失败时回退内置建议。留空仍使用 CLI 默认模型，列表没有覆盖到的新模型仍可手动输入。
+- 版本号从 **1.142.0-rc1** 递增为 **1.142.0-rc2**。
+
+## 1.142.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **顶部侧栏快捷按钮恢复原生点击并校正终端独立光标** —— Diff / 终端 / 预览 / 文件快捷按钮改用标题栏环境下可稳定激活的原生 `NSButton`；终端在重画 SwiftTerm 正文之外，额外触发其自身 display 更新周期，使独立 caret 子视图重新定位，避免输出已推进但光标仍停留在旧提示符、视觉上出现“光标下面还有内容”。
+- 版本号从 **1.142.0** 递增为 **1.142.0-rc1**。
+
+## 1.142.0 - 2026-07-13
+
+### Added
+
+- **新增专家圆桌群聊模式** —— 与结构化会诊并列提供“圆桌群聊”：WillDeep 主持开场，所选 Claude Code、Codex CLI、Cursor Agent 按顺序逐个发言，每位专家都能看到此前完整公共对话；用户可配置 2–5 轮，WillDeep 在轮次之间归纳争议并在最后统一定稿。
+- **群聊过程实时可见并持久化** —— 会诊卡片按气泡展示 WillDeep 与各专家发言、当前轮次、专家失败信息和最终结论；群聊记录随会话保存，中途停止或应用退出沿用现有中断恢复机制。
+
+### Changed
+
+- **会诊入口增加模式选择** —— 输入议题后点击 Composer 的听诊器按钮，可选择“结构化会诊”或“圆桌群聊”，并继续为每位本机专家单独指定模型。两种模式都固定使用外部 CLI 的只读权限。
+- 版本号从 **1.141.0-rc1** 提升为 **1.142.0**。
+
+## 1.141.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **Agent 顶部侧栏快捷按钮恢复稳定打开右侧面板** —— 顶部 diff / terminal / preview / files 等快捷图标点击时，现在会同时更新当前面板状态并发出统一的 side-panel open request；按钮命中区同步放大，避免看得到图标但点击后右侧栏不出现。
+- **侧边栏终端切换/输出后主动刷新 SwiftTerm 画面** —— SwiftTerm 终端在重新挂载、尺寸变化和收到 PTY 输出后会主动触发 NSView layout/display，减少旧光标残影和“光标下面还有旧内容”的绘制错位。
+- 版本号从 **1.141.0** 递增为 **1.141.0-rc1**。
+
+## 1.141.0 - 2026-07-13
+
+### Added
+
+- **新增“多专家会诊”MVP** —— Composer 新增会诊入口，可选择已安装的 Claude Code、Codex CLI、Cursor Agent 中至少两位专家，并为每位专家单独指定模型；WillDeep 先给出初版，专家并行独立评审，WillDeep 归纳争议后再发起第二轮互评，最后由 WillDeep 汇总为自包含结论。
+- **会诊过程可见且可恢复** —— 聊天卡片实时展示当前阶段、专家进度、两轮意见、模型和失败原因，支持停止与复制最终结论；会诊报告随会话持久化，应用异常退出后未完成会诊会明确恢复为“已取消”，不再留下永久转圈。
+
+### Fixed
+
+- **some.im 供应商显示名固定为域名本身** —— 模型供应商 preset、Provider Library 读写、轮次报告和用量统计统一把 `some-im` 展示为 `some.im`；历史会话中已持久化的旧 `some.im (Rocky's relay)` 也会在展示层自动归一，避免侧边栏/统计页继续露出括号昵称。
+
+### Changed
+
+- **外部专家固定只读执行** —— Claude Code 与 Codex CLI 使用 `plan` 权限模式，Cursor Agent 使用 `ask` 权限模式；会诊不会自动编辑文件。各轮输入使用有界惰性数据区封装，降低共享意见中的提示注入和上下文失控风险。
+- 版本号从 **1.140.0-rc6** 提升为 **1.141.0**。
+
+## 1.140.0-rc6 - 2026-07-13
+
+### Fixed
+
+- **文档附件「发送预览」弹窗空白** —— 选中 .md（或任意文档）附件后点「发送预览」，弹出的 modal 只有一个空白窗、没有标题也没有内容。根因是 `AgentDocumentContextControls` 用 `.sheet(isPresented:)` + 另一个 `@State preview` 双状态：按钮在同一 tick 里先 `preview = makePreview()` 再置 `isPreviewPresented = true`，而 sheet 的 `if let preview` body 在 `preview` 赋值被观察到之前就先构建了 → 取到 nil → 整个 sheet 内容为空。改用 `.sheet(item: $preview)`，只在 `preview` 非空时呈现并把解包后的值直接传给 body，消除竞态；`AgentDocumentSendPreview` 补 `Identifiable`。预览文本本身没问题（附件存在时 `composeAttachedPrompt` 即使输入框为空也会产出非空内容）。
+- 版本号从 **1.140.0-rc5** 递增为 **1.140.0-rc6**。
+
+## 1.140.0-rc5 - 2026-07-13
+
+### Changed
+
+- **用量统计：省心托管流量单列为「省心托管」，不再混进 `unknown-model`** —— 省心托管是每轮由裁判自动路由、没有单一 session 模型，持久化时 `modelID` 被主动清空（`AppStateAgentSessions.swift:1577`），于是它和"老会话/迁移会话的空模型"一起掉进匿名的 `unknown-model` 桶里，看不出是谁。现给用量快照 `AgentUsageSessionSnapshot` 透传 `isManagedRouting`（源自 `session.managedRouting != nil`），托管会话在"模型"分组里聚成一行「省心托管」（从用户视角它本就是一个模型）；**只认托管标记**，老会话的空 `modelID` 仍归 `unknown-model`，不误伤。新增单测覆盖两种空模型的分流。
+- **顶部监控条「委派中」接上子代理轮次进度** —— 输入框上方的活动条（`AgentTaskMonitorRail`）此前派子代理时只显示「委派中」+ 计时，和 rc4 加在卡片上的轮次进度没打通。现把子代理的 `subagentProgress` 折进相位标签，显示「委派中 · 第 3/12 轮 · 5 次工具」；不点开卡片也能看出子代理在往前走。仅 `spawn_agent` 有此进度，外部 CLI 委派仍是纯「委派中」。
+
+### Fixed
+
+- 版本号从 **1.140.0-rc4** 递增为 **1.140.0-rc5**。
+
+## 1.140.0-rc4 - 2026-07-13
+
+### Added
+
+- **子代理卡片现在显示"用的哪个子代理"** —— `spawn_agent` 派生的子代理实际跑在哪个模型上（父模型或 `model` 覆盖）此前只在注册表里采集、UI 从不展示，用户点开卡片也看不到底层用谁。现将有效模型 stamp 到工具调用记录并在卡片上以「模型 xxx」徽标呈现（折叠态的分组预览也追加 `· <model>`）。顺带澄清：子代理是 App 进程内、只读工具集的 headless 子 agent loop，走与主循环同一个 provider 网关，**不是**调用 Claude / Codex / Cursor 等外部 CLI。
+- **同步派生子代理显示实时轮次进度** —— 默认（前台）`spawn_agent` 会 `await` 整个子 loop 跑完（最多 12 轮 LLM 往返）才返回，期间「委派中」只有一个不动的转圈，像卡死。现每进入一轮就把「第 N/12 轮 · M 次工具」刷到卡片上，让长任务读起来是"在往前走"而非"死掉了"。这不是主线程死锁——是 `async/await` 挂起等待网络 I/O，本次只把等待过程变透明。
+
+### Fixed
+
+- 版本号从 **1.140.0-rc3** 递增为 **1.140.0-rc4**。
+
+## 1.140.0-rc3 - 2026-07-13
+
+### Fixed
+
+- **破坏性命令审批卡片的「拒绝 / 确认执行」按钮点击区放大** —— 原来「拒绝」是裸文字、「确认执行」内边距很小，在小卡片里很难点中。现将两个按钮统一放大：字号 `caption → subheadline`、内边距加大到 16×8，并给「拒绝」补上等大的描边点击区与 `contentShape`，两键点击热区一致、更好点。
+- 版本号从 **1.140.0-rc2** 递增为 **1.140.0-rc3**。
+
+## 1.140.0-rc2 - 2026-07-13
+
+### Fixed
+
+- **some.im 登录后新聊天始终默认省心托管** —— 手动选择具体模型仅覆盖当前会话，不再通过全局偏好让后续新聊天退出托管；历史会话仍保持原有选择，不被自动改写。
+- **托管领域标签不再被 Coding Plan 权益误导** —— 页脚“通用/编程”改为展示裁判实际 `domain`，能力等级仍取实际选中模型；即使通用任务因 Coding Plan 权益使用 `someim-coding-plan-*`，也不会再伪装成“裁判判定为编程”。裁判提示词同时明确 Workspace、工具开关和开发应用环境本身不是编程证据，降低环境字段造成的分类偏置。
+- 版本号从 **1.140.0-rc1** 递增为 **1.140.0-rc2**。
+
+## 1.140.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **Goal 模式不再触发会话改名或 Workspace 切换** —— Goal 请求的工具列表会移除 `rename_session` 和 `change_workspace`；执行层同时拒绝缓存或异常生成的同名调用且不展示确认卡，保证目标任务持续运行在当前会话与 Workspace 中。
+- **省心托管在 some.im 未登录时不再“静默无响应”** —— 会话使用「省心托管」（或 provider 为 some.im）但 some.im 共享登录态已丢失（本机或其它共享 App 登出、token 过期）时，发送不再打出未鉴权中继请求、拿回空流后被静默丢弃（用户看不到回复也无报错）。改为发送前登录门禁：保留用户已输入的消息、弹出可操作错误提示「some.im 未登录，「省心托管」无法工作，请先登录」，并在错误卡片提供「去登录 some.im」按钮一键打开登录页；登录后点「重试」原样重发。`retryLastAgentTurn` 同路径复检，避免仍未登录时再次静默失败。
+- 版本号从 **1.140.0** 递增为 **1.140.0-rc1**。
+
+## 1.140.0 - 2026-07-13
+
+### Added
+
+- **Agent 可提议会话改名与 Workspace 切换** —— 新增 `rename_session` 和 `change_workspace` 两项会话级工具，模型仅在标题明显失真或当前 Workspace 缺失、错误时使用；两项操作始终展示逐次确认卡，Goal 模式、智能审批和始终允许规则均不能绕过。
+- **Workspace 切换后的旧上下文隔离** —— 当前会话获批切换到新的本地目录后，本轮其余工具调用会被安全跳过并完整补齐工具响应，随后结束该轮；下一条用户消息才会在新 Workspace 中继续，避免文件或命令误落到旧目录。
+
+### Changed
+
+- 版本号从 **1.139.0-rc3** 提升为 **1.140.0**。
+
+## 1.139.0-rc3 - 2026-07-13
+
+### Fixed
+
+- **无工作区的附件 Source 不再打开空 Files 侧栏** —— 点击精确来源时会把模型引用的行号子范围映射到本地较大的文本块，并在引用窗口中只展示对应行；若章节无法精确解析但原附件仍存在，则直接在 Finder 中选中文件。普通附件路径链接在当前会话未选择工作区时也采用 Finder 降级。
+- 版本号从 **1.139.0-rc2** 递增为 **1.139.0-rc3**。
+
+## 1.139.0-rc2 - 2026-07-13
+
+### Fixed
+
+- **发送预览不再只显示圆形残影** —— 文档“发送预览”改用独立预览窗口承载，不再受 Composer 圆角与聊天列裁切影响；窗口完整展示实际外发文档上下文、敏感信息检测提示和脱敏结果，并提供明确的关闭入口。
+- 版本号从 **1.139.0-rc1** 递增为 **1.139.0-rc2**。
+
+## 1.139.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **附件安全标签不再泄漏到用户气泡** —— 文档正文中的 Markdown 分隔线 `---` 不再被误判为用户输入起点；聊天记录只显示附件摘要和用户真实输入，`untrusted-attachment` 安全信封仍完整发送给模型。新增专用用户正文边界并对附件/技能内容中的同名边界进行转义，同时兼容已有会话。
+- 版本号从 **1.139.0** 递增为 **1.139.0-rc1**。
+
+## 1.139.0 - 2026-07-12
+
+### Added
+
+- **会话级资料库** —— 本地文档解析完成后会持久保留在当前会话，后续提问自动按问题召回相关来源；重新打开会话无需再次解压 Office 文件或执行 OCR。Composer 显示“本会话资料”，可逐份启用、停用、预览来源范围或移除。
+- **附件增量复用** —— 会话资料记录源文件大小与修改时间；未变化的文件直接复用既有解析结果，发生变化时会在发送前自动重新解析并保留用户输入，避免拿旧内容回答。
+- **可点击精确引用** —— Assistant 输出的 `[Source: 文件; page/sheet/section/lines]` 来源标记会渲染为可点击链接；点击打开本地“文档引用”窗口，定位并高亮对应抽取原文，同时可打开原文件或在 Finder 中显示。
+- **文件夹知识源** —— 文件选择器和拖放支持把目录加入当前会话知识库；本地递归索引支持的文档类型，遵守 `.gitignore` 与自定义排除规则，默认跳过构建目录、依赖目录、隐藏文件和常见密钥文件。目录变化通过递归文件系统 watcher 防抖后增量重建，未变化文档复用原解析/OCR 结果。
+- **智能文档任务模式** —— Composer 可选择自动、总结、比较、电子表格分析、代码审查或证据提取；自动模式会根据问题与附件类型选择专用提示，并强制文档事实使用精确来源标记。
+- **发送前隐私预览与本地脱敏** —— “发送预览”展示实际会传给模型的文档片段；默认在本机识别并脱敏私钥、常见 API Key、Bearer/JWT、邮箱、手机号和身份证号。原文件、本地预览与引用窗口仍保留原文，只有外发上下文被替换。
+- **引用证据导出** —— 文档引用窗口可把当前定位原文导出为 Markdown、纯文本、PDF 或 DOCX；导出完全在本机完成。
+
+### Changed
+
+- 版本号从 **1.138.0-rc11** 提升为 **1.139.0**。
+
+## 1.138.0-rc11 - 2026-07-12
+
+### Fixed
+
+- **Office 附件解析兼容 Swift 6 并发检查** —— DOCX/XLSX 的 XML 解析数据结构和 delegate 显式声明为非 actor 隔离，消除后台解析路径的主 actor 警告，避免这些警告在 Swift 6 语言模式下升级为编译错误。
+- 版本号从 **1.138.0-rc10** 递增为 **1.138.0-rc11**。
+
+## 1.138.0-rc10 - 2026-07-12
+
+### Fixed
+
+- **附件解析预览弹层不再出现红色焦点边框** —— Composer 文档附件 chip、预览弹层、全选/全不选按钮、分块选择行和滚动区域补齐 `.focusable(false)`，打开预览或点击分块时不再抢键盘焦点。
+- 版本号从 **1.138.0-rc9** 递增为 **1.138.0-rc10**。
+
+## 1.138.0-rc9 - 2026-07-12
+
+### Added
+
+- **附件解析预览与范围选择**：Composer 文件芯片显示本地解析状态，点击可预览抽取内容，并逐页、逐工作表或逐章节选择是否加入本轮上下文；解析期间发送按钮会等待，避免附件尚未准备好就发出请求。
+- **macOS Vision 本地 OCR**：PDFKit 发现页面没有文本层时，自动把该页渲染为图像并通过 Apple Vision 离线识别中英文；OCR 页在预览中单独标记，模型上下文继续保留原始 PDF 页码。OCR provider 采用协议抽象，为后续可选 PaddleOCR 适配器预留接入点。
+- **精确来源引用**：PDF 页、XLSX Sheet、DOCX 标题章节和文本行块都生成稳定来源标记；大附件按当前问题在本地召回相关块，模型收到的每块内容均带 `[Source: 文件; page/sheet/section/lines]`，便于回答时引用原文位置。
+- **附件提示注入防护**：所有文档内容放入明确的 `untrusted-attachment` 边界，提示模型不得执行文档内指令、泄露机密或把附件当作系统提示；常见中英文覆盖指令会触发可疑内容警告。
+
+### Changed
+
+- **Office 结构抽取增强**：DOCX 保留 Heading 层级；XLSX 标出隐藏工作表，并同时提供公式与缓存计算结果；`unzip` 输出改为及时排空，避免大 OOXML 条目填满管道导致解析阻塞。
+- 版本号从 **1.138.0-rc8** 递增为 **1.138.0-rc9**。
+
+## 1.138.0-rc8 - 2026-07-12
+
+### Added
+
+- **Agent Composer 通用文件附件**：加号文件选择器不再仅限图片，新增本地附加 `txt`、`md`、常见代码文件、`csv`、`tsv`、`json`、PDF、DOCX 和 XLSX；支持多选，并让文件拖放复用同一套附件判断。
+- **Office/PDF 本地上下文抽取接线**：纯文本文件直接读取，PDF 使用 PDFKit 抽取文本层，DOCX/XLSX 使用现有本地 OOXML 解析器转为紧凑文本后加入当轮上下文；扫描版 PDF 无文本层时明确提示需要 OCR。
+
+### Changed
+
+- **附件安全边界**：Composer 文件入口采用扩展名白名单，并为非图片文档设置 50 MB 上限；不支持或过大的拖放文件会显示本地错误，不会静默塞入模型上下文。
+- 版本号从 **1.138.0-rc7** 递增为 **1.138.0-rc8**。
+
+## 1.138.0-rc7 - 2026-07-12
+
+### Changed
+
+- **Agent 侧边栏开关贴合原生窗口控件**：把会话侧边栏的显示/隐藏图标从聊天内容区上方移到 macOS 红黄绿窗口控制按钮的右侧；按钮与原生标题栏同高、保留悬停提示和 `Command+\\` 快捷键，避免遮挡侧边栏标题。
+- 版本号从 **1.138.0-rc6** 递增为 **1.138.0-rc7**。
+
+## 1.138.0-rc6 - 2026-07-12
+
+### Added
+
+- **短剧视频生成引擎选择**：`generate_video_from_image`、`short_drama_generate_shot_media` 和 `short_drama_generate_batch_media` 新增 `video_engine` 参数；不传时默认使用 **Seedance 2.0**，用户指定 `kling` / `可灵` 时改为返回 Kling MCP handoff。
+- **Kling MCP 视频生成接线说明**：可灵路径会给出 `who_am_i`、`file_upload`、`image_to_video` / `text_to_video`、`query_tasks` 的执行顺序，以及完成后通过 `import_media_manifest` 导回短剧分镜/媒体任务侧栏的参数。
+- **媒体任务 provider 支持 Kling**：导入或登记可灵生成结果时，侧栏 provider 可显示为 `Kling`，不再归入未知来源。
+
+### Changed
+
+- **短剧视频提示默认口径统一**：候选图、媒体任务行、storyboard widget 和制作包文档中的视频生成提示改为“默认 Seedance 2.0，可指定 Kling/可灵”，避免旧文案强制引导到 some.im。
+- 版本号从 **1.138.0-rc5** 递增为 **1.138.0-rc6**。
+
+## 1.138.0-rc5 - 2026-07-12
+
+### Changed
+
+- **侧边栏产物按系统方式打开**：Agent 媒体任务侧栏与短剧产物缩略图点击后改为用 macOS 默认 App 打开对应文件，不再把图片强制留在内置预览或把非图片只定位到 Finder。
+- **产物右键菜单增强**：产物缩略图右键菜单新增“打开方式”子菜单，可选择系统可用 App 或手动选择其他 App 打开；同时保留“在 Finder 中显示”。
+- 版本号从 **1.138.0-rc4** 递增为 **1.138.0-rc5**。
+
+## 1.138.0-rc4 - 2026-07-12
+
+### Changed
+
+- **Agent 聊天布局更紧凑**：缩小聊天正文与 composer 的左侧横向留白，让窄窗口下内容更靠近左侧会话区。
+- **窄窗口自动收起会话侧栏**：Agent 模式在窗口缩到阈值以下时会临时隐藏左侧会话侧栏，并显示左侧最近会话 rail；窗口变宽后按用户原本偏好自动恢复。
+- 版本号从 **1.138.0-rc3** 递增为 **1.138.0-rc4**。
+
+## 1.138.0-rc3 - 2026-07-11
+
+### Added
+
+- **编辑器 macOS 行首/行尾快捷键**：Editor 模式支持 `Command+←` / `Command+→` 跳转至当前行首/行尾，`Command+Shift+←` / `Command+Shift+→` 可扩展选区；行为与原生 TextKit 文本编辑一致。
+- 版本号从 **1.138.0-rc2** 递增为 **1.138.0-rc3**。
+
+## 1.138.0-rc2 - 2026-07-11
+
+### Changed
+
+- **保护机密入口后置**：Agent composer 的锁形“插入保护机密”按钮移到发送区附近，不再紧跟附件按钮占用高频操作位。
+- **需要输入时自动弹窗**：Agent 创建终端快捷操作后，如存在尚未填写的受保护输入，会自动弹出安全输入框；明文只写入本机加密终端保险库，AI 不会收到。取消后仍可在原工具卡补填。
+- 版本号从 **1.138.0-rc1** 递增为 **1.138.0-rc2**。
+
+## 1.138.0-rc1 - 2026-07-11
+
+### Added
+
+- **悬浮转写条扩展为可定制视觉系统**：新增经典波条、均衡器、频谱、脉冲、数字矩阵和霓虹天际线 6 种波形；圆角可独立选择微圆角、圆润、柔和或胶囊。
+- 新增量子青、霓虹东京、极光薄荷、离子风暴、等离子核心、太阳耀斑、全息投影、激光网格、深空、赛博日落、月面信号、宇宙葡萄等 12 套双霓虹科幻主题，预览与实际转写浮窗一致。
+- **原生 Computer Use Helper**：新增单独签名并随 App 打包的 `WillDeepComputerUseHelper.app`，不依赖 Alma；它拥有独立的 Accessibility 与 Screen & System Audio Recording 权限。修改系统权限后只需重启 helper，无需重启 WillDeep。
+- Agent 新增原生 macOS 应用发现、后台启动、AX 状态快照、窗口截图、点击、右键、滚动、拖拽、非敏感文本输入、按键与 AX 设值工具；每次操作均回传新的 AX 状态和压缩截图，AX 不足时支持以截图坐标为后备。
+- 所有会读屏或控制外部 App 的动作都强制进入审批边界；密码、验证码、API Key 等敏感数据禁止由 Computer Use 自动输入。
+- 新增 Computer Use 工具风险边界回归测试。
+- 版本号从 **1.137.0-rc6** 递增为 **1.138.0-rc1**。
+
+## 1.137.0-rc6 - 2026-07-11
+
+### Fixed
+
+- **连续天数不再受统计范围影响**：无论选择 24 小时、7 天、30 天还是全部，“当前连续天数”和“最长连续天数”都始终按完整使用历史计算；会话数、消息数、活跃天数与图表仍按所选范围过滤。
+- 新增 31 天连续使用历史在 24 小时筛选下仍保持 `31d / 31d` 的回归测试。
+- 版本号从 **1.137.0-rc5** 递增为 **1.137.0-rc6**。
+
+## 1.137.0-rc5 - 2026-07-11
+
+### Fixed
+
+- **已登录 some.im 时默认省心托管**：未做过模型选择的用户创建新聊天时默认进入“省心托管”；登录对账仅允许尚未开始的空聊天采用该模式，历史会话不会被改写。
+- 模型模式偏好持久化为“未选择 / 省心托管 / 具体模型”三态；用户手动选择具体模型或路由默认值后，后续新聊天不再自动切回托管，再次手动选择“省心托管”即可恢复。
+- 兼容旧版本：已有最近使用模型记录的用户视为曾手动选择模型，升级后继续保留原选择；相关 11 项模型选择测试全部通过。
+- 版本号从 **1.137.0-rc4** 递增为 **1.137.0-rc5**。
+
+## 1.137.0-rc4 - 2026-07-11
+
+### Fixed
+
+- **带参数 Slash 命令不再选中即误触发**：无参数命令继续即时执行；必填或可选参数的 workflow 命令选中后改为填入 `/<command> `，保持 composer 焦点并将光标置于末尾，等待用户补充参数后再按 Enter。
+- Slash 菜单直接展示各 workflow 的参数格式；必填参数为空时保留已输入命令并显示原有缺参错误，可选参数命令可直接再按一次 Enter 使用默认行为。
+- 新增命令参数模式与精确 invocation 解析测试，相关 2 项测试全部通过。
+- 版本号从 **1.137.0-rc3** 递增为 **1.137.0-rc4**。
+
+## 1.137.0-rc3 - 2026-07-11
+
+### Fixed
+
+- **托管消息页脚按 Judge 最终实际模型显示**：`someim-auto-flash/pro/premium` 分别显示“托管-通用-flash/pro/premium”；`someim-coding-*` 与 `someim-code-*` 显示“托管-编程-flash/pro/premium”，其中 `low/high` 统一映射为 `flash/pro`。质量升级后的最终模型也会同步反映在页脚。
+- 历史 TextKit 消息与流式 SwiftUI 消息统一使用完整标签，保留质量升级 `↑` 和 Judge 回退 `~` 标记；悬停提示继续展示实际模型标识。
+- 新增实际模型族、等级映射与状态标记回归测试；相关 39 项测试全部通过。
+- 版本号从 **1.137.0-rc2** 递增为 **1.137.0-rc3**。
+
+## 1.137.0-rc2 - 2026-07-11
+
+### Fixed
+
+- **聊天选文入口改为贴选区悬浮 tooltip**：选中文字后不再自动弹出原生 `NSMenu`，改为在选区上方显示单按钮圆角浮层；上方空间不足时自动落到下方，并约束在当前可见区域内。点击空白处、重新选择或历史内容刷新时会自动收起，右键菜单仍保留“添加到任务”作为备用入口。
+- 相关 `AgentChatHistoryRendererTests` 34 项全部通过。
+- 版本号从 **1.137.0-rc1** 递增为 **1.137.0-rc2**。
+
+## 1.137.0-rc1 - 2026-07-11
+
+### Added
+
+- **聊天历史选文添加到任务**：在历史用户输入或 AI 输出中选中文字后，选区旁会弹出仅含“添加到任务”的菜单；点击后原文作为“对话摘录”文本附件进入底部 composer，可删除、继续补写问题，并随下一条用户消息持久化及发送给模型。右键选区也保留同一入口；不实现截图中的“更多详情”和“在侧边聊天中提问”。
+- 新增选区传递与空选区保护回归测试；`AgentChatHistoryRendererTests` 34 项全部通过。
+- 版本号从 **1.136.0-rc52** 提升为 **1.137.0-rc1**。
+
+## 1.136.0-rc52 - 2026-07-10
+
+### Added
+
+- **终端 Shell 选项**：终端设置新增 zsh、bash、sh、fish、ksh、tcsh 等常见 Shell 路径菜单，同时保留自定义路径输入；编辑器底部终端和 Agent 侧栏本地终端统一读取该设置。
+- 版本号从 **1.136.0-rc51** 递增为 **1.136.0-rc52**。
+
+### Fixed
+
+- **some.im 国家综合探测**：客户端并发查询 Cloudflare 代理后的 `https://some.im/api/v1/public/client-location`、`myip.ipip.net` 与 `api.myip.la/en?json`，任一路明确返回中国即使用国内 API；没有中国但至少一路有效返回非中国时使用国际 API，三路均失败则保留上次线路。探测不会因当前推理线路已切到 `api.niuwoai.com` 而改用国内 API Host。
+- **已登录 some.im 账号入口**：会话列表底部的账号名称与小齿轮统一通过可靠的设置窗口深链打开「some.im 整合」标签，不再依赖可能停留在旧标签或未显示窗口的系统 `showSettingsWindow:` 动作；刷新按钮仍仅刷新账户状态。
+
+## 1.136.0-rc51 - 2026-07-10
+
+### Changed
+
+- **some.im 按远端国家自动选路**：启动时访问 some.im 公共客户端位置接口；中国（`CN`）自动使用 `https://api.niuwoai.com/v1`，其余地区或位置接口暂不可用时使用全球线路或保留上次可用线路。
+- **移除手工“some.im 整合”设置**：不再让用户选择开关、地区、Base URL 或编辑 API Key；登录状态与 Keychain 凭据自动驱动接入，只保留图片/视频模型偏好并自动拉取模型。
+- **视频默认模型**：新旧空配置统一补齐为 `seedance-2.0`。
+
+### Fixed
+
+- **设置页点数格式统一**：some.im Account 中的大额 credits 与会话列表左下账户区共用 `M/B` 两位小数紧凑格式，避免再次显示十位超长数字。
+- 版本号从 **1.136.0-rc50** 递增为 **1.136.0-rc51**。
+
+## 1.136.0-rc50 - 2026-07-10
+
+### Fixed
+
+- **修复 Debug 包缺少共享 Keychain 签名权限**：为 Xedit Debug 配置补上 `Xedit/WillDeep.entitlements`，让浏览器登录回传的 some.im 凭据可以写入共享 session；未被本地签名授权时仍保留普通 Keychain 回退。
+- 版本号从 **1.136.0-rc49** 递增为 **1.136.0-rc50**。
+
+## 1.136.0-rc49 - 2026-07-10
+
+### Fixed
+
+- **修复无签名 Debug 包无法保存 some.im 登录凭据**：检测到共享 Keychain access group entitlement 不可用时，Debug 包回退到当前 App 的普通 Keychain；正式签名包继续使用共享 Keychain。
+- 版本号从 **1.136.0-rc48** 递增为 **1.136.0-rc49**。
+
+## 1.136.0-rc48 - 2026-07-10
+
+### Changed
+
+- **打包脚本自动读取 some.im 客户端密钥**：`debug_install_mac_apps.rb` 与 `release_mac_apps.rb` 在本地未设置 `WILLDEEP_CLIENT_LOGIN_SECRET` 时，通过 SSH 从 `root@h1.niuwoai.com:/etc/niuwo/niuwo.env` 读取；值只在当前构建进程内传递，不写日志或本地文件。
+- 版本号从 **1.136.0-rc47** 递增为 **1.136.0-rc48**。
+
+## 1.136.0-rc47 - 2026-07-10
+
+### Fixed
+
+- **some.im 客户端登录密钥不再写入 Info.plist**：保留编译期 Swift 常量注入，移除旧的 Info.plist 占位符，避免同一密钥在 App 包中重复保存。
+- 版本号从 **1.136.0-rc46** 递增为 **1.136.0-rc47**。
+
+## 1.136.0-rc46 - 2026-07-10
+
+### Fixed
+
+- **some.im 客户端登录密钥改为编译期 Swift 常量**：Xcode 从 `WILLDEEP_CLIENT_LOGIN_SECRET` 生成 DerivedData 源文件，`debug_install_mac_apps.rb` 与 `release_mac_apps.rb` 在缺少变量时拒绝打包；真实密钥不写入源码仓库。
+- 版本号从 **1.136.0-rc45** 递增为 **1.136.0-rc46**。
+
+## 1.136.0-rc45 - 2026-07-10
+
+### Fixed
+
+- **修复 some.im 浏览器登录包漏注入客户端密钥**：Release 打包现在要求构建环境提供 `WILLDEEP_CLIENT_LOGIN_SECRET`；运行时若 bundle 仍缺少该值，会在打开登录前直接提示构建配置问题，不再让浏览器登录后才显示“没有返回凭据”。密钥值不写入仓库、日志或 UI。
+- 版本号从 **1.136.0-rc44** 递增为 **1.136.0-rc45**。
+
+## 1.136.0-rc44 - 2026-07-10
+
+### Fixed
+
+- **some.im 浏览器登录状态不再静默卡在等待**：兼容 `success`、`completed`、`authorized`、`logged_in` 等完成态；轮询遇到 401/404 或网络错误时立即在登录卡片显示原因，同时继续重试，不再把请求失败伪装成“正在等待浏览器登录”。
+- 新增 completed-style 浏览器登录状态回归测试。
+- 版本号从 **1.136.0-rc43** 递增为 **1.136.0-rc44**。
+
+## 1.136.0-rc43 - 2026-07-10
+
+### Fixed
+
+- **复杂一次性命令不再推荐“总是允许”**：审批卡把“已有永久规则如何匹配”和“当前调用是否值得新建永久规则”拆成两层。常规、短小且可复用的命令（如 `git push origin branch`）仍显示“总是允许”；参数过多、命令过长、SSH 套远端命令、shell/解释器内联脚本和参数过深的 Lark CLI 调用只显示本次允许，避免为低复用命令制造永久授权规则。
+- **不为按钮展示额外消耗模型调用**：长期复用价值先由本地确定性策略判断，安全判官继续只负责“当前命令能否自动执行”；已保存的旧规则仍按原签名匹配，不会因 UI 收紧而失效。
+- **侧边栏终端 ZMODEM 支持工具预选本机路径**：`terminal_send_command` 新增 `zmodem_upload_paths` 和 `zmodem_download_directory` 参数，Agent 可在远端 `rz` / `sz` 握手前直接指定本机文件或目录；参数缺省时仍由用户通过 macOS 文件面板选择，并限制为一次性、方向匹配的预选。
+- 新增授权推荐边界测试，覆盖可复用 `git push`、多参数 `go test`、SSH 远端层、`ruby -e` 内联脚本和短终端命令。
+- **远程媒体任务默认免审批**：`some_im_create_media_task` / `some_im_poll_media_task` / `some_im_cancel_media_task` 及对应的 `replicate_*` 预测工具是异步渲染任务的提交·轮询·取消，无本地副作用，却在每次提交（乃至每次轮询同一任务）时都弹「允许/拒绝」。现按静态白名单默认放行（仍保持 `.write` 语义与只读沙箱），仅 `requestEveryTime` 模式仍强制手动确认。
+- 版本号从 **1.136.0-rc42** 递增为 **1.136.0-rc43**。
+
+## 1.136.0-rc42 - 2026-07-10
+
+### Fixed
+
+- **右侧「产物」不再等同于 Git 未提交文件**：新增会话级 `agentArtifactPaths` 产物清单，只记录当前 AI 会话新建的用户可交付文档、图片、音视频等文件，并与同一会话的媒体任务输出合并展示；已提交到 Git 的产物仍会保留，其他会话、旧脏文件、已有源码修改、`build`/缓存目录不会再混入。
+- **「产物」与「工作文件」口径明确分离**：产物区直接标明“当前会话产生的文件与媒体”，工作文件区标明“当前会话关联的未提交变更”；同一会话的产物从工作文件分组中去重，避免一份文件在右栏重复出现。
+- 新增会话产物归因测试，覆盖新建 PDF/视频应进入产物、已有源码修改和构建/缓存输出应排除的边界。
+- 版本号从 **1.136.0-rc41** 递增为 **1.136.0-rc42**。
+
+## 1.136.0-rc41 - 2026-07-09
+
+### Fixed
+
+- **省心托管下 `spawn_agent` 子 agent 悄悄跑基础 tier**：当轮实际生效的模型由 judge 路由（及无 tool_call 时的输出质量升档）写入 `turnConfiguration.model`，但 `spawn_agent` 的调用处一直传的是没被路由过的基础 `configuration`。结果 some.im 省心托管开启时，父 agent 在跑升档后的 tier（如 `someim-code-premium`），子 agent 却继承 base flash tier，输出无声变差。现改为向 `executeSpawnAgentToolCall` 传 `turnConfiguration`，子 agent 与父 agent 同 tier。非托管场景 `turnConfiguration == configuration`，行为不变。
+- 版本号从 **1.136.0-rc40** 递增为 **1.136.0-rc41**。
+
+## 1.136.0-rc40 - 2026-07-09
+
+### Fixed
+
+- **Workflow（`/code-review` 等）在 some.im 模型下空转卡死**：workflow 的子 agent 此前建 client 时漏传 `someIMContext`（会话/工作区上下文头），而主循环每个 some.im 请求都会带。结果在**经 some.im 连接的模型**（如 gpt-5.5）上，子 agent 请求缺合法会话上下文被 some.im stall，卡片只剩一个「Workflow」图标、无进度无报错。现按主循环同样逻辑构造 `someIMContext` 并透传到 `WorkflowEngine → AgentSubagentRunner`。
+- **Workflow 看门狗超时**：新增单次运行 360s 看门狗（`AppStateAgentWorkflows.runWorkflowWithWatchdog`）。子 agent 的 provider 请求 stall 时不再无限挂起，超时即把卡片转为 `.failed` 并给出「模型/网关可能没响应」的原因。
+- **`/code-review` 全维度失败不再伪装成功**：4 个 review 维度全失败时，此前会返回一句成功字符串让卡片变绿勾；现改为抛 `WorkflowError.allTasksFailed`，卡片正确显示 `.failed`。
+- 版本号从 **1.136.0-rc39** 递增为 **1.136.0-rc40**。
+
+## 1.136.0-rc39 - 2026-07-09
+
+### Fixed
+
+- **some.im 浏览器登录卡死自恢复**：当 browser-status 返回 `connected` 却没有可识别的 WillDeep API Key 时，现在会丢弃这个已被服务端标记为 connected 的一次性登录 `code`（此前保留在内存里，导致再点「在浏览器打开」复用死 code、被秒回同一条“已登录但没有返回凭据”，只能重启 App 才能恢复）。清空后再次打开即会 mint 全新 `code`。设置页与 Onboarding 两处轮询均已修复。
+- **some.im 登录诊断日志**：`connected` 却无凭据时，记录响应里出现的字段名（仅字段名、不含任何值，避免泄露 token / 邮箱），便于比对 some.im 实际返回的 key 命名或确认是否根本没下发凭据。
+- 版本号从 **1.136.0-rc38** 递增为 **1.136.0-rc39**。
+
+## 1.136.0-rc38 - 2026-07-09
+
+### Fixed
+
+- **some.im 浏览器登录协议兼容**：浏览器登录 URL 和状态轮询同时携带 `code` / `device_code` / `willdeep_device_code` 与 `pair_token` / `willdeep_pair_token`，兼容按新旧参数名实现的 some.im 控制面。
+- **some.im 扁平凭据回写兼容**：browser-status 返回 `connected` 且携带 app API key 时，不再强制要求嵌套 `account` 对象；支持扁平 `email` / `credits` / `default_model` 与 `api_token` / `customer_session_token` 字段，避免误报“已登录但没有返回凭据”。
+- 版本号从 **1.136.0-rc37** 递增为 **1.136.0-rc38**。
+
+## 1.136.0-rc37 - 2026-07-09
+
+### Fixed
+
+- **修正 some.im auto 托管模型命名**：无 coding plan 且裁判域为 general 时，low/high/premium 分别解析为 `someim-auto-flash/pro/premium`，不再使用不存在的 `someim-auto-low/high`。
+- 版本号从 **1.136.0-rc36** 递增为 **1.136.0-rc37**。
+
+## 1.136.0-rc36 - 2026-07-09
+
+### Changed
+
+- **some.im Coding Plan 感知托管路由**：登录 some.im 后会定期查询 `/customer/plan/subscription` 并缓存 coding plan 状态；省心托管路由在每轮裁判后根据该状态选择模型族。
+- **托管模型族按权益拆分**：有 coding plan 时，low/high/premium 统一解析为 `someim-coding-plan-low/high/premium`；没有 plan 时，编程域解析为 `someim-code-low/high/premium`，通用域解析为 auto 家族。
+- 版本号从 **1.136.0-rc35** 递增为 **1.136.0-rc36**。
+
+## 1.136.0-rc35 - 2026-07-09
+
+### Changed
+
+- **本地模型辅助任务拆分**：设置页将“标题和上下文压缩先用本地”拆成“会话标题先用本地”和“上下文压缩先用本地”两个独立开关；旧配置只迁移到标题偏好，上下文压缩默认保持远端 provider。
+- **本地模型 composer 备选**：新增“加入 composer 模型备选”和显示名称输入框；勾选后自动维护一个固定 ID 的 Ollama / Local OpenAI provider 条目，让本地聊天模型进入 composer 模型菜单，取消勾选时只移除这个自动条目。
+- **委派 coding agent 默认免审核**：`claude_code` / `codex_cli` / `cursor_agent` / `cline_cli` 在默认 smart 模式下不再逐次弹人工审批，直接放行（`.staticAllowlist`）——它们各自自带审批 + 沙箱审核，视为可信。`requestEveryTime`（每次都问）模式仍会逐次询问；子进程自身的沙箱边界不变（不提权）。
+- 版本号从 **1.136.0-rc34** 递增为 **1.136.0-rc35**。
+
+## 1.136.0-rc34 - 2026-07-09
+
+### Fixed
+
+- **some.im 浏览器登录凭据落库校验**：浏览器配对返回 connected 后，WillDeep 现在必须先把 app API Key 写入共享 session 并读回验证，成功后才保存 account 与启用 some.im；如果 some.im 没返回 key，或本机 Keychain / 共享 session 写入失败，不再把设置页显示成已连接但 API Key 为空。
+- **some.im 设置页同步共享登录态**：设置页订阅 some.im account/session 变更通知，通知到达时会重新读取 account、settings 与 API Key，并同步 Agent provider / 图片理解配置，避免跨 App 登录或浏览器回调后只刷新账号摘要、不刷新 API Key 输入框。
+- 版本号从 **1.136.0-rc33** 递增为 **1.136.0-rc34**。
+
+## 1.136.0-rc33 - 2026-07-09
+
+### Changed
+
+- **Agent 左侧输入 minimap 悬停对齐 Codex**：hover 某条刻度时改为“鱼眼”放大——被悬停的刻度最长、颜色最深（accent 满强度），临近的几条按距离渐次变短、颜色渐次变浅，平滑过渡到静止态，不再只有单独一条突变。
+- **minimap 悬停缩略卡直接出现**：卡片从“自左侧滑出 + 渐显”改为直接出现（`.identity`），在不同刻度间快速切换时不再有卡片一边滑出一边滑入的花哨效果；刻度鱼眼仍保留 0.12s 平滑动画。
+- 版本号从 **1.136.0-rc32** 递增为 **1.136.0-rc33**。
+
+## 1.136.0-rc32 - 2026-07-09
+
+### Fixed
+
+- **Agent 会话切换延迟优化**：点击左侧会话列表时先切换 `activeAgentSessionID`，再以不刷新 `updatedAt`、不移动列表位置的方式保存旧会话，避免保存和会话重排挡在选中态反馈前。
+- **Agent 侧栏分组热路径减负**：工作区分组预先缓存 display name 与远端 runtime 描述，排序比较不再反复 `URL(fileURLWithPath:)` 或 JSON decode UserDefaults，降低 SwiftUI body 重算时的主线程开销。
+- **Agent context ring 估算减半**：`estimatedAgentSystemMessage` 新增与两个 token 估算值同款的 `(messageCount, sessionID, 1s)` 缓存。此前 `estimatedAgentTokens` 与 `estimatedAgentBaselineTokens` 会在会话切换（两个值缓存同时失效）时各自完整构建一遍 system prompt 并跑一遍内存检索，两次都压在点击主线程上；现在两个估算器共享一次构建，切换时最重的“system prompt 构建 + 内存检索”从 2 次降到 1 次。
+- **Agent 切换跳过重复工作区 stat**：`syncWorkspaceContext` 在目标会话工作区已经激活过安全域时直接返回，不再每次会话切换都对同一目录做一次 `isExistingDirectory` 文件系统 stat（同工作区内多会话来回切时最明显）。
+- 版本号从 **1.136.0-rc31** 递增为 **1.136.0-rc32**。
+
+## 1.136.0-rc31 - 2026-07-09
+
+### Fixed
+
+- **some.im 浏览器登录控制面固定**：浏览器登录页与配对状态轮询固定使用 `https://some.im` 控制面，不再从当前推理 Base URL 推导 `/customer/login`，避免选择国内推理节点 `https://api.niuwoai.com/v1` 时打开错误网页登录域名。配对码继续统一使用 some.im 端接受的 `WD-` 前缀。
+- 版本号从 **1.136.0-rc30** 递增为 **1.136.0-rc31**。
+
+## 1.136.0-rc30 - 2026-07-09
+
+### Added
+
+- **对话区左侧「用户输入刻度尺」**:Agent 对话区左边缘中部新增一列等大、等距的短横线,每条对应一次用户输入。鼠标移到某条横线上:横线变长,旁边浮出小卡片(这一轮用户说了啥 / AI 回了啥 / 改了哪些文件);点击则把对话区滚动到该用户输入处(复用历史 NSTextView 的 `agentChatHistoryUserMessageID` 锚点 + `scrollRangeToVisible`,纯原生无新依赖)。
+
+### Changed
+
+- **对话区显示轮数上限从 20 条提升到 60 条**(约 30 个用户轮)。历史烘焙进单个增量布局的 NSTextView,放大窗口不会重新引入长列表卡顿;单条内容仍由 `messageContentRenderCap` 兜底。
+- 版本号从 **1.136.0-rc29** 递增为 **1.136.0-rc30**。
+
+## 1.136.0-rc29 - 2026-07-09
+
+### Added
+
+- **Markdown inline code 胶囊与 Hex 色块渲染**:Agent 聊天 Markdown 里的 inline code 继续保持轻量胶囊观感;`#RGB` / `#RRGGBB` / `#RRGGBBAA` 这类颜色字面量会自动追加同色小方块。流式 SwiftUI 消息和落定后的 TextKit 历史消息共用同一套 inline 语义增强,避免刚生成时好看、滚进历史后变素颜。
+- **归档带活跃定时任务的会话前会确认**:归档一个仍拥有活跃定时任务的会话时,弹确认框提示「该会话有 N 个活跃定时任务,归档会停止并移除它们」;确认后先删掉这些任务再归档(归档后本就不该再跑)。取消则不动。
+- **会话列表活跃定时任务时钟图标**:会话行最前面新增一个小时钟图标(仅当该会话拥有 enabled 的定时任务时显示),一眼看出哪些会话挂着在跑的定时任务。
+- 版本号从 **1.136.0-rc28** 递增为 **1.136.0-rc29**。
+
+## 1.136.0-rc28 - 2026-07-09
+
+### Added
+
+- **会话内定时任务(schedule_task)**:Agent 现在能在对话里直接安排一个定时任务——新增 `schedule_task` 工具(支持 `interval_minutes` 或 `daily_at`,可选 `goal` 目标),安排后 transcript 底部会出现一张**定时任务卡片**,点击可打开该任务详情(侧栏编辑器)。定时任务复用既有 Routine 调度器,每次在后台新会话里跑给定 prompt。
+- **达成目的自动消失**:给任务设 `goal` 后,每次触发的那次 agent 会被要求判断目标是否达成;达成则调用新增的 `complete_scheduled_task` 工具移除自己(卡片转为「已完成」灰态、侧栏条目消失)。`AgentRoutine` 新增 `originSessionID` / `goal` 字段(向后兼容)。卡片消息以新的 `.scheduledTask` role 持久化随会话保留,且不发给 LLM。
+- 版本号从 **1.136.0-rc27** 递增为 **1.136.0-rc28**。
+
+## 1.136.0-rc27 - 2026-07-08
+
+### Changed
+
+- **Agent 侧栏 some.im 账号入口点击行为**：已登录时点击账号位改为打开「设置 → some.im」整合 tab（不再跳浏览器），图标随之从外链箭头改为齿轮；未登录时保持点击进入浏览器登录。移除了已登录点击走浏览器 handoff 的死代码。
+- 版本号从 **1.136.0-rc26** 递增为 **1.136.0-rc27**。
+
+## 1.136.0-rc26 - 2026-07-08
+
+### Added
+
+- **some.im 登录态跨 App 共享**：apiKey / sessionToken 改存共享 Keychain 访问组（Team `ZH2S7D6PL6`，entitlement `keychain-access-groups`），通过独立私有 Swift 包 [`SomeIMSharedSession`](https://github.com/xurenlu/SomeIMSharedSession) 收拢读写。一处登录、本机所有签名 App 都登录；一处登出、大家一起登出（登录/登出经 `DistributedNotificationCenter` 广播不含任何密钥的变更通知，各 App 收到后重读凭据并对账 agent provider）。首次启动把旧的 per-app Keychain 凭据一次性迁移进共享组、验证读回后删旧。`saveAPIKey("")` 由「删 key」改为 no-op，杜绝设置页空串误覆盖导致的「登录一会儿就掉」。
+- **some.im 设置页「退出登录」按钮**：账户区新增带二次确认的退出登录，清共享会话（广播全 App）+ 本地缓存 + agent provider；文案 en / zh-Hans 齐备。
+- **CI 私有包鉴权**：`test.yml` 用只读 deploy key（secret `SOMEIM_DEPLOY_KEY`）解析私有 `SomeIMSharedSession` 包，https→ssh 重写仅限定该包仓，公开依赖 SwiftTerm 不受影响。
+
+### Changed
+
+- 版本号从 **1.136.0-rc25** 递增为 **1.136.0-rc26**。
+
+## 1.136.0-rc25 - 2026-07-08
+
+### Changed
+
+- **some.im 生图默认异步化**：`generate_image` 现在复用 `some_im_create_media_task`，普通 Agent 生图会提交到媒体任务中心并由轮询下载产物，不再阻塞等待同步 `/images/generations` 返回。
+- **some.im 图片媒体任务默认端点** 从 `images/generations` 改为 `images/async-generations`；短剧分镜/资产图片生成等复用 `SomeIMAsyncMediaClient.defaultEndpointSuffix` 的入口同步走异步生图接口，视频仍默认 `videos/generations`，图片编辑仍默认 `images/edits`。
+- **some.im 媒体任务请求超时**：提交、轮询、取消请求的单次 `URLRequest.timeoutInterval` 明确设为 `AgentNetworkSupport.resourceTimeout`（600 秒），避免默认 request timeout 120 秒先取消长耗时请求。
+- 版本号从 **1.136.0-rc24** 递增为 **1.136.0-rc25**。
+
+## 1.136.0-rc24 - 2026-07-08
+
+### Added
+
+- **some.im「省心托管」动态路由（Phase 1 + Phase 2 + Phase 3）**：composer 模型菜单在 some.im provider 下新增「省心托管」入口。选中后每个用户轮先用轻量裁判模型 `someim-judge`（底层非思考 DeepSeek）判断任务域（coding/general）与复杂度（low/high），结合会话级「只升不降」能力档位动态选择本轮实际模型（`someim-coding-plan-low/high/premium`、`someim-auto-flash/pro`）；裁判失败自动回退本地启发式。无 tool call 的输出会做质检（本地确定性重复/空输出检测 + `someim-judge` 复核），命中明确生成故障时清掉本轮输出并升一档重试一次（每用户轮至多一次）。some.im 请求附带 `x-willdeep-session-id` 与本机随机 `x-willdeep-workspace-id`（只发随机 UUID，不含任何本地路径）。裁判与主模型共用同一 provider 并发槽；路由锁定每用户轮一次，tool 循环内不重判。可观测性：每条 assistant 消息记录本轮 route 决策（选中模型/档位/domain/complexity/是否 fallback/是否升档），消息 footer 显示「托管 · Low/High/Premium」标记（升档 ↑、fallback ~）。设计文档：`docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`。
+
+### Changed
+
+- 版本号从 **1.136.0-rc23** 递增为 **1.136.0-rc24**。
+
+## 1.136.0-rc23 - 2026-07-08
+
+### Fixed
+
+- `cursor_agent` 外部委派工具现在能发现官方独立安装的 `cursor-agent`（`curl https://cursor.com/install | bash` 装在 `~/.local/bin/cursor-agent`，且不提供 `cursor` 命令）。此前发现逻辑只查 `cursor` 编辑器启动器，只装了独立 Agent CLI 的用户会被误判为"未安装"、调用直接失败。发现优先级：独立 `cursor-agent` → `cursor` 编辑器启动器（后者会把 `agent` 子命令转发给同一个 headless agent）。`LocalAgentCLI` 设置页发现目录同步更新。
+- 委派给外部 CLI（claude / codex / cursor / cline）时，子进程 PATH 补上 `~/.local/bin` 与 `~/.cargo/bin`。从 Finder/Dock 启动 App 只继承最小 launchd PATH，外部 CLI 再 fork 的 `node` / `uv` / `python` / `git` 若装在用户级前缀里会 `command not found`，导致委派任务跑到一半失败。
+
+### Changed
+
+- 版本号从 **1.136.0-rc22** 递增为 **1.136.0-rc23**。
+
+## 1.136.0-rc22 - 2026-07-08
+
+### Fixed
+
+- 智能审批 LLM 判官不再因 API key 时序竞态而静默掉线：`configurationForSafetyJudge()` 在运行时配置的 apiKey 为空时，直接从当前激活的 provider library 条目的 Keychain 密钥补齐（读本地副本、不触发 provider-library 的 didSet 级联），消除审计日志里大量 `unavailable / missing api key` 导致的"判官没上岗、直接退回人工"。
+
+### Changed
+
+- Goal 模式不再对所有写操作"一刀切"自动放行。沙箱内、非破坏性的文件写与已校验的公网 `web_fetch` 仍然快速放行以保持自主；命令类调用（`run_command` / `terminal_send_command` / `terminal_send_control` / `call_mcp_tool`）改为走与 smart 模式相同的「静态分类 → LLM 判官」闸门（Goal 模式隐式启用判官）。判官判为危险、判官不可用，或属于需打字确认的破坏性操作时，暂停等待人工，而非盲目执行——按风险分级，向 Codex 的 auto-review 语义靠拢。
+- 版本号从 **1.136.0-rc21** 递增为 **1.136.0-rc22**。
+
+## 1.136.0-rc21 - 2026-07-08
+
+### Fixed
+
+- `generate_image` / some.im 图片任务产出的生成图会挂到最终 assistant 消息，在 Markdown 下方直接显示缩略图，不再只藏在工具结果里。
+- 生成图默认保存到当前 workspace 根目录，可通过 `output_directory` 指定 workspace 内子目录，不再落到下载目录。
+- 聊天区生成图支持右键“引用”，会向 composer 写入 `<generated-image-reference ... />` 标记；后续修改该图时可通过 `edit_generated_image` 发送给 `gpt-image-2` 作为参考图，不需要重新上传图片。
+- 版本号从 **1.136.0-rc20** 递增为 **1.136.0-rc21**。
+
+## 1.136.0-rc20 - 2026-07-08
+
+### Fixed
+
+- Agent 会话区右上 Diff、Terminal、Preview、Files 快捷入口移除外层胶囊框和选中图标底框，避免图标外再套一层圆角矩形。
+- 选中态改用图标强调色与字重表达，保持可点击热区和侧栏切换行为不变。
+- 版本号从 **1.136.0-rc19** 递增为 **1.136.0-rc20**。
+
+## 1.136.0-rc19 - 2026-07-08
+
+### Added
+
+- Agent 聊天会话新增 `Command+F` 会话内搜索：右上角显示悬浮搜索入口，输入后高亮所有命中，并提供上一条/下一条和当前命中计数。
+- 搜索模式会临时纳入当前会话完整可见历史，不再只覆盖默认渲染的最近消息；当前命中会自动滚入视口，搜索时不会被自动到底滚动打断。
+- 新增搜索匹配与活动高亮回归测试，锁定大小写无关匹配和当前命中特殊高亮。
+- 版本号从 **1.136.0-rc18** 递增为 **1.136.0-rc19**。
+
+## 1.136.0-rc18 - 2026-07-08
+
+### Fixed
+
+- Agent 左下 some.im 账号区改用紧凑 credits 展示，百万/十亿级数字显示为 `46.00M` / `4.21B`，避免长余额挤爆侧栏。
+- 补齐 some.im 账号区 credits、打开账号、刷新余额等文案的中英文本地化，中文环境不再显示英文 `credits`。
+- 新增回归测试，锁定 some.im credits 紧凑格式保留两位小数。
+- 版本号从 **1.136.0-rc17** 递增为 **1.136.0-rc18**。
+
+## 1.136.0-rc17 - 2026-07-08
+
+### Fixed
+
+- Agent 右侧 Diff 面板的彩色 diff 渲染改为后台生成 `AttributedString`，避免打开面板时主线程同步拆行和着色导致窗口卡顿。
+- Diff 面板在侧栏渲染前会截断超大 diff 并提示如何查看完整内容，防止长文本直接进入 SwiftUI `Text`。
+- 新增回归测试，锁定超大 diff 会在进入侧栏显示前降级。
+- 版本号从 **1.136.0-rc16** 递增为 **1.136.0-rc17**。
+
+## 1.136.0-rc16 - 2026-07-08
+
+### Fixed
+
+- `generate_image` 现在作为无需用户审核的 read-tier Agent 工具直接执行；some.im 启用、API key 和 prompt 校验仍在实际调用前保留。
+- 新增回归测试，锁定通用图片生成工具不会进入审批等待。
+- 版本号从 **1.136.0-rc15** 递增为 **1.136.0-rc16**。
+
+## 1.136.0-rc15 - 2026-07-08
+
+### Added
+
+- 新增 `docs/SOME_IM_MAC_APP_INTEGRATION.md`，系统说明 macOS App 接入 some.im 的浏览器登录、Keychain 存储、provider library 同步、VL fallback、onboarding/settings 入口和验证清单。
+- 新增 `BundledSkills/some-im-mac-integration`，让 Agent 在修改或审查 some.im Mac 接入时优先使用该工作流和安全边界。
+- 版本号从 **1.136.0-rc14** 递增为 **1.136.0-rc15**。
+
+## 1.136.0-rc14 - 2026-07-08
+
+### Changed
+
+- Onboarding 的 some.im 步骤改为浏览器登录优先：进入步骤自动准备登录请求，用户点击“在浏览器打开”完成 some.im 登录后回到 WillDeep 继续流程。
+- Onboarding 移除 some.im 邮箱验证码表单；该步骤仍可跳过，用户可以在 AI provider 步骤手动填写 API key 和模型。
+- AI provider onboarding 在所选主模型不支持图片输入时，会要求补充 VL/视觉 provider、Base URL、API key 和模型，并再次建议直接集成 some.im 以省掉多模态兜底配置。
+- 版本号从 **1.136.0-rc13** 递增为 **1.136.0-rc14**。
+
+## 1.136.0-rc13 - 2026-07-08
+
+### Changed
+
+- some.im 设置页的浏览器登录体验简化为进入页面自动准备登录请求，只保留“在浏览器打开”入口；用户在浏览器完成 some.im 登录后，页面提示回到 WillDeep 继续使用。
+- 移除 Settings → some.im 里的邮箱验证码表单、二维码、随机码、URL 展示和复制按钮，避免用户在多个登录入口之间来回猜。
+- 版本号从 **1.136.0-rc12** 递增为 **1.136.0-rc13**。
+
+## 1.136.0-rc12 - 2026-07-08
+
+### Fixed
+
+- Agent 空白页统计面板的“当前连续天数”在今天尚未开始写时不再直接清零，会保留截至昨天的连续写作天数；只有今天和昨天都没有记录时才显示 0。
+- 新增连续天数回归测试，覆盖“今天空但昨天连续”和“昨天也断档”两种场景。
+- 版本号从 **1.136.0-rc11** 递增为 **1.136.0-rc12**。
+
+## 1.136.0-rc11 - 2026-07-08
+
+### Fixed
+
+- Agent 左下未绑定 some.im 账号区现在直接打开 fallback Settings 窗口，绕过系统 `showSettingsWindow:` 偶发吞掉程序化打开请求的问题。
+- 未绑定 some.im footer 增加整块点击与 simultaneous tap 兜底，点击头像、文字、空白或齿轮区域都能触发 Settings → some.im 并自动生成浏览器登录链接。
+- 版本号从 **1.136.0-rc10** 递增为 **1.136.0-rc11**。
+
+## 1.136.0-rc10 - 2026-07-08
+
+### Fixed
+
+- 普通启动不再先创建空 Editor 主窗口再延迟切到 Agent；Agent 单例窗口现在作为默认启动 Scene 直接打开。
+- 显式打开文件/目录、`willdeep://open?path=...` 和手动“显示 Editor”仍走 Editor 窗口，不改变 editor mode 入口。
+- 版本号从 **1.136.0-rc9** 递增为 **1.136.0-rc10**。
+
+## 1.136.0-rc9 - 2026-07-08
+
+### Fixed
+
+- Agent 左下未绑定 some.im 的头像/账号区现在点击后会直达 Settings → some.im，并自动生成浏览器登录链接和二维码。
+- some.im 设置页会消费来自导航入口的自动生成请求；如果页面已存在未完成链接，会恢复同一随机码的轮询而不是重新生成。
+- 版本号从 **1.136.0-rc8** 递增为 **1.136.0-rc9**。
+
+## 1.136.0-rc8 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录轮询不再因设置页暂时消失而取消；用户跳到浏览器完成登录后，WillDeep 仍会继续等待并自动接收 `connected` 状态。
+- 已生成的浏览器登录链接在再次点击“在浏览器打开”时会恢复同一随机码的轮询，避免浏览器已完成但 App 停在二维码状态。
+- 浏览器登录卡片现在显示真实轮询状态，不再在 watcher 停止后误导性显示“链接已生成”。
+- 版本号从 **1.136.0-rc7** 递增为 **1.136.0-rc8**。
+
+## 1.136.0-rc7 - 2026-07-08
+
+### Fixed
+
+- About 菜单现在由 AppDelegate 在启动和重新激活时直接接管系统 App 菜单项，避免 SwiftUI commands 只挂在 URL WindowGroup 上导致普通启动或 Agent 窗口里仍打开系统默认 About 面板。
+- 版本号从 **1.136.0-rc6** 递增为 **1.136.0-rc7**。
+
+## 1.136.0-rc6 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录轮询在服务端返回 `connected` 但缺少 WillDeep 凭据时，现在会保留 `connected` 状态并让设置页立即显示明确错误，不再降级为 `unknown` 后继续显示“正在等待浏览器完成登录”。
+- 新增 browser-status `connected` 缺凭据场景的回归测试。
+- 版本号从 **1.136.0-rc5** 递增为 **1.136.0-rc6**。
+
+## 1.136.0-rc5 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录状态回写兼容嵌套 `credentials`、camelCase 凭据字段，以及 `account` / `customer` / `user` 账号字段，避免浏览器显示登录完成但桌面端继续等待。
+- 浏览器登录状态为 connected 但缺少 WillDeep API key / 账号信息时，设置页会立即停止等待并显示明确错误，不再静默转圈到超时。
+- 新增 some.im browser-status 兼容响应单测。
+- 版本号从 **1.136.0-rc4** 递增为 **1.136.0-rc5**。
+
+## 1.136.0-rc4 - 2026-07-07
+
+### Fixed
+
+- Mobile Gateway H5 QR now uses compact `r` / `t` relay parameters or `b` / `k` LAN parameters instead of base64url-wrapped full JSON, reducing QR density for system camera recognition.
+- Kept legacy `p` payload compatibility while making the generated QR URL short by default.
+- 版本号从 **1.136.0-rc3** 递增为 **1.136.0-rc4**。
+
+## 1.136.0-rc3 - 2026-07-07
+
+### Fixed
+
+- Agent 左下 some.im 未登录账号入口现在整行可点击，并在打开 Settings 后补一次目标 pane 选择，避免只弹出设置窗口却没有落到 some.im 页面。
+- Mobile Gateway 从 Settings → Runtimes 的子 tab 提升为顶层设置分区，和 some.im、Voice 等入口保持同级。
+- 版本号从 **1.136.0-rc2** 递增为 **1.136.0-rc3**。
+
+## 1.136.0-rc2 - 2026-07-07
+
+### Fixed
+
+- Mobile Gateway QR now renders an H5 URL with a base64url `p` payload instead of raw JSON, so Android App scanners can extract credentials while system camera/browser scanners open the H5 page.
+- Added H5 QR URL wrapping tests to keep relay credentials recoverable from the `p` parameter.
+- 版本号从 **1.136.0-rc1** 递增为 **1.136.0-rc2**。
+
+## 1.136.0-rc1 - 2026-07-07
+
+### Added
+- **自定义关于窗口** —— App 菜单的 About 入口改为 WillDeep 自己的 SwiftUI 关于窗口，采用 museterm 的单例窗口打开方式和紧凑信息布局；内容只展示 WillDeep 图标、版本、构建号、Bundle ID、官网与复制版本信息操作，不搬 MuseTerm 的产品介绍和推荐应用清单。
+
+### Changed
+- 版本号从 **1.135.0-rc1** 提升为 **1.136.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.135.0-rc1 - 2026-07-07
+
+### Changed
+- **少量数据默认少用 Markdown 表格** —— Agent 系统提示词新增回答格式偏好：当数据量不多（约 6 条以内）且用户没有主动要求表格时，优先使用短段落或项目符号，减少小表格在当前聊天渲染里的阅读负担。
+- **Agent stable prompt 前缀升为 v8** —— 系统提示词稳定前缀版本随格式规则调整同步更新，避免 prompt cache 继续复用旧回答格式约束。
+- 版本号从 **1.134.0** 提升为 **1.135.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.134.0 - 2026-07-07
+
+### Added
+- **语音输入支持 AI 轻度整理** —— Settings → Voice 新增“AI 整理”选项，可选择关闭、补标点分段或整理成要点。麦克风按钮与 Fn push-to-talk 共用同一条转写后处理链路；默认关闭以保持本机转写原行为，开启后只把转写文本发给当前配置的 AI provider，音频仍留在本机。
+
+### Changed
+- 版本号从 **1.133.0-rc2** 提升为 **1.134.0**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.133.0-rc2 - 2026-07-07
+
+### Fixed
+- **some.im 浏览器登录状态自动回写** —— 浏览器登录链接现在携带隐藏的长配对 token；WillDeep 设置页生成链接后会轮询 some.im 的 browser-status 接口，浏览器端完成登录后通过 browser-complete 标记连接完成，WillDeep 会自动保存 app 专用 API key / customer session / 账号余额并把当前窗口从二维码切换为已登录状态。
+
+### Changed
+- 版本号从 **1.133.0-rc1** 提升为 **1.133.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.133.0-rc1 - 2026-07-07
+
+### Added
+- **some.im 账号入口升为一等公民** —— Settings 顶层新增独立 some.im 分区；Agent 左侧栏底部常驻 some.im 账号位，已登录时展示头像/credits 并可打开后台，未登录时展示匿名头像与未登录提示，点击直达 some.im 集成设置。
+- **some.im 浏览器登录链接** —— some.im 设置页可生成带短随机码的浏览器登录链接与二维码，支持复制链接/随机码或直接在浏览器打开；用户在 some.im 页面登录完成后按页面提示回到 WillDeep 继续使用。
+- **收起会话列表后可从左边缘呼出最近会话** —— Agent 会话侧栏收起时，鼠标靠近窗口左边缘会滑出最近活跃会话浮层；列表只展示有真实用户消息的最近会话，并在每行前方用明显区分样式显示 workspace 前两个字符（并入 main 同版本改动）。
+
+### Changed
+- 版本号从 **1.132.0-rc3** 提升为 **1.133.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.132.0-rc3 - 2026-07-07
+
+### Fixed
+- **Editor 入口不再停在未打开文件夹空态** —— 从 Agent 顶部图标或菜单“显示 Editor”切回编辑器时，如果当前没有任何标签，会自动创建一个 Untitled 空白编辑 tab，直接进入可输入状态。
+
+### Changed
+- 版本号从 **1.132.0-rc2** 提升为 **1.132.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.132.0-rc2 - 2026-07-07
+
+### Fixed
+- **Agent 工具审批卡片点击不再丢失** —— 审批决定现在按 runtime + tool call ID 暂存和投递；用户在执行循环注册等待者之前先点 Allow / Deny / Confirm / Send 时，决定会被后续等待者消费，不再出现 terminal command 审批卡片看似可点但没有反应的状态。
+- **多个 pending 工具审批不再串线** —— continuation 记录当前等待的工具 ID，点击其它 pending 卡片只会暂存对应决定，不会唤醒错误的工具调用。
+- **已提交审批显示等待态** —— 工具卡片在决定已记录但执行循环尚未接收时隐藏操作按钮，显示“已提交决定，等待执行循环接收”，避免继续展示不可重复交付的按钮。
+
+### Changed
+- 版本号从 **1.132.0-rc1** 提升为 **1.132.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.132.0-rc1 - 2026-07-06
+
+### Added
+- **Mobile Gateway 接入友盟远程推送触发** —— Android 通过 `push.register` 上报友盟 device token 后，局域网 Go gateway 会在 `tool.pending` / `patch.upsert` 等需要用户注意的桌面事件出现时调用友盟 U-Push；默认互联网中继模式下，Swift desktop peer 会本地保存 token 并直接触发同样的友盟自定义 payload，确保两种连接模式都能把审批、补丁审查和 `ask_user` 输入提醒推到手机。
+- **本机友盟配置读取** —— Mac 端会从环境变量或本机 `local.properties` 读取 `UMENG_PUSH_ENABLED`、`UMENG_APPKEY`、`UMENG_APP_MASTER_SECRET` / `UMENG_MASTER_SECRET`，并兼容 `UMENG_MESSAGE_SECRET` 作为本地调试兜底；`.gitignore` 已忽略 `local.properties`，避免把密钥提交进仓库。
+
+### Changed
+- 版本号从 **1.131.0-rc9** 提升为 **1.132.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc9 - 2026-07-06
+
+### Fixed
+- **Agent 侧边栏重资源会在长时间未查看后释放** —— 会话侧边栏记录最后查看时间；终端、嵌入浏览器、Widget 和图片编辑器等重面板在所属会话超过 1 小时未被查看后会自动收起并释放对应资源，其中终端会关闭该会话打开的 tab，嵌入浏览器会重置不可见 WebView 状态。
+- **Dev Server 面板改为 workspace 共享视角** —— 同一工作区内不同 Agent 会话会看到同一组 dev server / tail 后台任务，避免每个会话各自认为要启动一套服务而造成端口占用冲突。
+
+### Changed
+- 版本号从 **1.131.0-rc8** 提升为 **1.131.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc8 - 2026-07-06
+
+### Fixed
+- **Agent 右侧侧边栏状态改为跟随会话** —— 侧边栏打开的面板类型、文件/预览选择、媒体任务 scope 和图片编辑器输入现在保存到当前会话 runtime；切到另一个会话会按目标会话自己的状态显示（未打开过则收起），切回原会话会恢复原侧栏与关联数据，不再被其它会话覆盖或清空。
+
+### Changed
+- 版本号从 **1.131.0-rc7** 提升为 **1.131.0-rc8**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc7 - 2026-07-06
+
+### Fixed
+- **文本模型带图不再把 VL 描述暴露在聊天记录里** —— 当前模型不支持图片输入时，Image Understanding 生成的图片描述仍会作为模型上下文发送，但用户气泡、TextKit 历史记录、旧历史预览和复制按钮只展示用户原文与图片缩略图，不再显示 `[Image description generated...]` 或 `Image 1:` 这类内部转写内容。
+
+### Changed
+- 版本号从 **1.131.0-rc6** 提升为 **1.131.0-rc7**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc6 - 2026-07-06
+
+### Changed
+- **普通启动默认只显示 Agent 窗口** —— App 冷启动不带文件/目录意图时，会自动打开 Agent 单例窗口并关闭 SwiftUI 先创建的空 Editor 窗口；通过命令行通用打开命令、`willdeep://open?path=...`、Finder 右键打开文件或目录时仍保留 Editor 模式。Agent 顶部“进入 Editor”图标入口不变。
+- 版本号从 **1.131.0-rc5** 提升为 **1.131.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc5 - 2026-07-06
+
+### Fixed
+- **最后一条用户气泡底部不再被裁掉** —— TextKit 历史聊天视图的本征高度现在为气泡背景额外预留底部绘制余量，避免最后一条用户输入的下圆角和 footer 区域贴近滚动容器底部时被裁切。
+
+### Changed
+- 版本号从 **1.131.0-rc4** 提升为 **1.131.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc4 - 2026-07-06
+
+### Fixed
+- **展开旧聊天历史不再默认渲染完整富文本** —— transcript 顶部“对话前面还有多条消息”现在点击后先展示最多 4000 字符的纯文本预览，只保留角色与正文，避免长会话一次性把完整历史烤成富文本导致内存和主线程压力飙升；完整详情仍可通过预览里的“完整详情”按钮打开独立窗口查看。
+
+### Changed
+- 版本号从 **1.131.0-rc3** 提升为 **1.131.0-rc4**，并同步 Xcode / Go agent / Help / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc3 - 2026-07-06
+
+### Fixed
+- **干净 tracked 文件的 Agent 编辑直接落盘** —— `edit_file` / `apply_patch` 修改已存在文件时，如果所有目标文件都已经被 git 跟踪、当前对 HEAD 干净，并且 App 内没有未保存编辑，补丁会直接应用，不再要求用户再点一次 Apply。未跟踪文件、已有未提交改动的文件、打开但未保存的文件仍保留 inline patch 卡片等待用户确认。
+
+### Changed
+- 版本号从 **1.131.0-rc2** 提升为 **1.131.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc2 - 2026-07-06
+
+### Fixed
+- **AI 回复结束后聊天区补滚到底部** —— 自动滚动此前只在「消息/工具调用条数变化」时触发（防逐 token 滚动钉死主线程的既有设计），而 assistant 消息在流式开始、内容还近乎空白时就已 append 并完成那次滚动；之后长回复在视口下方持续长高、条数不变、再无滚动，输出结束时视口停在答案中段。现在监听回合结束（`isAgentResponding` true→false），等布局落定后一次性滚到底部哨兵，用户总能看到最新内容；流式期间行为不变、零逐 token 开销。
+
+### Changed
+- **Dev Server 面板改为可直接操作项目 dev 环境** —— 面板现在会扫描当前工作区根目录与常见前端/后端目录，发现 Vite/Next/React/Vue、Node API、Go、Rails、FastAPI 和静态 HTML 的启动候选；前端与后端分区支持直接启动、停止、重启，并继续复用后台 job 注册表。
+- **实时日志 tail 不再只回填提示词** —— Dev Server 面板可直接对用户指定的 workspace/tmp/本地日志路径启动 `tail -f` 后台任务，输出尾部与 AI 通过 `run_command(run_in_background=true)` 启动的任务统一展示。
+- 版本号从 **1.131.0-rc1** 提升为 **1.131.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.131.0-rc1 - 2026-07-06
+
+### Added
+- **Web 编程专家** —— 新增 `webCoding` 专家，覆盖截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览、浏览器截图 QA 与 dev server 编排；Agent 提示词会在短剧/Web 编程等场景引导用户确认激活对应专家。
+- **专家激活工具** —— 新增 `activate_expert`，模型可在 `ask_user` 确认后为当前会话激活专家，而不是只提示用户手动找开关。
+- **Dev Server 侧栏面板** —— 新增右侧 `Dev Server` tab，激活 Web 编程专家后可查看当前会话的前端/后端 dev server 与 `tail -f` 后台任务，读取输出尾部、停止任务，并把启动/重启/tail 日志请求回填给 Agent。
+
+### Changed
+- **本地 HTML 预览资源增强** —— `show_widget(html_path:)`、widget action 预览和 widget 源文件重载都会把 HTML 所在目录作为 WebView baseURL，允许用户引用同目录下的 CSS、JS 和图片文件，同时继续禁止网络连接和任意本地跳转。
+- 版本号从 **1.130.0-rc4** 提升为 **1.131.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0-rc4 - 2026-07-06
+
+### Fixed
+- **Agent 右侧面板「…」菜单不再重复列出快捷入口** —— 顶部快捷条已有的 Diff / Terminal / Preview / Files 从更多菜单中移除；更多菜单只展示非快捷面板入口，当前已有面板打开时仍保留「关闭面板」操作。
+- **用户输入气泡左侧大片留白收窄到约一个字宽** —— TextKit 历史渲染里用户消息正文左缩进原是写死的 172pt、气泡固定 82% 宽，窄窗口下输入内容左边空出一大块。现在正文左缩进降到 16pt（约一个汉字），气泡几乎撑满内容列（左缘仅留 4pt、右缘保持 30pt trailing margin），窄到极限时退回 260pt 最小宽度右对齐。
+
+### Changed
+- 版本号从 **1.130.0-rc3** 提升为 **1.130.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0-rc3 - 2026-07-06
+
+### Fixed
+- **右侧面板（预览等）在小窗口下启动即占掉半个窗口** —— 面板宽度此前只按持久化值（默认 320pt）夹在 240–760 之间，完全不看窗口实际宽度；在 ~650pt 的窗口里 320+ 的面板直接吃掉一半以上，中间 chat 列被裁得没法用。现在面板有效宽度按「窗口宽 − 会话侧栏 − chat 舒适宽」动态封顶：小窗口下自动收窄（最窄 240pt），窗口拉大后自动恢复用户拖出来的偏好宽度；拖拽上限同样吃这个封顶，不允许把 chat 列挤没。
+- **拖动右侧面板分隔条时闪动感明显** —— 此前每个鼠标事件都改真实布局宽度，chat 列与面板内容（markdown 逐帧重折行、WebView/终端逐帧重排）整体重排版，肉眼即闪。现在拖拽期间两侧内容都按拖拽起点宽度冻结排版，只有 frame 跟手移动（chat 内容钉左缘、面板内容钉右缘，多余部分裁掉），松手后一次性按新宽度重排；分隔条在拖拽中还锁定左右缩放光标与高亮，消除快速拖动时 hover 高频翻转带来的光标/高亮闪烁。窗口 `contentMinSize` 也不再跟随持久化面板宽度，只保证最窄面板放得下。
+
+### Changed
+- 版本号从 **1.130.0-rc2** 提升为 **1.130.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0-rc2 - 2026-07-06
+
+### Fixed
+- **窗口收窄时左侧会话栏被挤出左缘 / 中间聊天区外溢右缘** —— 中间 chat 列的 frame 只写了 `maxWidth: .infinity`,按 SwiftUI frame 语义其最小宽度会回退为子内容本征最小宽,统计卡片 / composer 等压不动的内容把中间列下限顶得比可用空间还宽,整条 HStack 溢出后被父级默认居中:左栏被推出窗体左缘、chat 内容溢出右缘。现在中间列显式 `minWidth: 0` 成为真正的唯一可压缩列(压不下的内容靠左、在右缘被 `.clipped()` 裁掉),外层 frame 改 `.leading` 对齐,即便平铺工具 / 编程式 resize 把窗口压到固定列宽之和以下,左栏也钉在左缘不再被遮挡。
+
+### Changed
+- 版本号从 **1.130.0-rc1** 提升为 **1.130.0-rc2**,并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0-rc1 - 2026-07-06
+
+### Added
+- **截图工具与工具结果图片直通视觉模型** —— 新增 `capture_screenshot` 工具，可截取本机 Mac 屏幕（`screencapture`）、连接的 Android 设备/模拟器（`adb exec-out screencap`）或已启动的 iOS 模拟器（`xcrun simctl io screenshot`）。`AgentToolResult` 新增 `images` 字段，`.tool` 消息随之携带图片：Anthropic 等视觉模型以 `tool_result` image block 形式直接“看到”像素并可多轮重发；DeepSeek / OpenAI Chat / Gemini 等非视觉或不支持工具图片的 provider 自动降级为纯文本 payload（含本地 OCR + 保存的完整分辨率路径，可再调 `visual_qa_screenshot` 做 VL 描述）。图片在捕获时即缩放到 ≤1568 长边再入会话，避免上下文与内存膨胀。工具卡片内联渲染缩略图（ImageIO 下采样解码，规避历史上的图片/布局内存失控），点击在“预览”中打开完整截图。
+
+### Fixed
+- **手机网关设置页默认不再铺开高级参数** —— “显示高级信息”改为本次设置视图内的临时状态，不再记住历史展开值；旧用户曾经打开过高级信息，也不会每次进来都看到 IP、端口、协议、可执行路径等一大屏参数。
+- **Settings 里的图像理解配置立即作用到当前聊天** —— Settings 窗口不再新建独立 `AppState`，而是复用 `EditorAppStateRegistry` 当前 AppState；切换 Image Understanding 到 some.im 后，正在聊天的 Agent 会直接拿到新的 provider/baseURL/model/API key，不再继续用旧的 DashScope 配置。
+- **获取视觉模型列表成功后同步提交当前图像理解配置** —— 避免用户看到 `Fetched ... image models` 后误以为已生效，但下一次发图仍按旧配置请求。
+
+### Changed
+- **公共中继配置再收进自定义区域** —— `j.niuwoai.com` 默认中继地址和 relay room 字段仍保留给自建兼容 WebSocket 中继服务的用户，但默认藏在“自定义中继服务”折叠组里；普通用户只看连接方式、状态和配对二维码即可。
+- 版本号从 **1.130.0** 调整为 **1.130.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.130.0 - 2026-07-06
+
+### Fixed
+- **Android 发图终于进入 Mac Agent 图片链路** —— `message.send` 和 `queue.update` 现在会解析 Android 上传的 `payload.images` data URL，转成 Mac 原生 `AgentImageAttachment` 后进入现有 composer / queued message / Image Understanding 流程；纯图片消息也允许发送，不再因为缺少 `payload.text` 被拒绝。
+
+### Changed
+- 本次记录对齐当前产品版本 **1.130.0**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc47 - 2026-07-06
+
+### Fixed
+- **纯「思考中」切换不再自动开合右侧任务监控面板** —— `AgentTaskMonitorSnapshot` 的 `isAgentResponding` 虽然被设计为不参与自动展开判定，却仍是 `Equatable` 的比较字段，导致 agent 每次「思考↔空闲」翻转都会触发 `handleTaskMonitorSnapshotChange`；当用户手动打开、当前无后台内容的面板遇到一次 thinking 切换时，会被「无可见监控内容 → 收起」分支自动关掉。现在当两次快照除 `isAgentResponding` 外其余字段全等时判定为纯思考态切换，直接跳过、不改动面板开合状态。
+
+### Changed
+- 版本号从 **1.129.0-rc46** 提升为 **1.129.0-rc47**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc46 - 2026-07-06
+
+### Added
+- **Mobile Gateway 下发真实运行能力给 Android** —— Swift desktop peer 新增 `capabilities.get` / `capabilities.updated` 协议路径，向手机同步当前 provider、模型、技能、专家和插件列表；Android 发送 `message.send` 时可带回 `provider_id`、`model`、`skills`、`experts` 和 `plugins`，Mac 端在发起这一轮 Agent 前应用这些运行上下文。
+
+### Changed
+- 版本号从 **1.129.0-rc45** 提升为 **1.129.0-rc46**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc45 - 2026-07-06
+
+### Fixed
+- **Agent composer「更多设置」弹层不再抢输入焦点** —— workspace / model / mode / 审批 / 执行器 / 插件 / 专家这些 composer pill 统一声明 `focusable(false)`；「更多设置」popover、专家开关、插件行和 MCP 只读行也补齐焦点禁用，避免打开弹层后把键盘焦点从输入框拿走。
+
+### Changed
+- 版本号从 **1.129.0-rc44** 提升为 **1.129.0-rc45**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc44 - 2026-07-06
+
+### Fixed
+- **Agent 左侧 workspace 列表更安静也更顺手** —— workspace 行尾的新建会话 `+` 不再常驻显示，只有鼠标移到该 workspace 行或其会话列表区域时才出现；点击 workspace 名称本身现在也会展开 / 收起会话列表，不再必须精确点文件夹图标。
+
+### Changed
+- 版本号从 **1.129.0-rc43** 提升为 **1.129.0-rc44**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc43 - 2026-07-06
+
+### Fixed
+- **智能审批终于会真正调用 AI 裁判了** —— 排查发现「智能审批」的 LLM 裁判此前几乎从不生效（本机审计日志 2000+ 条里 `llmJudge` 命中 0 次），根因有二并一并修复：
+  - **工具覆盖缺口**：裁判此前只覆盖 `run_command` 和 `call_mcp_tool`，而占人工审批大头的 `terminal_send_command`（侧边栏终端命令）直接绕过裁判弹人工。现在 `terminal_send_command` 走与 `run_command` 相同的「静态安全白名单 → LLM 裁判」链路，`terminal_send_control`（ctrl_c/enter/escape）也通过伪命令送裁判。
+  - **裁判请求必然失败且静默**：`max_tokens` 仅 16，被 reasoning 模型（如 deepseek-v4-flash）的思考过程烧光，正文永远为空；且 OpenAI-兼容响应体 `content` 为非可选字段，`content=null` 时整体解码失败 → 静默 `return false`。现在输出预算提到 512（Responses 1024）、`content` 改可选、超时从 12s 放宽到 20s。
+- **裁判失败不再无声无息** —— 每次裁判结果（allow / deny / unavailable + 失败原因）落盘到 `~/Library/Application Support/WillDeep/AgentAudit/judge.jsonl`，「为什么还在问我」从此可查。
+
+### Added
+- **把人工审批历史喂给 AI 裁判做参照** —— 从审计日志提取操作者过去手动「批准 / 拒绝」的命令样本，作为软性 few-shot 附到裁判 system prompt（明确不覆盖安全规则，危险命令仍判 NO）。历史块经过去重、单行截断、注入标记中和，且**体量受控**（批准≤14 条、拒绝≤6 条）。
+- **裁判请求针对 prompt 缓存优化** —— 历史块**不是每次调用都重取**：在内存里缓存、最多每 30 分钟重建一次，使「安全规则 + 历史」的 system 前缀在多次裁判间保持字节一致，命中 provider 的 prompt 缓存；Anthropic 路径额外给 system 块打 `cache_control: ephemeral`；每次调用只有末尾 `<command>` 变化。
+
+### Changed
+- 版本号从 **1.129.0-rc42** 提升为 **1.129.0-rc43**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc42 - 2026-07-06
+
+### Fixed
+- **聊天历史里的终端工具摘要不再刷屏** —— `terminal_send_command`、`terminal_snapshot`、`terminal_send_control` 统一聚合为「终端操作」，最新 assistant 输出保留终端操作摘要，历史 assistant 输出会隐藏终端相关摘要；历史里的读取文件、搜索代码等非终端工具摘要仍照常显示，保留必要上下文。
+- 新增回归测试覆盖终端工具聚合、最新 assistant 终端摘要展示，以及历史 assistant 仅隐藏终端摘要的行为。
+
+### Changed
+- 版本号从 **1.129.0-rc41** 提升为 **1.129.0-rc42**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc41 - 2026-07-06
+
+### Changed
+- **version_consistency 回归通用版本一致性检查** —— `scripts/version_consistency.rb` 不再扫描短剧/剧本相关 cutoff、tryout、manual queue，也不再承载短剧 delivery gate；报告只检查产品版本号位点是否一致。
+- **短剧验收脚本解除对 version_consistency delivery gate 的依赖** —— `short_drama_mvp_acceptance_report.rb` 仍要求版本报告通过，但不再要求版本报告内包含短剧专属 gate 名称；短剧守门继续留在短剧自己的 contract / acceptance / handoff 脚本里。
+- 版本号从 **1.129.0-rc40** 提升为 **1.129.0-rc41**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.129.0-rc40 - 2026-07-06
+
+### Fixed
+- **全屏 Agent composer 上方不再重复显示单文件编辑提示** —— 已有贴近 composer 的「N 个文件已更改 +X -Y / 审查」汇总条时，transcript 底部不再额外显示「正在编辑/已编辑 某个文件」活动行，避免同一组工作树变更出现两次提示；停靠侧边栏模式仍保留该行，因为它没有同样的 composer 汇总条。
+- **侧边栏终端 heredoc / apply patch 改为兜底可用而非绝对禁止** —— system prompt、`terminal_send_command` 描述、远程 runtime 附加提示和默认全局规则同步改为：优先使用 App 编辑/写入、`apply_patch`、明确文件传输或 `rz/sz`；当远程无法安装 `lrzsz` 或传输路径不可用时，可以使用小而清晰、可审查、可验证的 heredoc、patch、sed/perl 等远程编辑兜底。
+
+### Changed
+- 版本号从 **1.129.0-rc39** 提升为 **1.129.0-rc40**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc39 - 2026-07-06
+
+### Added
+- **WillDeep 侧边栏终端支持 rz/sz ZMODEM 桥接** —— 侧边栏终端现在会拦截远端 `rz` / `sz` 的 lrzsz 握手：远端 `rz` 时弹本机文件选择并用本机 `sz` 上传，远端 `sz` 时弹保存目录并用本机 `rz` 下载。桥接过程把本机 lrzsz 子进程与当前 PTY 对接，不再把 ZMODEM 控制流直接刷成乱码。
+- **lrzsz 缺失时给安装提示** —— 本机缺 `rz`/`sz` 时终端会取消本次 ZMODEM 并提示 `brew install lrzsz`；system prompt / `terminal_send_command` 工具说明也改为明确 WillDeep 前端支持 ZMODEM，模型在远端使用前应先跑 `command -v rz sz`，缺失时按服务端系统提示安装 `lrzsz`。
+- 新增 ZMODEM 握手检测回归断言，覆盖远端 `rz` 提示归类为上传、远端 `sz` 握手归类为下载。
+
+### Fixed
+- **`terminal_snapshot` 取侧边栏终端内容不再卡死** —— 读取加了 3 秒超时护栏：主线程被占用（典型是 agent 流式渲染富 markdown 时 SwiftUI 布局吃满主线程）时，工具不再无限等待 `MainActor` 调度而挂住整个工具调用；超时会返回一句「主线程繁忙、什么都没改、稍后重试」的明确错误，让模型自己重试而不是干等。
+- **脱敏与截断移出主线程** —— 主线程上只做一次廉价的原始视口抓取（`rawViewportText`），secret 脱敏正则和长度截断改到主线程外执行，避免超长行触发正则灾难性回溯时冻结 UI；超时护栏同时覆盖脱敏阶段。
+- **无终端/终端已退出时给出可操作的错误而非静默空快照** —— 没有活跃终端标签时抛出清晰错误（提示先打开侧边栏终端，或用 `terminal_send_command` 自动起 shell），不再返回一个 agent 无法与「真的没输出」区分的空「disconnected」快照；终端进程已退出时明确标注「process has exited（展示最后可见屏幕）」。
+
+### Changed
+- 版本号从 **1.129.0-rc38** 提升为 **1.129.0-rc39**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc38 - 2026-07-06
+
+### Fixed
+- **侧边栏终端提示词避免 heredoc 文件写入** —— Stable system prompt、`terminal_send_command` 工具描述和远程 runtime 附加提示同步收紧：操作可见侧边栏终端时，不再用 heredoc / here-string / `cat > file` / `echo > file` 等粘贴式多行 shell 技术生成或覆写文件，优先走 `create_file` / `edit_file`、普通 `run_command` 或明确的文件传输路径。
+- **rz/sz 作为检测后启用的增强路径** —— system prompt 明确 `rz/sz` 只在终端前端支持 ZMODEM、远端安装 `rz`/`sz`，并经用户同意或小文件测试证明可用后才尝试；支持不明或测试失败时回退到 scp/rsync、workspace 文件、附件或 App 编辑/写入流程。
+- 新增回归断言覆盖侧边栏终端上下文提示中的 heredoc 禁用与 `rz/sz` ZMODEM 条件说明。
+
+### Changed
+- 版本号从 **1.129.0-rc37** 提升为 **1.129.0-rc38**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc37 - 2026-07-06
+
+### Fixed
+- **Composer 粘贴同一张图片不再重复入队** —— 剪贴板图片读取新增内容 fingerprint 去重，避免 macOS 同一张图以多个 pasteboard item/flavor 暴露时，`Command+V` 后预览区出现重复缩略图。
+- **文本模型带图发送不再静默丢图** —— 当当前模型不支持图片输入（如 DeepSeek 非 VL 模型）时，会先用 Image Understanding 生成图片描述并并入用户消息；若图片描述失败，本轮会停在错误卡而不是继续发出一个“图片已省略”的请求。OpenAI-compatible text-only payload 在已有生成描述时也不再追加误导性的 omitted 提示。
+- **shell 包装的 `echo DOCKER_DONE` 哨兵不再误弹审批** —— `SafeCommand` 现在能识别 `sh` / `bash` / `zsh` 的 `-c` / `-lc` 包装命令：内层是 `echo` / `printf` 等无副作用哨兵时直接按只读放行，避免远端/容器脚本收尾的一句 `echo DOCKER_DONE` 交给用户确认；内层藏有 `rm`、敏感路径或显式系统路径时仍会降级为审批/确认。
+- 新增回归测试覆盖剪贴板图片去重，以及 text-only provider 收到生成图片描述时的请求编码。
+- 新增回归测试覆盖 `/bin/sh -lc "echo DOCKER_DONE"` 的静态安全分类与沙箱决策，确认 shell 包装哨兵不再进入用户审批。
+
+### Changed
+- 版本号从 **1.129.0-rc36** 提升为 **1.129.0-rc37**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc36 - 2026-07-06
+
+### Fixed
+- **工作树 diff 预览遇到大量前端构建产物时自动降级** —— `showAgentWorktreeDiff` 现在在超过文件数/变更行数阈值，或命中 `dist` / `*-web-dist` / `assets/*.js` 等疑似预构建前端产物时，不再渲染完整 hunk，而是展示原因、文件摘要和受限预览，避免 160+ 个压缩 JS/CSS diff 拖慢界面。
+- 新增回归测试覆盖 `railway-prebuilt-web-dist/assets/*.js` 大量删除场景，确保预览不再输出完整 `diff --git` 内容。
+
+### Changed
+- 版本号从 **1.129.0-rc35** 提升为 **1.129.0-rc36**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc35 - 2026-07-06
+
+### Fixed
+- **队列引导接管等待确认/询问时会收起旧卡片** —— 用户在当前 turn 卡在 `confirm` / 普通授权 / `ask_user` 时发送新消息或点击排队消息的“立即发送”，现在会把当前阻塞工具调用标记为已拒绝/已跳过，并恢复队列消费；旧的 confirm / ask_user 交互卡不再继续挂在聊天区等用户输入。
+- 新增回归测试覆盖 Stop、立即发送排队消息和新消息接管等待态时的 `awaitingConfirm` / `awaitingUserAnswer` 收尾行为。
+
+### Changed
+- 版本号从 **1.129.0-rc34** 提升为 **1.129.0-rc35**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc34 - 2026-07-05
+
+### Fixed
+- **apply_patch 现在支持 CRLF 文件** —— `AgentPatchApplier.apply` 此前把文件内容按 `"\n"` 切分,CRLF 文件每行残留尾部 `\r`,而解析出的 diff 行不带 `\r`(parse 用 `.newlines` 切),导致上下文永远匹配不上、每个 hunk 都 "hunk did not match"。现在匹配时先剥掉每行尾部 `\r`,输出时若原文件是 CRLF 再整体还原 `\r\n`——LF 文件零影响(仅当真有 `\r` 时才 dropLast)。
+- **补丁模糊匹配歧义时拒绝而非改错位置** —— hunk 在 ±6 行锚点窗口匹配不上时会退回全文件搜索;此前取**第一个**匹配,在重复代码里可能把补丁打到错误的函数上。现在全文件回退要求**唯一**匹配,出现多处相同 context+removed 块时拒绝(→ "hunk did not match"),交回用户判断。±6 锚点窗口内仍保留就近优先(高置信,行为不变)。
+- **越界 hunk 行号不再崩溃** —— hunk 头 `oldStart` 指向文件末尾之后(文件被外部截断/头部损坏)时,`(preferredIndex-6)...(preferredIndex+6)` 会出现 `lower > upper` 触发 ClosedRange 运行时陷阱直接崩溃;现在先把锚点夹到合法区间,安全失败为 "hunk did not match"。
+- 新增回归测试 `AgentPatchApplierRobustnessTests`(CRLF 应用/LF 不受影响/歧义拒绝/唯一漂移块仍应用/越界锚点安全失败),既有 32 个补丁与 edit_file 用例全绿。
+
+### Changed
+- 版本号从 **1.129.0-rc33** 提升为 **1.129.0-rc34**,并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc33 - 2026-07-05
+
+### Fixed
+- **图片蒙版编辑面板文案国际化收尾** —— 继 rc29 首批（蒙版工具/画笔模式选择器、发送到聊天、空状态、枚举标签）之后，把 `AgentImageEditPanel` 剩余约 40 处硬编码中文全部迁入 `L10n.AgentImageEditor`：面板标题与工具栏 tooltip（撤销/清空/导出）、反选蒙版 Toggle 及说明、提交区（标题、模式/服务选择器、提示词与 model/version/endpoint 占位符、提交按钮、Replicate 配置提示、provider 说明）、导出/提交状态消息（含 %@ 插值模板）、选区摘要、聊天接力 lead 行和制作锚点行标签。聊天 handoff 结构化块中被合约测试钉住的 `active_task_follow_up` 行保持原文（属 agent prompt 合约，非 UI 文案）；`short_drama_media_contract_test` / `image_edit_contract_test` 中逐字断言中文源串的检查同步改为断言 L10n 调用形式，两个合约测试与 i18n 覆盖率守卫（100%）全部通过。
+- 版本号从 **1.129.0-rc32** 提升为 **1.129.0-rc33**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc32 - 2026-07-05
+
+### Changed
+- **持久化模型图 Swift 6 就绪：整体标注 `nonisolated`** —— 项目开着 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`，`AgentSession` 及其全部 Codable 子类型（29 个顶层声明，含 AgentMessage / AgentPlan / AgentGoal / WorkflowReport / AgentWidget / 自学习与回忆模型等）的 synthesized Codable conformance 之前都是 main-actor 隔离的，rc30 的后台写队列 encode 会触发「isolated conformance in nonisolated context」警告（Swift 6 模式下是 error）。这些类型全是无 main-actor 状态的纯值类型，现已显式 `nonisolated`。
+- **连带清理**：`L10n`（纯 `String(localized:)`）、`AgentSessionStore.defaultTitle`、`AgentWorkspaceAvailability(+Resolver)`、`RemotePathValidator`、`AgentWidgetRecommendedAction/HandoffAction`、`AgentLocalModelFileMatch`、`AgentSessionTodoSummary`、`AgentMarkdownTableFormatter.StyledSpan` 一并标注，顺手消掉同族的既有隔离警告（含测试宏展开处）。本次为纯注解变更，无行为变化；相关隔离警告从约 20 条降到 0。
+- 版本号从 **1.129.0-rc31** 提升为 **1.129.0-rc32**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc31 - 2026-07-05
+
+### Fixed
+- **编辑器终端面板 i18n 补全** —— `EditorTerminalView.swift` 约 20 处硬编码英文 UI 文案（终端头部标题/工作目录占位符/Run 菜单/「未找到项目命令」/四个按钮 tooltip，以及终端设置页的 Shell/字体/自定义字体/大小/光标/光标闪烁/配色方案/环境各标签、「跟随应用皮肤」选项、字号 pt 显示和三段说明文案）全部提取到 `L10n.EditorTerminal`（key 前缀 `editor-terminal.`，共 23 个），`Localizable.xcstrings` 按字母序补齐 en + zh-Hans 双语条目；中文系统下终端面板与终端设置不再回落英文。i18n 覆盖率守卫保持 100%。
+- 版本号从 **1.129.0-rc30** 提升为 **1.129.0-rc31**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc30 - 2026-07-05
+
+### Changed
+- **会话持久化移出主线程** —— 此前每次 persist 都在 @MainActor 上同步 JSON 编码 + 原子写盘（一个回合触发多次，长对话/含 base64 图片的会话单次可达几十毫秒），流式输出期间反复卡 UI。现在所有会话写盘走 `AgentSessionStore` 的串行后台写队列：
+  - `persist()` 异步入队并**按会话合并**（一回合连发 N 次只编码最新快照一次）；写序用票据（seq）门控，`saveAsync → delete → saveAsync` 交错时后发的保存不会被先排队的 drain 抢走、也不会被 delete 误伤。
+  - 同步 `save()` / `delete()` 也路由到同一队列，与异步路径保持每会话写序一致；`delete` 先取消待写快照，防「删除后被 pending 写复活」。
+  - `load(id:)` 优先返回还没落盘的最新快照；**`loadAll()` 叠加 pending 快照**——否则 Settings 窗口（第二个 AppState 实例）在写窗口期调用 loadAll 会把刚持久化的会话误标回「metadata-only 且无用户消息」，下一次空会话清理会**删掉有真实历史的会话**（对抗性审查发现的数据丢失竞态）。
+  - 写失败时快照**放回内存兜底**（load 仍能读到最新态）并经 `saveDidFailNotification` 广播，各 AppState 实例认领自己 runtime 的失败挂到错误卡；App 退出前 `flushPendingWrites()` 排空队列，⌘Q 不丢最后一条消息。
+  - 置顶/归档/改名/标题摘要这几处同步 save 改为异步（调用方本就丢弃返回值），不再排队等大会话写完。
+
+### Fixed
+- **置顶/归档不再被回合结束的 persist 冲掉** —— `toggleAgentSessionPinned/Archived` 此前只改 `agentSessions` 行、不回写常驻 runtime 的 session 副本（rename 早就回写了），runtime 下一次 persist 会用旧副本覆盖,静默取消置顶/归档；现在两处都镜像回写。附回归测试。
+- 新增回归测试：异步写合并+flush、pending 快照可读、delete 取消待写、delete 后再 save 不被吞、loadAll 叠加 pending 快照且不误标空会话、pin/归档扛住 runtime persist。
+- 版本号从 **1.129.0-rc29** 提升为 **1.129.0-rc30**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc29 - 2026-07-05
+
+### Fixed
+- **移动网关非法 host 配置不再闪崩** —— `desktopBaseURL` / `pairingBaseURL` 此前把用户可编辑的 host/port 拼进 `URL(string:)!` 强制解包，host 含空格或非法字符时直接崩溃；现在统一走 `httpBaseURL(host:port:)`，先 trim 再解析，解析失败回退 `127.0.0.1`。
+- **关标签页对话框期间 tabs 变化不再越界** —— `closeTab` 在「未保存更改」弹窗（含背后的存储面板）模态循环期间，主队列任务可能改动 `tabs` 数组，之前继续用弹窗前捕获的 index 删除，有错删/越界风险；现在弹窗返回后按 id 重查 index。
+- **LSP 跳转失败不再无声无息** —— 定义/声明/类型定义/实现四条查询路径的 catch 此前完全吞掉错误，语言服务器持续故障时只能靠猜；现在补 `NSLog("[EditorLSP] …")` 日志（回退/蜂鸣行为不变），排查有迹可循。
+
+### Changed
+- **窗口 chrome 轮询不再多链叠加** —— `MainWindowChrome.Coordinator.attach` 被 SwiftUI 每次 `updateNSView` 调用，之前每次都新启一条 30-tick 的递归 poll 链、多条链并行做同样的事；现在加 `isPolling` 防重入，只维持一条链（刷新重试预算的语义保留）。
+- **项目文件缓存淘汰排序不再重复查磁盘** —— `ProjectFileListCache.evictOldProjectsIfNeeded` 的排序比较器里每次比较都查两次 mtime（O(n log n) 次元数据查询）；现在先一次性解析成 `(URL, Date)` 再排序。
+- **一批硬编码文案走 L10n（en/zh-Hans 齐全）** —— ① 关标签页「未保存更改 / 保存失败」两个 NSAlert（原硬编码英文）；② composer 手动压缩按钮 Compress / Compressing… 及 tooltip（原硬编码英文）；③ composer 工作树摘要条「N 个文件已更改 / 审查」与侧栏任务监控「还有 N 个后台任务 / 还有 N 个文件」（原硬编码中文）。i18n 覆盖率守卫保持 100%。
+- 版本号从 **1.129.0-rc28** 提升为 **1.129.0-rc29**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc28 - 2026-07-05
+
+### Fixed
+- **LSP 进程不再无限累积** —— language server 会话按「服务器×工作区」缓存但从不关闭（`closeAll` 无调用者），跨项目游走一圈就挂一排 sourcekit-lsp/gopls 常驻到退出。现在加 LRU 上限（6 组），超出即停掉最久未用的会话；被淘汰的项目再次打开文件时自动重建（文档状态经 `didOpen` 重同步）。`transport.stop()` 同时关闭 stdin 写端（体面退出 + 立刻回收文件描述符），`send()` 改用可 throw 的 `write(contentsOf:)`，杜绝向已停进程写入时的 ObjC 异常崩溃。新增 LRU 淘汰回归测试。
+- **删除会话加确认框** —— 右键菜单误触不再直接抹掉整段对话；弹窗含会话名，删除按钮标记为 destructive（en/zh-Hans 文案齐全）。
+- **会话落盘失败浮出错误卡** —— `AgentSessionStore.save` 失败（磁盘满/权限丢失）此前只 print 到控制台，用户重启后才发现历史丢失；现在 persist 失败会在会话错误卡上提示（不覆盖已显示的 provider 错误）。
+
+### Changed
+- **聊天渲染：路径识别正则提为 static 缓存** —— 此前每渲染一个文本块都重新编译一次 `NSRegularExpression`，流式输出期间是纯浪费；pattern 恒定，编译一次终生复用。
+- **会话列表：persist 不再全量排序** —— `persistAgentSession` 每回合触发多次、每次对整个 @Published 会话数组全量 `sort`（顺带放大侧栏重绘）；现改为单次 move-to-front（persist 刚盖了 `updatedAt`，该会话必是最新）。加载与其余插入点原本就维持降序，语义不变。
+- 版本号从 **1.129.0-rc27** 提升为 **1.129.0-rc28**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc27 - 2026-07-04
+
+### Fixed
+- **后台任务失败后聊天会话不再"装死"** —— 侧栏任务监控里后台任务（`run_in_background` shell job）已显示失败，但聊天窗口不发起任何新动作、agent 承诺的"完成后我会告诉你结果"永远不来。修复了完成通知唤起链路上的四个死角：
+  - **上下文压缩窗口**：回合结束的 defer 先跑自动压缩再尝试唤起，`isCompressingContext` 把唤起 guard 挡掉后无人补触发；现在压缩结束时会重新 kick（`runContextCompression` defer）。
+  - **Provider 槽位竞争**：唤起尝试抢不到并发槽就静默放弃，之后槽位释放只排空用户消息队列；现在 `releaseProviderSlot` 会额外扫描所有持有滞留完成事件的会话并逐个唤起。
+  - **媒体任务与后台 subagent 完全没有唤起钩子**：此前只能等下一个用户消息才在回合顶部拉取；现在 `AgentMediaTaskRegistry.onTaskFinished` / `AgentSubagentRegistry.onRunFinished` 与 shell job 走同一条 auto-resume 链路，唤起判定也改为三通道合并计数（`hasPendingBackgroundWakeups`）。
+  - **闲置 runtime 淘汰竞态**：带着运行中后台任务/subagent 的会话可能被 idle-runtime 淘汰，任务完成时查不到 runtime、通知丢失（淘汰还会误杀在跑的 subagent）；现在这类会话不参与淘汰，且完成钩子改用 `runtime(for:)` 兜底重新物化。
+  - 新增回归测试：subagent 完成钩子/计数、媒体任务终态钩子/计数、重复终态不重复入队。
+- 版本号从 **1.129.0-rc26** 提升为 **1.129.0-rc27**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc26 - 2026-07-04
+
+### Fixed
+- **Patch 批量操作条移到待审卡片组底部** —— 当多张 Apply 卡片同时待审时，`全部拒绝 / 全部应用` 不再显示在列表顶部，而是放在这一组待审卡片最下面；用户可以先逐项扫完变更，再决定是否批量处理。
+- 版本号从 **1.129.0-rc25** 提升为 **1.129.0-rc26**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc25 - 2026-07-04
+
+### Fixed
+- **VL 图片说明失败时不再把供应商错误贴进用户消息** —— 文本模型带图时，Image Understanding / VL 请求失败后不再把 `Image description failed...`、HTTP 状态码或 provider 错误正文拼进用户气泡；保留原用户文本继续发送，避免 401、模型名、relay 信息等诊断文本污染对话内容。
+- **外部执行器与视觉 QA 的 VL 失败输出改为安静降级** —— Composer 委托 Claude Code / Codex 时，VL 失败不再把错误详情写入委托 prompt；视觉 QA 工具也改为返回通用不可用提示，不暴露底层 provider 错误。
+- 版本号从 **1.129.0-rc24** 提升为 **1.129.0-rc25**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.129.0-rc24 - 2026-07-03
+
+### Changed
+- **移动网关默认改为互联网中继，Go 本地网关降级为可选备选** —— 新增连接方式设置（Settings → 移动网关 → 连接方式），两档：
+  - **互联网中继（默认）**：不再启动本地 Go 网关进程。Swift 桌面 peer 直接连中继房间（`wss://j.niuwoai.com/ws/broadcast/{room}`），并由 App 自己用中继设置生成配对二维码（`relay_base_url`/`relay_room`/`relay_token`）；手机凭共享 `relay_token` 加入同一房间，脱离局域网也能用，无需安装/运行任何本地进程。存活状态取桌面 peer 自己的 WebSocket 连接（无 `/mobile/health`）。注销设备为全体轮换：轮换房间 + 令牌后所有已配对设备需重新扫码。
+  - **局域网网关（备选，默认关闭）**：仍可一键切回，启动 Go `serve-mobile` 进程走同网 HTTP 配对 + 按设备令牌 + 按设备注销（rc24 前的行为，现改为 opt-in）。
+  - 关键事实：Go 网关从不自己连中继，rc24 前它只是在配对负载里「广告」中继坐标；中继总线一直是 Swift peer 直连——所以中继模式可完全不跑 Go 进程。
+  - 向后兼容：配对二维码里的 `relay_*` 字段与现有安卓端读取的完全一致；旧安装缺 `transportMode` 字段的一律迁移为中继。
+- **会话内容加密说明**：中继模式下内容经中继服务器转发，目前仅传输层加密（WSS），尚未端到端加密。端到端加密设计（需与 `willdeep-android` 仓库协同）见新增文档 [MOBILE_GATEWAY_E2E_ENCRYPTION_DESIGN.md](docs/MOBILE_GATEWAY_E2E_ENCRYPTION_DESIGN.md)。
+- 版本号从 **1.129.0-rc23** 提升为 **1.129.0-rc24**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc23 - 2026-07-03
+
+### Fixed
+- **移动网关快照不再在主线程反复物化/淘汰/落盘 runtime** —— `mobileGatewayQueuedMessages` / `mobileGatewayRecentMessages` / `mobileGatewayWorktreeChanges` 此前经由 `runtime(for:)` 读状态：每次周期快照都会把所有持久化会话物化成 runtime（磁盘读 + JSON 解码），随即触发 idle runtime 淘汰、对每个被淘汰会话同步 JSONEncoder 编码 + 原子写盘，全部发生在 @MainActor，下一次快照又重来 —— materialize→evict→persist 死循环把 CPU 常驻拖到 20–60%（rc21 采样 `/tmp/WillDeep-29480.sample.txt` 定位）。快照访问器现在只读已存活的 `agentRuntimes`（新增只读 `mobileGatewayLiveRuntimes`），零副作用；手机端打开会话仍走命令路径按需物化单个会话。新增防回归测试断言快照访问器不改变 `agentRuntimes`。
+
+### Changed
+- 版本号从 **1.129.0-rc22** 提升为 **1.129.0-rc23**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc22 - 2026-07-03
+
+### Added
+- **workspace 级记忆可视与隔离补强** —— Global/Project 记忆隔离链路原本就在（project 记忆按 workspace 指纹只在对应项目注入），本次补齐可用性短板：
+  - 记忆记录新增可读 `projectPath`；设置 → 记忆列表为 project 记忆显示项目名 tag 与完整路径行，当前 workspace 的记忆带「当前项目」标识；
+  - 记忆列表新增「全部 / 仅全局 / 当前项目」scope 过滤器；
+  - 只有指纹的老记录在对应 workspace 打开时自动回填可读路径（retrieve 和设置页 onAppear 两处触发）；检索匹配增加路径兜底，指纹方案变化不再导致 project 记忆失联；编辑重存为 Project 可把搬家后的孤儿记忆一键重绑到当前 workspace；
+  - `add_memory` 不传 scope 时不再一律默认 global，改为按内容启发式推断（提到仓库/项目/版本/changelog/测试等且有 workspace → project），工具描述同步引导模型显式传 scope。
+
+### Changed
+- 版本号从 **1.129.0-rc21** 提升为 **1.129.0-rc22**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc21 - 2026-07-03
+
+### Added
+- **edit_file 精确替换编辑工具（对齐 Claude Code）** —— Agent 编辑既有文件的首选原语不再是模型手写 unified diff，改为 `edit_file(path, old_string, new_string, replace_all)` 精确字符串替换：宿主在当前内容中定位唯一匹配、自行合成上下文行与文件逐字节一致的 diff，再走既有 patch 卡片 / Goal & workspace 自动应用 / undo / worktree 跟踪管线，合成后先做 parse→apply 往返自检。old_string 找不到、不唯一、与 new_string 相同时以可自纠的工具错误回传模型（附出现次数与修正建议）。这从根源上消除「patch 的某段与当前文件内容不匹配」的高频 Apply 失败。
+
+### Changed
+- **apply_patch 降级为 legacy fallback** —— 工具描述与 system prompt（stable prefix bump 到 v6）全面改为引导 edit_file；仅当 edit_file 无法表达变更时才允许手写 diff。create_file 指引同步更新。
+- **edit_file 读取与应用同源** —— 新增 `editableContentProvider`：edit_file 匹配 old_string 时优先取编辑器 tab 的未保存缓冲（与 patch 应用侧 `editableContent` 同一来源），tab 与磁盘不一致不再导致必然失配。
+
+### Fixed
+- **聊天代码块超宽自动换行** —— 聊天里 ``` 代码块的长行（docker 命令、URL 等）此前按 `.byClipping` 直接在卡片边缘裁掉，内容不可读；现在改为按字符自动换行。原「裁剪 + 代码块内横向滚动」机制（scroll-wheel 平移 glyph）随之整体移除；表格仍保持不换行以保住等宽列对齐，宽表格继续走表格详情窗口。
+- **patch 解析器 hunk 内伪文件头误判** —— hunk 内以 `-`/`+` 开头、内容恰为 `-- …`/`++ …` 的行（如删除 SQL/Lua 注释行）会序列化成 `--- …`/`+++ …`，此前被误当成文件头导致解析错乱；现在仅在无打开 hunk 或目标形如 `a/`、`b/`、`/dev/null` 时才按头处理。
+- 版本号从 **1.129.0-rc20** 提升为 **1.129.0-rc21**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc20 - 2026-07-03
+
+### Fixed
+- **Apply 卡片点击后立即收起** —— Agent patch proposal 列表现在只渲染仍待处理的 `.pending` 卡片；用户点击 Apply 或 Reject 后，卡片会从聊天区收起，避免失败态卡片继续露出灰色按钮、让用户误以为还能重复点击。失败原因仍保留在 proposal 状态里供诊断、持久化和移动端状态使用。
+- **Agent 不再把本地命令误发到已 SSH 的侧边栏终端** —— system prompt 现在要求把右侧可见终端当作独立的会话级机器上下文：使用 `terminal_send_command` 前要确认 active tab 是本地 macOS shell 还是 SSH 到某台服务器，并记录 host/user/directory；当终端已经在远端服务器里而命令本应本地执行时，必须改用 `run_command` 或先确认。
+
+### Changed
+- **终端工具说明补强主机边界** —— `terminal_snapshot` 明确用于识别当前终端是否本地/SSH，`terminal_send_command` 明确禁止把 local-intended command 发进 SSH server tab。
+- 版本号从 **1.129.0-rc19** 提升为 **1.129.0-rc20**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc19 - 2026-07-03
+
+### Added
+- **Goal 卡片吸附到 composer 上方并可编辑** —— Goal 模式已有目标时，composer 上方显示紧凑目标卡片，展示目标摘要、运行耗时和清单进度；点击卡片或铅笔按钮可直接打开 Goal 编辑器。
+
+### Fixed
+- **修改 Goal 后后续执行立即按新目标走** —— 用户在 Agent 正在响应时保存新 Goal，会自动排入一条 follow-up，让当前 turn 结束后的下一轮带着新 Goal 继续；同时用运行期修订时间戳避免旧回复里的 `goal-check` 误勾新清单。
+
+### Changed
+- 版本号从 **1.129.0-rc18** 提升为 **1.129.0-rc19**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.129.0-rc18 - 2026-07-03
+
+### Fixed
+- **终端录制密码询问回到聊天区** —— `terminal_create_shortcut` 创建带 `protected_placeholder` 的录制后，不再自动把用户带到右侧 Terminal 侧栏填写密码；聊天区工具卡直接显示本地 SecureField 密码询问卡，保存后写入本机终端加密 vault，并折叠为“用户输了密码”。右侧 Terminal 侧栏不再显示密码输入卡，避免同一件事在两个地方问。
+
+### Changed
+- 版本号从 **1.129.0-rc17** 提升为 **1.129.0-rc18**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc17 - 2026-07-03
+
+### Fixed
+- **Agent 侧栏切换不再卸载 Terminal** —— 右侧侧栏第一次打开 Terminal 后会记住并常驻终端面板；切换到 Diff / Files / Widget / 媒体任务等其它侧栏时，Terminal 只隐藏并关闭命中测试，不再触发 SwiftUI 分支销毁，已有 PTY 进程、滚屏和输入状态继续保留。
+
+### Changed
+- 版本号从 **1.129.0-rc16** 提升为 **1.129.0-rc17**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc16 - 2026-07-03
+
+### Fixed
+- **终端录制密码输入统一放到右侧 Terminal 侧栏** —— `terminal_create_shortcut` 成功后仍自动打开终端侧栏；聊天区工具卡不再显示 SecureField 密码输入，只保留“打开终端侧栏”的本地提示，真实密码统一在侧栏顶部卡片填写并写入本机终端加密 vault，避免用户误以为需要把密码发进聊天。
+
+### Changed
+- 版本号从 **1.129.0-rc15** 提升为 **1.129.0-rc16**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc15 - 2026-07-03
+
+### Fixed
+- **Agent 统计面板恢复历史模型用量数据** —— 会话启动轻量索引仍不常驻完整 `messages`，但新增统计专用 usage snapshot，从持久化 session JSON 解码角色、时间、token、模型、图片数量和工具参数长度等轻量字段；概览、热力图、模型用量和时间范围过滤改读该快照，避免“会话数还在但消息、令牌、活跃天数全归零”。
+
+### Changed
+- 版本号从 **1.129.0-rc14** 提升为 **1.129.0-rc15**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc14 - 2026-07-03
+
+### Fixed
+- **终端录制带密码占位时不再“灰着不能播还不知道去哪填”** —— `terminal_create_shortcut` 创建录制后会自动打开右侧 Terminal 侧栏；带 `protected_placeholder` 的录制会在终端上方显示本地 SecureField 密码卡片，保存后写入本机终端加密 vault，回放按钮随即恢复可用。聊天区工具卡只提示打开终端侧栏，不再提供密码输入框；该侧栏卡片不会卸载当前 SwiftTerm/PTY 终端，填写密码时已有终端进程、滚屏和输入状态继续保留。
+- **终端录制 JSON 可见事件改成人可读文本** —— 可见输入保存为 `text` 字段，不再在编辑器里展示 `115, 115, 104...` 数字串；`text` 支持 `\n`、`\t`、`\r`、`\e`、`\b`、`\xHH` 等转义，旧 `bytes` 数组格式仍可读取。
+
+### Changed
+- 版本号从 **1.129.0-rc13** 提升为 **1.129.0-rc14**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.129.0-rc13 - 2026-07-03
+
+### Changed
+- **本地图片理解默认模型明确为 VL** —— 本地辅助模型设置里的“图片理解模型”默认值从旧的 `qwen3.5-4b-q4_k_m` 自动迁移为 `qwen3.5-4b-vl-q4_k_m`，Summary 模型继续默认使用 `qwen3.5-4b-q4_k_m`；Provider 列表里的 `Ollama / Local OpenAI` 默认模型也改为 VL 名称，避免设置页看起来像在拿纯文本模型做图片识别。
+- **模型下载区新增本地必要文件查找** —— 设置页“模型下载”新增“查找本地文件”，通过 `/usr/bin/find` 按 `Qwen3.5-4B.Q4_K_M.gguf` 与 `mmproj-BF16.gguf` 文件名搜索常见本地目录，并根据文件大小与推荐包预估大小给出“大小匹配 / 大小接近 / 大小不像”的候选判断。
+- 版本号从 **1.129.0-rc12** 提升为 **1.129.0-rc13**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc12 - 2026-07-03
+
+### Changed
+- **本地 provider system prompt 增加语言偏好** —— 当请求走内置 `Ollama / Local OpenAI`，或自定义 OpenAI-compatible endpoint 指向 `localhost` / `127.0.0.1` / `::1` 时，system prompt 会追加“请优先使用当前系统首选语言回答；若用户最近明确使用其他语言则跟随用户语言”，并保留代码、命令、路径、API 名称和模型名原文。普通远端 OpenAI / Claude / some.im provider 不追加该提示，避免改变远端请求行为。
+- 版本号从 **1.129.0-rc11** 提升为 **1.129.0-rc12**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc11 - 2026-07-03
+
+### Added
+- **本地模型辅助加速（Ollama / LM Studio / llama.cpp server）** —— Agent provider 清单新增 `Ollama / Local OpenAI`，支持无 API Key 的本机 OpenAI-compatible endpoint。Settings → AI Providers 新增「本地模型加速」区，可配置本地 endpoint、图片理解模型、summary 模型，并分别控制“图片识别先用本地”和“标题 / 上下文压缩先用本地”。图片理解、会话标题和上下文压缩会按“本地候选 → 远端 provider”顺序尝试，本地服务不可用或返回空结果时自动 fallback，不影响用户继续用 OpenAI / Claude / some.im 做主生产对话。
+- **本地 VL 模型后台下载入口** —— 设置页新增推荐模型包下载状态，当前只下载 `Qwen3.5-4B.Q4_K_M.gguf` 和 `mmproj-BF16.gguf` 两个必要文件，跳过同仓库其他量化版本；下载在后台执行，可查看当前文件、总体进度、速度、保存目录并随时取消。下载完成后仍由 Ollama、LM Studio 或 llama.cpp server 加载模型并暴露 OpenAI-compatible endpoint，WillDeep 暂不直接在进程内加载 GGUF。
+
+### Changed
+- 版本号从 **1.129.0-rc10** 提升为 **1.129.0-rc11**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.129.0-rc10 - 2026-07-03
+
+### Fixed
+- **Agent 左侧历史会话列表恢复显示** —— 1.129.0-rc3 为降低启动内存，把会话启动加载改成只读取轻量索引，`messages` 不再常驻；但侧边栏“隐藏空 New Chat”逻辑仍用 `session.messages` 判断是否有用户消息，导致历史会话索引被误判为空会话并全部隐藏，只剩当前新对话。现在轻量索引会额外用只解 `role` 的消息索引记录“是否存在用户消息”，侧边栏显示和空会话清理都使用该标记，恢复旧会话列表，同时不回退到完整 transcript 常驻内存。
+
+### Changed
+- 版本号从 **1.129.0-rc9** 提升为 **1.129.0-rc10**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc9 - 2026-07-03
+
+### Fixed
+- **纯文本模型不再收到历史图片的 `image_url`（HTTP 400）** —— some.im 这类多模型中转的 provider 级 `supportsImageInput` 为 true，但用户实际选的可能是纯文本模型（如 `deepseek-v4-flash`）；长会话历史里只要有一张图（早前贴图、工具截图），编码请求时就会生成 `image_url` content part，被 API 以 `unknown variant image_url, expected text` 400 掉整个请求。现在 `AgentConfiguration.supportsImageInput` 在 provider 开关之上叠加模型级判断（`modelAcceptsImageInput`）：DeepSeek 文本/代码系（非 `-vl`）与 `someim-auto*` 判为不支持图片，历史图片自动替换为「[N image attachment(s) omitted ...]」文字占位，最新消息图片继续走视觉子模型转文字描述；未知模型保持支持图片，不误伤多模态自定义模型。
+- **错误详情卡片复制按钮命中区过小、无反馈** —— Request/Input Messages/Request Body/Response 各区右上角的复制按钮此前是 10pt 裸 SF Symbol，可点区域只有十几个点，点上去经常"没反应"；且复制成功也无任何提示。现在按钮补了 padding + contentShape 撑大命中区，点击后 icon 变绿色 ✓ 并显示「已复制」1.5 秒，复制内容仍为该区完整文本（不受界面截断影响）。
+
+### Changed
+- 版本号从 **1.129.0-rc8** 提升为 **1.129.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc8 - 2026-07-03
+
+### Fixed
+- **patch 卡片「已应用」识别，不再把已落地的改动误报为失败（1.129.0-rc8）** —— 当一个 patch 卡片对应的改动其实已经落地（Goal / workspace-access 前置自动应用、另一个会话改了同一 working tree、或同一改动裂成的重复卡片其孪生卡已应用），点「应用」时旧逻辑会因 hunk 的 context 对不上而抛出「patch 的某段与当前文件内容不匹配」并标为失败，让用户面对一张无法处理的孤儿卡。现在 `applyAgentPatch` 失配（`hunkDidNotMatch`）后会调用 `AgentPatchApplier.isAlreadyApplied` 判断文件是否已是该 patch 的目标状态：若每个 hunk 的目标内容（context + 新增行）都已存在，则把卡片标为 `.applied` 并显示「改动已存在，无需重复应用」，卡片随即从待处理列表隐藏；只有 context 与目标结果都对不上的真失败才继续报错。手动 Apply、批量自动应用、enqueue 直接落盘三条路径统一走新的 `resolveAgentPatchApplication`，行为一致。判断保持保守：纯删除 hunk（目标内容为空）无法凭存在性确认，仍按真失败处理。
+
+### Changed
+- 版本号从 **1.129.0-rc7** 提升为 **1.129.0-rc8**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc7 - 2026-07-03
+
+### Fixed
+- **Xcode 全量测试不再被文件加载错误弹窗卡住（1.129.0-rc7）** —— `AppState.applyFileLoadResult` 在 XCTest 环境下跳过 `NSAlert.runModal()`，仍执行失败回退逻辑，避免测试宿主因为用户本机会话中的大文件或不可读文件弹出模态窗口后无限等待。
+- **性能修复验证链路继续收口（1.129.0-rc7）** —— 保留 rc6 的 provider library Keychain 懒加载、测试 Keychain 隔离和 Voice smoke opt-in，并补齐文件加载错误路径的非交互测试保护，减少开发机状态对全量 `XeditTests` 的干扰。
+
+### Changed
+- 版本号从 **1.129.0-rc6** 提升为 **1.129.0-rc7**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc6 - 2026-07-03
+
+### Fixed
+- **Provider library 启动不再批量解密 Keychain（1.129.0-rc6）** —— `AgentSettingsStore.loadProviderLibrary()` 只 materialize active provider 的 API key，非 active entry 保留为未加载状态；切换 active 或在 Settings 选中条目时再按需读取对应 Keychain row，避免启动时逐条 `SecItemCopyMatching` 阻塞主线程。
+- **未加载 provider key 不会被保存流程误删（1.129.0-rc6）** —— `AgentProviderEntry` 增加运行时 `apiKeyLoaded` 标记，`saveProviderLibrary` 只同步已加载的 secret；新增单测覆盖“半加载 library 保存后 inactive key 仍可懒加载回来”的回归场景。
+- **XCTest 启动不再访问开发机真实 Keychain（1.129.0-rc6）** —— `AgentSettingsStore` 在 XCTest 环境下使用进程内 Keychain storage，与已有 sandbox 测试隔离对齐，修复完整 Xcode 测试宿主在建立 XCTest connection 前卡在 Keychain 解密的问题。
+- **Voice smoke 测试改为显式 opt-in（1.129.0-rc6）** —— `VoiceSmokeTests` 不再默认扫描 `~/Downloads` 里的本地音频文件，避免完整单测在开发机文件系统元数据读取或长音频 preflight 上卡住；需要手动转录 smoke 时设置 `WILLDEEP_VOICE_SMOKE=1`。
+
+### Changed
+- 版本号从 **1.129.0-rc5** 提升为 **1.129.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc5 - 2026-07-03
+
+### Fixed
+- **Git / 文件状态轮询 timer 不再在 body 内重建（1.129.0-rc5）** —— editor 主视图的 10s 状态刷新 timer publisher 提升为稳定静态实例，避免 SwiftUI body 重算时反复构造新的 autoconnect timer；配合前序 git 状态同值保护，空闲刷新不再因为 publisher 重建和相同结果发布放大全局 UI 更新。
+
+### Changed
+- 版本号从 **1.129.0-rc4** 提升为 **1.129.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc4 - 2026-07-03
+
+### Fixed
+- **编辑器行号尺大文件首行定位改为缓存二分（1.129.0-rc4）** —— gutter 计算首个可见行号时不再每次从文件头逐字符扫描到可见区，而是按文本长度缓存行起点表并二分定位；大文件底部滚动和重绘时避免每帧重复扫完整前缀。
+- **Mobile Gateway / Dock badge 降低全局通知放大（1.129.0-rc4）** —— Mobile Gateway 快照调度改为 400ms 窗口节流，持续流式期间不会无限推迟也不会每个 `objectWillChange` 重建任务；Dock badge 不再订阅整个 `AppState.objectWillChange`，改为会话列表变更 + runtime 局部订阅驱动。
+- **远端 daemon 前台命令轮询降频（1.129.0-rc4）** —— daemon runtime 的前台命令状态轮询从 250ms 调整为 1s，避免长命令期间每个任务持续 4 req/s 压远端服务和本地 async 调度。
+
+### Changed
+- 版本号从 **1.129.0-rc3** 提升为 **1.129.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc3 - 2026-07-03
+
+### Fixed
+- **MCP stdio 工具不再每次调用冷启动（1.129.0-rc3）** —— stdio MCP server 现在按配置复用已初始化连接，后续 `listTools` / `callTool` 走同一进程和 JSON-RPC id 序列，避免 `npx/node` 类 server 每次工具调用都启动、initialize、退出；阻塞式 stdio 等待移到每个连接的专用串行队列，减少挤占 Swift cooperative pool 的风险。
+- **Agent 会话启动内存不再常驻完整历史（1.129.0-rc3）** —— `AgentSessionStore.loadAll()` 改为加载轻量会话索引，跳过 `messages` 和 `contextSummary`，打开具体会话时再从磁盘物化完整 transcript；置顶、归档、重命名和空会话清理都加物化保护，避免把轻量索引误当空消息写回。
+- **编辑器括号匹配限制扫描窗口（1.129.0-rc3）** —— 光标停在未配对括号附近时，匹配高亮最多扫描 120000 个 UTF-16 code unit，不再从当前位置一路扫到大文件开头或结尾。
+
+### Changed
+- 版本号从 **1.129.0-rc2** 提升为 **1.129.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc2 - 2026-07-02
+
+### Fixed
+- **Agent 与 Editor 高 CPU / 高内存热路径收敛（1.129.0-rc2）** —— Agent 工具参数流式更新改用滚动指纹和节流发布，避免碎片化 JSON 参数在流式过程中反复拼接比较并触发高频 UI invalidation；Editor 的 LSP 文档同步新增输入防抖，选区与 git 状态等 `@Published` 状态增加同值保护，降低每键输入和空闲轮询造成的全局刷新。
+- **大文件编辑与媒体预览内存占用下降（1.129.0-rc2）** —— Scope guide 与 changed-line cache 避免大文件 O(n²) / 全文 hash 热路径；Agent 图片、媒体缩略图改为后台降采样并缓存，侧栏 diff / preview 避免在 SwiftUI body 中重复重算，远端媒体 artifact 下载改为文件流落盘而不是整包读入内存。
+- **异步进程等待不再阻塞协程线程池（1.129.0-rc2）** —— Shell 前台命令与视频 workflow 中的 ffmpeg / ffprobe 等进程等待改为 termination handler + continuation，减少长时间外部命令挤占 Swift concurrency worker 的风险；非活跃 Agent runtime 会按最近使用保留并持久化驱逐，降低多会话常驻对象压力。
+
+### Changed
+- 版本号从 **1.129.0-rc1** 提升为 **1.129.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.129.0-rc1 - 2026-07-02
+
+### Added
+- **Agent Composer 空输入提示（1.129.0-rc1）** —— composer 在用户尚未输入时显示多语言 placeholder，提示 `/` 唤起命令、`@` 引用文件/工作区、`$` 挂载技能与插件；开始输入、粘贴文本、选择历史消息或插入触发 token 后提示会自动消失。
+- **内置 SwiftUI 卡死诊断技能（1.129.0-rc1）** —— `BundledSkills` 新增 `swiftui-hang-diagnose`，WillDeep 的技能目录、设置页与 `$` skill picker 可直接发现并读取该技能；技能内置 `sample` / `spindump` 主线程采样流程和 SwiftUI/AppKit/UIKit 卡死模式库，用于诊断原生 Mac/iOS App 转圈、Beachball、CPU 跑满和主线程死锁。
+
+### Changed
+- 版本号从 **1.128.0-rc6** 提升为 **1.129.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc6 - 2026-07-02
+
+### Fixed
+- **CI artifact 上传配额不再拖红整个 run** —— GitHub Actions artifact 存储被约 300 个历史测试报告（13.3GB，主要是每次约 100MB 的 xcresult）占满后，`Upload test artifacts` 步骤失败会把测试全绿的 run 标成 failure。已清理旧 artifact（保留最近 10 个），上传步骤加 `continue-on-error: true`（测试结论以前置步骤为准，报告仍写入 job summary），retention 从 14 天缩短到 7 天减缓积累。
+
+### Changed
+- 版本号从 **1.128.0-rc5** 提升为 **1.128.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc5 - 2026-07-02
+
+### Fixed
+- **修复 CI 上 some.im provider 同步测试断言过期** —— `syncSomeIMProvider` 自 1.127.0-rc1 起默认文本模型改为 `someim-auto-flash`，但 `syncingSomeIMProviderCreatesActiveChatProvider` 测试仍断言旧的 `deepseek-v4-flash/pro`，导致 main 上 GitHub Actions 失败。测试改为断言 `SomeIMIntegrationSettings.defaultTextModel`，与实现保持单一事实来源。
+
+### Changed
+- 版本号从 **1.128.0-rc4** 提升为 **1.128.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc4 - 2026-07-02
+
+### Fixed
+- **终端录制受保护输入按“回车”成条计数** —— 手动录制终端会话时，echo-off 隐藏输入（密码）此前按字符逐个生成受保护事件：一条 19 字符的密码会被记成 19 次“受保护输入”。现在连续按键合并到一个待定缓冲区，直到用户按回车（CR/LF）或 echo 恢复才落成一个受保护事件，做到“一条密码 = 一次受保护输入”。回车键本身作为普通提交事件保留，回放仍能正常提交密码行；录制中途结束时未提交的密码行也会在 `finish` 时补齐，不再丢失。
+
+### Changed
+- 版本号从 **1.128.0-rc3** 提升为 **1.128.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc3 - 2026-07-02
+
+### Added
+- **口述录制密码占位本地填写（1.128.0-rc3）** —— `terminal_create_shortcut` 支持 `protected_placeholder` 事件，Agent 只生成“密码 1 / 密码 2”这类占位；工具成功后聊天区工具卡片会像 `ask_user` 一样显示本地 SecureField，让用户填写真实密码并直接写入终端录制 vault。
+- 未填写密码占位的终端录制禁止回放，侧边栏 tooltip 会提示待填写数量，避免用户误以为录制已完整可用。
+
+### Security
+- 真实密码不作为 tool 参数、不进入聊天消息、不回传模型、不写入录制 JSON；本地提交只调用 App 内部方法把值写入 AES-GCM vault。
+- `terminal_create_shortcut` 继续拒绝 `password` / `secret` / `protected_text` 等明文字段，只允许无密文的 `protected_placeholder` 标签。
+
+### Changed
+- 版本号从 **1.128.0-rc2** 提升为 **1.128.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc2 - 2026-07-02
+
+### Fixed
+- **终端录制受保护输入不再反复触发 Keychain 解锁（1.128.0-rc2）** —— 新录制的隐藏输入改为写入本地 AES-GCM 加密 vault，回放时优先从 vault 读取，避免一个录制里多个密码片段逐条弹系统密码。
+- 旧版终端录制的 Keychain 引用仍保留兼容 fallback：首次成功读取后会迁移写入本地 vault，后续回放不再依赖 Keychain 读取。
+
+### Security
+- 终端录制受保护输入 vault 文件和密钥文件落在本机 Application Support 录制目录，并收紧为当前用户可读写；录制 JSON 仍不保存明文密码。
+
+### Changed
+- 版本号从 **1.128.0-rc1** 提升为 **1.128.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.128.0-rc1 - 2026-07-02
+
+### Added
+- **口述生成终端录制（1.128.0-rc1）** —— 新增 `terminal_create_shortcut` Agent 工具，可把用户口述的终端操作转换为可回放的终端录制捷径；事件支持命令、可见文本、控制键和等待时间，生成前仍需用户审批。
+
+### Security
+- `terminal_create_shortcut` 拒绝生成 password / protected / echo-off 隐藏输入事件，避免把口述中的敏感内容写入可回放录制；密码类步骤仍建议由用户手动录制受保护输入。
+
+### Changed
+- 版本号从 **1.127.0-rc1** 提升为 **1.128.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.127.0-rc1 - 2026-07-02
+
+### Added
+- **终端录制回放状态可视化（1.127.0-rc1）** —— 终端录制捷径现在会在列表中展示录制总耗时；回放执行时高亮当前捷径，显示剩余时间、当前事件进度和预计结束时间，结束或中断后保留状态提示。
+- **some.im 邮箱验证码自动接入（1.127.0-rc1）** —— Onboarding 与 Settings 支持填写邮箱、收验证码、自动注册/登录 some.im 并保存 app 专用令牌；默认文本模型切到 `someim-auto-flash`，侧边栏左下角显示按 `1 USD = 100000 credits` 换算后的剩余 credits，并可一键打开自动登录后的 some.im 后台。
+
+### Changed
+- 版本号从 **1.126.0-rc1** 提升为 **1.127.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.126.0-rc1 - 2026-07-02
+
+### Added
+- **AI 辅助终端录制编辑（1.126.0-rc1）** —— 新增 `terminal_list_shortcuts` 与 `terminal_edit_shortcut` Agent 工具，AI 可列出终端录制事件结构，并在用户批准后修改标题、等待时间、删除事件、替换或重写可见输入文本。
+
+### Fixed
+- 终端录制保存时会把同一录制中重复的 echo-off 隐藏输入合并到同一个本地凭据引用，回放时同一密码只需读取一次；`AgentCredentialStore.save` 不再为了比较旧值而先读取 Keychain，减少保存或回放录制时反复要求解锁钥匙串的情况。
+- 终端录制编辑工具不会向模型暴露隐藏输入明文，也拒绝对受保护事件执行可见文本替换或重写。
+- 版本号从 **1.125.0-rc1** 提升为 **1.126.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.125.0-rc1 - 2026-07-02
+
+### Added
+- **Agent Composer 触发符语义统一（1.125.0-rc1）** —— Agent composer 新增 `$` Skill picker，技能 chip 也改为 `$skill` 展示；`@` picker 只保留 workspace 与项目文件引用，`/` 继续负责命令和 workflow，和通用软件里的“命令 / 引用 / 能力包”心智保持一致。
+
+### Changed
+- `@` picker 的搜索提示和空状态不再提及 skills，新增 `$` 技能搜索提示与空状态本地化文案。
+- 版本号从 **1.124.0-rc1** 提升为 **1.125.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.124.0-rc1 - 2026-07-01
+
+### Changed
+- **Mobile Gateway 默认公网中继（1.124.0-rc1）** —— Mac 端 Mobile Gateway 默认使用 `https://j.niuwoai.com` 作为 relay base URL，用户不再需要手动填写中继站点域名。
+- **安装级自动 room** —— relay room 从固定 `willdeep-mobile` 改为首次安装后自动生成并持久化的 `willdeep-<uuid>`；已保存旧默认 room 的配置会自动迁移到安装级 room，避免不同 Mac 共用默认房间名。
+- 版本号从 **1.123.0-rc1** 提升为 **1.124.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.123.0-rc1 - 2026-07-01
+
+### Added
+- **Mobile Gateway Public Relay（1.123.0-rc1）** —— Mobile Gateway 配对二维码现在可携带公网 relay 信息，Mac desktop peer 可连接 `cdnproxy` 的 `/ws/broadcast/*` 房间，Android 扫码后可直接通过公网 WebSocket 发送 `message.send`、`session.list`、审批/补丁决策等既有 Mobile Gateway 命令，不再必须与 Mac 处于同一局域网。
+- `willdeep-agent serve-mobile` 新增 `--relay-base-url`、`--relay-room`、`--relay-token-file`，relay token 通过 0600 文件传入，避免出现在进程命令行；Swift coordinator 会把 relay 信息写入二维码 payload，并用同一 relay 房间连接桌面端业务桥。
+- 版本号从 **1.122.0-rc1** 提升为 **1.123.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.122.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Authoritative Workspace Symbol Misses（1.122.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的符号跳转查询现在会把 LSP `workspace/symbol` 成功返回的空结果视为权威未命中，不再继续过滤当前文件 outline 来补一个本地猜测结果。
+- `SymbolJump` 现在区分 workspace symbol 的 `loading` / `available` / `failed` 状态；LSP 正常响应时显示 workspace symbol 结果（即使为空），只有 LSP 未就绪或失败时才回退当前文件大纲过滤。
+- 新增 `EditorLanguageServiceTests` 覆盖空 workspace symbol 结果从 LSP manager 原样返回，并新增 `EditorWorkflowTests` 覆盖第一批语言 workspace symbol available 空结果权威、failed 才 fallback 的策略。版本号从 **1.121.0-rc1** 提升为 **1.122.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.121.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Authoritative Definition Misses（1.121.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 Go to Definition 现在会把 LSP 成功返回的空 definition 结果视为权威“未找到定义”，不再继续用正则 resolver 补跳到一个看似匹配但可能错误的位置。
+- 语言服务器缺失、启动失败或请求异常时仍保留旧正则 fallback，保证未安装 LSP 的环境还能基础跳转；但只要 LSP 正常响应，就由 LSP 决定是否存在定义。
+- 新增 `EditorLanguageServiceTests` 覆盖空 definition 结果从 LSP manager 原样返回，以及第一批语言定义 fallback policy 的空结果权威语义。版本号从 **1.120.0-rc1** 提升为 **1.121.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.120.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Authoritative Folding（1.120.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的折叠/作用域引导线现在会区分 LSP folding range 的 `loading` / `available` / `failed` 状态；当语言服务器已返回 `textDocument/foldingRange` 时会完全信任 LSP 结果，即使为空也不再用本地括号/缩进启发式补折叠线。
+- AppKit editor 的 folding cache 现在把“LSP folding 是否权威”纳入缓存 key，避免从 fallback 切到 LSP 空结果后继续显示旧的本地 scope guides；语言服务器失败或未就绪时仍保留旧本地 fallback。
+- 新增 `EditorWorkflowTests` 覆盖第一批语言 LSP folding available 时不执行本地 fallback、failed 时才 fallback 的策略。版本号从 **1.119.0-rc1** 提升为 **1.120.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.119.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Authoritative Outline（1.119.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的结构面板与符号跳转现在会区分 LSP 大纲的 `loading` / `available` / `failed` 状态；当语言服务器已返回结果时会完全信任 `textDocument/documentSymbol`，即使结果为空也不再用正则 outline 补一个看似合理但可能错误的结构。
+- 结构面板在 LSP 大纲已可用时不再启动后台正则提取，只有语言服务器未就绪或失败时才使用旧正则 fallback，减少第一批 IDE 语言继续被正则驱动的情况。
+- 新增 `EditorWorkflowTests` 覆盖第一批语言 LSP 大纲 available 时不执行 fallback、failed 时才 fallback 的策略。版本号从 **1.118.0-rc1** 提升为 **1.119.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.118.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Workspace Resource Operations（1.118.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 LSP `WorkspaceEdit.documentChanges` 现在会保留并应用 `create` / `rename` / `delete` 文件资源操作，不再把 server 返回的资源变更吞掉。
+- 资源操作应用沿用当前 workspace 安全边界：所有目标路径必须位于 root 内，未保存 tab 会阻止覆盖、移动或删除；成功创建、重命名或删除后会发送对应 `workspace/didChangeWatchedFiles` `created` / `deleted` 事件，帮助语言服务器刷新项目结构索引。
+- 新增 `EditorLanguageServiceTests` 覆盖 resource operation 解码与 applier 映射。版本号从 **1.117.0-rc1** 提升为 **1.118.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.117.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Workspace Edit Refresh（1.117.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 rename、quick fix 和 server `workspace/applyEdit` 在成功改写当前文件、已打开 tab 或磁盘文件后，会把实际变更文件逐个发送 `workspace/didChangeWatchedFiles` `changed` 事件，帮助语言服务器刷新跨文件索引和诊断。
+- **Editor LSP Semantic Token Polish（1.117.0-rc1）** —— 语义高亮现在识别 LSP 常见的 `variable`、`parameter` 和 `label` token；`variable` 可覆盖正则误判的类型名颜色并保留 declaration/definition 加粗，`parameter` 使用独立颜色，Go / Swift / TypeScript / JavaScript 的语义 token 呈现更接近 IDE。
+- 新增 `EditorLanguageServiceTests` 覆盖变量、参数语义 token 覆盖正则高亮的行为。版本号从 **1.116.0-rc1** 提升为 **1.117.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.116.0-rc1 - 2026-07-01
+
+### Added
+- **Editor LSP Watched Files（1.116.0-rc1）** —— Go / TypeScript / JavaScript / Swift 的 editor 会在保存、新建文件、新建文件夹和创建缺失外部文件成功后发送 `workspace/didChangeWatchedFiles`，帮助 gopls / typescript-language-server / sourcekit-lsp 刷新项目索引。
+- `LanguageServerClient` 现在声明 workspace `didChangeWatchedFiles` client capability，并支持 `created` / `changed` / `deleted` file event payload；`EditorLanguageServiceManager` 会把第一批语言文件精确投递给对应 session，把配置文件或文件夹变更投递给当前 root 覆盖路径的已有 session，不无端启动无关 server。
+- 新增 `EditorLanguageServiceTests` 覆盖 client 级 watched-files notification payload，以及 manager 对 `package.json` 这类非源文件变更通知已有 workspace session 的路由。版本号从 **1.115.0-rc1** 提升为 **1.116.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.115.0-rc1 - 2026-07-01
+
+### Added
+- **Voice 转录语言设置（1.115.0-rc1）** —— Settings → Voice 新增“转录语言”选择，默认跟随系统语言，也可强制使用自动检测、中文、英文、粤语、日语或韩语，方便日本市场和多语言语音输入测试。
+- Fn push-to-talk 与 composer 麦克风按钮现在会读取该偏好后再调用 SenseVoice ONNX 推理；日语系统会默认映射到 SenseVoice `ja`，手动选择“日语”时也会固定走日语识别。
+- 新增语音语言偏好解析测试，覆盖日语、中文、英文、韩语和未知系统语言回退。版本号从 **1.114.0-rc17** 提升为 **1.115.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.114.0-rc17 - 2026-07-01
+
+### Added
+- **Editor LSP Will Save Wait Until（1.114.0-rc17）** —— Go / TypeScript / JavaScript / Swift 保存前会在 server 声明 `textDocumentSync.willSaveWaitUntil` 时请求 `textDocument/willSaveWaitUntil`，把语言服务器返回的保存前 edits 应用到即将写盘的内容，再继续原有 `textDocument/didSave` 通知。
+- 保存流程会先执行本地 `contentForSave` 归一化，再用短超时等待 LSP 保存前 edits，最后再次按本地保存规则归一化；LSP 失败或超时时回退原内容，不阻断保存。
+- 新增 `EditorLanguageServiceTests` 覆盖 client 级 `willSaveWaitUntil` 请求参数、manager 保存前同步顺序和 fake server edits。版本号从 **1.114.0-rc16** 提升为 **1.114.0-rc17**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc16 - 2026-07-01
+
+### Added
+- **Editor LSP Range Formatting（1.114.0-rc16）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单在有选区时新增 Format Selection，通过 `textDocument/rangeFormatting` 只格式化当前选区，不再只能对整篇文档发 `textDocument/formatting`。
+- `LanguageServerClient` 现在声明 `textDocument.rangeFormatting` capability、读取 `documentRangeFormattingProvider`，并在 server 支持时发送 `LSPDocumentRangeFormattingParams`；AppState 复用现有 `EditorTextEditApplier` 安全应用 edits，并在异步返回前校验当前文件、语言和文本未变化。
+- 新增 `EditorLanguageServiceTests` 覆盖 manager 级 `textDocument/rangeFormatting` 主流程、range 参数和 formatting options。版本号从 **1.114.0-rc15** 提升为 **1.114.0-rc16**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc15 - 2026-07-01
+
+### Added
+- **Editor LSP Inlay Hint Resolve（1.114.0-rc15）** —— Go / TypeScript / JavaScript / Swift 的 inlay hint 现在会保留 server 返回的 `data`，并在 server 声明 `inlayHintProvider.resolveProvider` 时请求 `inlayHint/resolve`，拿到懒加载 tooltip / text edits / padding 等信息后再映射到 editor hint span。
+- `LSPInlayHint`、`LSPInlayHintLabel` 和 label parts 升级为 `Codable`，支持把 hint 原样发回 server；`EditorInlayHintSpan` 新增 tooltip 承载位，resolve 失败时回退原 hint，不让单个懒加载失败清空整页提示。
+- 新增 `EditorLanguageServiceInlayHintTests` 覆盖 manager 级 `inlayHint/resolve` 主流程、resolve 请求 `data` 回传和 resolved tooltip 映射。版本号从 **1.114.0-rc14** 提升为 **1.114.0-rc15**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc14 - 2026-07-01
+
+### Added
+- **Editor LSP Document Link Resolve（1.114.0-rc14）** —— Go / TypeScript / JavaScript / Swift 的 document link 现在会保留 server 返回的原始 `DocumentLink.data`，当链接没有初始 `target` 且 server 声明 `documentLinkProvider.resolveProvider` 时，Command-click 会先请求 `documentLink/resolve` 再打开安全 target。
+- `EditorDocumentLinkSpan` 现在可以承载 unresolved link range，不再因为初始 `target` 为空就丢弃 import/module 链接；AppState 会在当前文件、语言和文本仍匹配时打开 resolve 后的 `file` / `http` / `https` URL，继续过滤不可信 scheme。
+- 新增 `EditorLanguageServiceDocumentLinkTests` 覆盖 manager 级 `documentLink/resolve` 主流程、resolve 请求 `data` 回传和 resolved target 解码。版本号从 **1.114.0-rc13** 提升为 **1.114.0-rc14**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc13 - 2026-07-01
+
+### Added
+- **Editor LSP Code Action Resolve（1.114.0-rc13）** —— Go / TypeScript / JavaScript / Swift 应用 quick fix 前会在 server 声明 `codeActionProvider.resolveProvider` 时请求 `codeAction/resolve`，拿到懒加载的 `WorkspaceEdit` / command / `data` 后再执行。
+- `LSPCodeAction` 现在保留并回传 `data`，`LSPWorkspaceEdit` 支持编码；AppState 在当前文件、语言和文本仍匹配时使用 resolve 后的 action，并复用现有 workspace edit 安全应用路径。resolve 失败会回退原 action。
+- 新增 `EditorLanguageServiceTests` 覆盖 manager 级 `codeAction/resolve` 主流程、resolve 前同步文档顺序、server `data` 回传和 resolved edit 应用数据。版本号从 **1.114.0-rc12** 提升为 **1.114.0-rc13**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc12 - 2026-07-01
+
+### Added
+- **Editor LSP Workspace Requests（1.114.0-rc12）** —— Go / TypeScript / JavaScript / Swift 的语言服务器主动请求 `workspace/configuration` 时，client 现在会按请求项数量返回空配置对象数组，避免 server 等不到 JSON-RPC response；后续有真实语言设置 UI 时可在同一路径填入 per-language 配置。
+- `LanguageServerClient` 现在声明 workspace `configuration` capability，并响应 `workspace/workspaceFolders`，返回 initialize root 的 URI 和名称，帮助 gopls / typescript-language-server / sourcekit-lsp 识别当前工作区。
+- 新增 `EditorLanguageServiceTests` 覆盖 server-initiated `workspace/configuration` 与 `workspace/workspaceFolders` 请求响应。版本号从 **1.114.0-rc11** 提升为 **1.114.0-rc12**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc11 - 2026-07-01
+
+### Added
+- **Editor LSP Completion Resolve（1.114.0-rc11）** —— Go / TypeScript / JavaScript / Swift 应用补全前会在 server 声明 `completionProvider.resolveProvider` 时请求 `completionItem/resolve`，拿到懒加载的 detail、documentation、`additionalTextEdits` 和 server `data` 后再应用补全。
+- `LSPCompletionItem` 现在保留 `data` 字段并随 resolve 请求原样回传；AppState 会在当前文件、语言和文本仍匹配时使用 resolve 后的 item，resolve 失败则回退原 item，避免补全动作因为懒加载失败而中断。
+- 新增 `EditorLanguageServiceTests` 覆盖 manager 级 `completionItem/resolve` 主流程、保存原始 completion `data`、以及 resolve 前同步文档顺序。版本号从 **1.114.0-rc10** 提升为 **1.114.0-rc11**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc10 - 2026-07-01
+
+### Added
+- **Editor LSP DidSave（1.114.0-rc10）** —— Go / TypeScript / JavaScript / Swift 保存成功后会按语言服务器声明的 `textDocumentSync.save` 能力发送 `textDocument/didSave`，让 gopls / typescript-language-server / sourcekit-lsp 能在真实保存生命周期后刷新诊断、索引和项目状态。
+- `LanguageServerClient` 现在解析 `textDocumentSync` 的数字与 options 两种形态，只有 server 声明 save 支持时才发保存通知，并尊重 `save.includeText` 决定是否携带最终写盘文本；`EditorLanguageServiceManager` 会先同步最新 buffer，再发送 didSave。
+- 新增 `EditorLanguageServiceTests` 覆盖 client 级 didSave capability 协商、includeText payload，以及 manager 级保存前同步顺序。版本号从 **1.114.0-rc9** 提升为 **1.114.0-rc10**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc9 - 2026-07-01
+
+### Added
+- **Editor LSP Code Action Commands（1.114.0-rc9）** —— Go / TypeScript / JavaScript / Swift 的 code action 现在支持执行语言服务器返回的 command-only quick fix：读取 `executeCommandProvider.commands` 后发送 `workspace/executeCommand`，并兼容裸 `Command` action 的 `arguments`。
+- `LanguageServerClient` 现在处理语言服务器发起的 `workspace/applyEdit` 请求，AppState 复用现有 workspace edit 安全应用路径，限制在当前 workspace 内并保护未保存 tab；执行后刷新当前 LSP 文档状态和 outline。
+- 新增 `EditorLanguageServiceCodeActionCommandTests`，覆盖裸 Command 解码、manager 级 `workspace/executeCommand` 主流程、null result 响应和未声明 capability 时不请求。版本号从 **1.114.0-rc8** 提升为 **1.114.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc8 - 2026-07-01
+
+### Added
+- **Editor LSP Document Links（1.114.0-rc8）** —— Go / TypeScript / JavaScript / Swift 打开或编辑时会在 server 声明 `documentLinkProvider` 后请求 LSP `textDocument/documentLink`，把语言服务器识别出的 import 路径、URL 或文件引用映射为 editor link spans。
+- Editor 会用临时 underline / link color 绘制 document links，Command-click 命中语义链接时通过系统默认应用打开安全的 `file` / `http` / `https` target；切换文件、切换语言或语言服务器不可用时清空 stale links。
+- 新增 `EditorLanguageServiceDocumentLinkTests`，覆盖 document link 解码、target scheme 过滤、manager 级 `textDocument/documentLink` 主流程和未声明 capability 时不请求。版本号从 **1.114.0-rc7** 提升为 **1.114.0-rc8**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc7 - 2026-07-01
+
+### Added
+- **Editor LSP Document Symbols 兼容增强（1.114.0-rc7）** —— Go / TypeScript / JavaScript / Swift 的 outline 现在完整兼容 LSP `textDocument/documentSymbol` 的层级 `DocumentSymbol[]`、扁平 `SymbolInformation[]` 和 `null` 返回形态，扁平符号会映射为现有 editor outline items。
+- `LanguageServerClient` 现在会读取 `documentSymbolProvider` capability，server 未声明能力时不再直接请求；声明能力后再走 LSP 符号树，减少第一批 IDE 语言退回本地正则 outline 的概率。
+- 新增 `EditorLanguageServiceDocumentSymbolTests`，覆盖 document symbol 三种返回形态解码和 manager 级 `SymbolInformation[]` 主流程。版本号从 **1.114.0-rc6** 提升为 **1.114.0-rc7**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc6 - 2026-07-01
+
+### Added
+- **Editor LSP Inlay Hints（1.114.0-rc6）** —— Go / TypeScript / JavaScript / Swift 打开或编辑时会请求 LSP `textDocument/inlayHint`，把参数名、类型等语义提示转换为 editor hint spans，并在 TextKit 中作为轻量虚拟提示绘制，不写入正文。
+- `LanguageServerClient` 现在声明并解析 `inlayHintProvider`，支持 string label 与 label parts 两种返回形态；AppState 会按当前文件 URI 管理 hint 生命周期，切换文件、切换语言或语言服务器不可用时清空 stale hints。
+- 新增 `EditorLanguageServiceInlayHintTests`，覆盖 inlay hint 解码和 manager 级 `textDocument/inlayHint` 主流程。版本号从 **1.114.0-rc5** 提升为 **1.114.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc5 - 2026-07-01
+
+### Added
+- **Editor LSP Completion TextEdit / Additional Edits（1.114.0-rc5）** —— Go / TypeScript / JavaScript / Swift 的 completion 应用现在优先使用 LSP `CompletionItem.textEdit` / `InsertReplaceEdit` 指定的替换范围，不再只靠本地前缀范围猜测补全边界。
+- Completion item 会声明并处理 `snippetSupport`、`additionalTextEditsSupport`、`insertTextFormat`、`additionalTextEdits`；应用补全时会把 snippet placeholder 清成可插入文本，并将 server 返回的额外 edits 与主 edit 原子应用，支持补全同时插入 import 等语义改动。
+- 新增 `EditorLanguageServiceCompletionTests`，覆盖 completion item 解码、server text edit + additional edits 应用、snippet placeholder 清理和旧式本地 replacement range fallback。版本号从 **1.114.0-rc4** 提升为 **1.114.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc4 - 2026-07-01
+
+### Added
+- **Editor LSP Declaration / Go to Declaration 导航（1.114.0-rc4）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Go to Declaration，通过 LSP `textDocument/declaration` 跳转到符号声明位置，继续减少正则 resolver 在第一批 IDE 语言中的职责。
+- `LanguageServerClient` 现在声明 declaration client capability，解析 `declarationProvider`，并复用现有 `LSPDefinitionResult` 兼容单个 location、location 数组和空结果；Declaration 失败时只给可控失败反馈，不做本地正则伪回退。
+- 新增 `EditorLanguageServiceNavigationTests`，覆盖 manager 级 `textDocument/declaration` 主流程，并将导航专项测试从接近 2000 行的主语言服务测试文件拆出。版本号从 **1.114.0-rc3** 提升为 **1.114.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc3 - 2026-07-01
+
+### Added
+- **Editor LSP prepareRename / Rename Symbol 预校验（1.114.0-rc3）** —— Go / TypeScript / JavaScript / Swift 的 Rename Symbol 在弹出输入框前会优先调用 LSP `textDocument/prepareRename`，由语言服务器确认当前位置是否可重命名，并读取返回的 range / placeholder 作为默认名称。
+- `LanguageServerClient` 现在声明 rename `prepareSupport`，解析 `renameProvider.prepareProvider`，并支持 `prepareRename` 的 `null`、裸 `Range`、`{ range, placeholder }` 三种返回形态；未声明 prepare 能力的 server 会继续走原有 LSP rename 流程，已声明但返回不可重命名时显示明确提示。
+- 新增 `EditorLanguageServiceRenameTests` 2 条，覆盖 first-stage capability 暴露和 manager 级 `textDocument/prepareRename` 主流程。版本号从 **1.114.0-rc2** 提升为 **1.114.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc2 - 2026-07-01
+
+### Added
+- **Editor LSP Call Hierarchy / Show Call Hierarchy（1.114.0-rc2）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Show Call Hierarchy，会通过 LSP `textDocument/prepareCallHierarchy`、`callHierarchy/incomingCalls` 和 `callHierarchy/outgoingCalls` 查询当前符号调用关系。
+- 右上角新增 Call Hierarchy 浮层，分 Incoming / Outgoing 展示调用方与被调用方的符号名、文件、行列、detail 和预览行；点击条目会跳转到对应文件位置，语言服务器不可用或无结果时只显示可控空态，不做本地正则伪回退。
+- `EditorLanguageServiceTests` 扩展到 43 条，新增 manager 级 call hierarchy 主流程测试，并覆盖 first-stage capability 暴露。版本号从 **1.114.0-rc1** 提升为 **1.114.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.114.0-rc1 - 2026-07-01
+
+### Added
+- **Agent 联网调研来源胶囊（1.114.0-rc1）** —— `web_search` / `web_fetch` 工具结果新增结构化来源列表，当前轮 assistant 输出后会显示紧凑 favicon 来源胶囊，点击可展开来源清单并打开对应网页。
+- `AgentTurnReport` 会从本轮全部工具结果中去重收集来源，不受工具明细前 8 条展示限制；工具结果脱敏链路同步处理来源标题和 URL，避免 token / key 类 query 值进入 UI。
+- `AgentWebToolsTests` 和 `AgentTurnReportTests` 覆盖搜索来源提取、host 解析和回合来源去重。版本号从 **1.113.0-rc20** 提升为 **1.114.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc20 - 2026-07-01
+
+### Added
+- **Editor LSP Selection Range / Expand Selection（1.113.0-rc20）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Expand Selection，会通过 LSP `textDocument/selectionRange` 请求语言服务器的语法树选区链，并把当前光标或选区扩到下一层更大的语义范围。
+- 新增 `EditorSelectionRangeResolver`、selection range LSP 协议模型、client capability、manager 请求和 AppState 选区应用路径；没有可靠 LSP 范围时只提示不可用或无更大范围，不做本地正则伪回退。
+- `EditorLanguageServiceTests` 扩展到 42 条，新增 manager 级 `textDocument/selectionRange` 主流程和 selection range 扩选 resolver 测试。版本号从 **1.113.0-rc19** 提升为 **1.113.0-rc20**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc19 - 2026-07-01
+
+### Added
+- **Editor LSP Workspace Symbols / Symbol Jump 项目搜索（1.113.0-rc19）** —— Go / TypeScript / JavaScript / Swift 的 Symbol Jump 在输入非空查询时会优先通过 LSP `workspace/symbol` 做项目级语义符号搜索，结果展示文件名、行号和容器名，并可跨文件跳转到语言服务器返回的位置。
+- Symbol Jump 仍保留当前文件 outline fallback：空查询继续显示当前文件结构；语言服务器不可用、未声明 workspace symbol 能力或项目级查询无结果时，继续用当前文件 outline 过滤，避免项目符号搜索失败时把面板变成死路。
+- `EditorLanguageServiceTests` 扩展到 40 条，新增 manager 级 `workspace/symbol` 主流程测试，并覆盖 first-stage capability 暴露。版本号从 **1.113.0-rc18** 提升为 **1.113.0-rc19**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc18 - 2026-07-01
+
+### Added
+- **Editor LSP Type Definition / Implementation 导航（1.113.0-rc18）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Go to Type Definition 和 Go to Implementation，分别通过 LSP `textDocument/typeDefinition` 与 `textDocument/implementation` 跳转到类型定义或实现位置。
+- LSP initialize 现在声明并协商 type definition / implementation client capability；`LanguageServerClient`、`EditorLanguageServiceManager` 和 AppState 导航路径复用现有 location 跳转能力。普通 Definition 仍保留正则 fallback；Type Definition / Implementation 没有可靠正则语义时只提示失败，避免跳到看似相关但实际错误的位置。
+- `EditorLanguageServiceTests` 扩展到 39 条，新增 manager 级 `textDocument/typeDefinition` 和 `textDocument/implementation` 主流程测试，并覆盖 first-stage capability 暴露。版本号从 **1.113.0-rc17** 提升为 **1.113.0-rc18**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc17 - 2026-07-01
+
+### Changed
+- **Agent 侧边栏快捷入口优化（1.113.0-rc17）** —— Agent 标题栏右侧新增 Diff、Terminal、Preview、Files 四个高频侧边栏小图标，点击即可直接打开或关闭对应右侧面板；完整面板列表收进 `...` 菜单，保留原有所有侧栏 tab 选择能力。
+- Editor 窗口入口继续保留，但改为独立强调色胶囊按钮，并与侧栏工具组之间加入分隔线，避免和普通 side panel 入口混在一起。
+
+### Fixed
+- 右侧侧边栏拖拽改宽时不再每像素写入 `@AppStorage`，窗口最小宽度约束也延后到拖拽结束后提交；拖动过程只更新临时宽度并关闭隐式动画，减少面板内容和边界的抖动、闪动。版本号从 **1.113.0-rc16** 提升为 **1.113.0-rc17**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.113.0-rc16 - 2026-07-01
+
+### Added
+- **Editor LSP Document Highlights 接入（1.113.0-rc16）** —— Go / TypeScript / JavaScript / Swift 的 editor 光标移动到符号上时，会通过 LSP `textDocument/documentHighlight` 请求当前文档内的语义关联位置，并以轻量背景高亮读/写引用。
+- Document highlight 请求接入 `LanguageServerClient`、`EditorLanguageServiceManager`、`AppState` 和 `EditorView`：光标移动带 UTF-16 字符偏移，AppState 做 120ms 防抖和过期响应丢弃，EditorView 将符号高亮与诊断临时属性统一刷新，诊断显示优先级更高。
+- `EditorLanguageServiceTests` 扩展到 37 条，新增 document highlight 结果解码、manager 级 `textDocument/documentHighlight` 主流程和 first-stage capability 覆盖测试。版本号从 **1.113.0-rc15** 提升为 **1.113.0-rc16**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc15 - 2026-07-01
+
+### Added
+- **Editor LSP Code Actions 接入（1.113.0-rc15）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Show Code Actions，会通过 LSP `textDocument/codeAction` 获取 quick fix / source action 候选，并在右上角浮层展示。
+- Code Action 会携带当前选区或光标命中的诊断上下文；带 `WorkspaceEdit` 的 action 会复用 rename 的 workspace 安全应用路径，限制在当前 workspace 内，保护已打开且未保存的其他 tab，当前文件保持 dirty，其他安全文件写回磁盘。
+- `EditorLanguageServiceTests` 扩展到 35 条，新增 code action 联合结果解码、manager 级 `textDocument/codeAction` 主流程和面板 item 映射测试。版本号从 **1.113.0-rc14** 提升为 **1.113.0-rc15**，并同步 Xcode / Go agent / Help / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc14 - 2026-07-01
+
+### Added
+- **Editor LSP Signature Help 接入（1.113.0-rc14）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Show Signature Help，会通过 LSP `textDocument/signatureHelp` 展示当前调用签名、文档和 active parameter。
+- 新增 `LSPSignatureHelp`、`LSPSignatureInformation`、`LSPParameterInformation` 和 `EditorSignatureHelpPanelState`，支持参数 label 的字符串与 `[start, end]` 两种 LSP 形态；面板会高亮当前参数，语言服务器不可用时给出可控空态。
+- `EditorLanguageServiceTests` 扩展到 32 条，新增 signature help 解码、manager 级 `textDocument/signatureHelp` 主流程和 active parameter 面板映射测试。版本号从 **1.113.0-rc13** 提升为 **1.113.0-rc14**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc13 - 2026-07-01
+
+### Added
+- **Editor LSP Folding Ranges 接入（1.113.0-rc13）** —— Go / TypeScript / JavaScript / Swift 的 editor 折叠 gutter 现在会优先使用 LSP `textDocument/foldingRange` 返回的语法树折叠范围，不再只依赖本地 brace/indent/regex 规则。
+- 新增 `LSPFoldingRangeParams`、`LSPFoldingRange`、client folding range capability 和 `EditorFoldingRangeMapper`，把 LSP 0-based range 转为 editor 1-based `ScopeGuide`；语言服务器不可用或未声明 folding range 支持时继续使用 `ScopeGuideCalculator` fallback。
+- `EditorLanguageServiceTests` 扩展到 29 条，新增 folding range 到 scope guide 的映射测试和 manager 级 `textDocument/foldingRange` 主流程测试。版本号从 **1.113.0-rc12** 提升为 **1.113.0-rc13**，并同步 Xcode / Go agent / Help / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc12 - 2026-07-01
+
+### Added
+- **Editor LSP Rename Symbol 接入（1.113.0-rc12）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Rename Symbol，会通过 LSP `textDocument/rename` 获取语义级 `WorkspaceEdit`，而不是按正则直接替换当前单词。
+- 新增 `LSPRenameParams`、`LSPWorkspaceEdit`、`LSPTextDocumentEdit` 和 `EditorWorkspaceEditApplier`，支持 LSP `changes` 与常见 `documentChanges` text edits；rename 应用会限制在当前 workspace 内，保护已打开且未保存的其他 tab，当前文件改动保持为 dirty，其他安全文件写回磁盘。
+- `EditorLanguageServiceTests` 扩展到 27 条，新增 WorkspaceEdit 解码、manager 级 `textDocument/rename` 主流程和 workspace edit 应用测试。版本号从 **1.113.0-rc11** 提升为 **1.113.0-rc12**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc11 - 2026-07-01
+
+### Added
+- **Editor LSP Document Formatting 接入（1.113.0-rc11）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Format Document，当前文件会通过 LSP `textDocument/formatting` 获取语言服务器返回的 `TextEdit` 并应用到正文。
+- 新增 `LSPFormattingOptions`、`LSPTextEdit`、`LSPTextEditResult` 和 `EditorTextEditApplier`，格式化 edits 会按文档位置倒序应用，避免多段 replacement 因前序编辑导致 range 漂移；格式化成功后会标记 dirty、同步 LSP 文档并刷新语义 tokens。
+- `EditorLanguageServiceTests` 扩展到 24 条，新增 manager 级 `textDocument/formatting` 主流程和 TextEdit 应用顺序测试。版本号从 **1.113.0-rc10** 提升为 **1.113.0-rc11**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc10 - 2026-07-01
+
+### Fixed
+- **Agent workspace 移动/删除懒诊断（1.113.0-rc10）** —— Agent session 持久化本地 workspace 的 security-scoped bookmark 与文件身份线索，正常工具调用继续乐观使用记录路径，不做周期性目录轮询。
+- 工具、delegated agent、移动端读文件、patch 应用和 worktree 刷新现在会尊重 runtime 的 workspace availability；只有在工具/文件操作失败或 runtime 已知 missing/moved 时才诊断旧路径和 bookmark，检测到 rename/move 后不会静默改会话路径，而是要求用户重新选择确认。新增 `WorkspaceSessionTests` 覆盖 rename 后不静默 rebind 的行为。版本号从 **1.113.0-rc9** 提升为 **1.113.0-rc10**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc9 - 2026-07-01
+
+### Added
+- **Editor LSP References 接入（1.113.0-rc9）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 Find References，会通过 LSP `textDocument/references` 查询当前符号引用，并在 editor 右上角显示可点击引用列表。
+- References 面板支持 loading、空结果和不可用状态，结果行展示文件名、行列和预览行；点击结果会复用现有 LSP location 导航能力跳转到对应文件和位置。
+- `EditorLanguageServiceTests` 扩展到 22 条，新增 manager 级 `textDocument/references` 主流程和 `EditorReferenceItem` 显示元数据映射测试。版本号从 **1.113.0-rc8** 提升为 **1.113.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc8 - 2026-07-01
+
+### Added
+- **Editor LSP Semantic Tokens 接入（1.113.0-rc8）** —— Go / TypeScript / JavaScript / Swift 的 editor 高亮现在会在 regex fallback 之后优先应用 LSP `textDocument/semanticTokens/full` 返回的语义 token，让函数、类型、关键字、字符串、数字、注释等颜色来自语言服务器的语法树/AST 语义。
+- LSP initialize 现在声明 semantic tokens client capability，并读取 server 返回的 legend；editor 会把相对 delta token 数据解码成 UTF-16 range，切文件/切语言/语言服务器不可用时清空语义 token 并继续保留原有 regex 高亮 fallback。
+- `EditorLanguageServiceTests` 扩展到 20 条，新增 semantic token delta 解码、manager 级 `textDocument/semanticTokens/full` 主流程和 semantic token 覆盖 regex 高亮颜色测试。版本号从 **1.113.0-rc7** 提升为 **1.113.0-rc8**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc7 - 2026-07-01
+
+### Added
+- **Editor LSP Completion 接入（1.113.0-rc7）** —— Go / TypeScript / JavaScript / Swift 的 editor 右键菜单新增 LSP 补全入口，会通过 `textDocument/completion` 获取语言服务器候选，并在 editor 右上角显示可点击候选面板。
+- 补全面板支持 loading、空结果和不可用状态；选择候选后会按当前符号前缀或选区替换文本，优先使用 LSP `insertText`，没有时回退到 `label`，并把光标移动到插入文本末尾。
+- `EditorLanguageServiceTests` 扩展到 17 条，新增 completion array/list/null 解码、manager 级 `textDocument/completion` 主流程和 `EditorCompletionItem` 插入文本 fallback 测试。版本号从 **1.113.0-rc6** 提升为 **1.113.0-rc7**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc6 - 2026-07-01
+
+### Added
+- **Editor LSP Hover 接入（1.113.0-rc6）** —— Go / TypeScript / JavaScript / Swift 的右键菜单新增 LSP Hover 信息入口，当前符号会通过 `textDocument/hover` 查询语言服务器，并在 editor 右上角显示可复制的轻量信息面板。
+- LSP hover 解码支持 markdown、普通字符串和 marked-string 数组，避免不同语言服务器返回形态不一致时丢失文档或类型签名；语言服务器不可用、无内容或切换文件时会显示可控空态并清理过期 hover。
+- `EditorLanguageServiceTests` 扩展到 14 条，新增 hover 内容解码、manager 级 `textDocument/hover` 主流程和 `EditorHoverInfo` 映射测试。版本号从 **1.113.0-rc5** 提升为 **1.113.0-rc6**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc5 - 2026-07-01
+
+### Fixed
+- **Workspace 菜单 URL 比较卡死（1.113.0-rc5）** —— 采样显示 WillDeep 主线程 3715/3715 个样本卡在 SwiftUI `Menu` / `GraphHost.flushTransactions` 布局刷新链路，热点集中于 `URL.==`、`URL.path`、`NSURL.relativeString` 和 Swift 字符串桥接。
+- `WorkspacePickerPill` 的已知工作区缓存从 `[URL]` 改为稳定的 `id/path/displayName` 轻量快照，菜单 `ForEach` 不再用 `URL` 自身当 identity，active check 改为字符串 path 比较，避免 SwiftUI 在菜单布局和 diff 期间反复标准化、桥接和比较 URL。版本号从 **1.113.0-rc4** 提升为 **1.113.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness / 短剧指针文档位点。
+
+## 1.113.0-rc4 - 2026-07-01
+
+### Added
+- **Editor LSP 诊断接入（1.113.0-rc4）** —— Go / TypeScript / JavaScript / Swift 的 LSP `textDocument/publishDiagnostics` 现在会进入 AppState，并按当前文件 URI 转换为 editor 可绘制的错误、警告、信息和提示区间。
+- Editor 正文新增 LSP 诊断下划线与轻量背景提示，状态栏显示错误/警告数量，并可一键跳转到首个诊断位置；切换到非第一批 IDE 语言或关闭文件时会清理过期诊断。
+- `EditorLanguageServiceTests` 扩展到 11 条，新增 diagnostics notification 分发、UTF-16 range 反向转换和 editor diagnostic issue 映射测试。版本号从 **1.113.0-rc3** 提升为 **1.113.0-rc4**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.113.0-rc3 - 2026-07-01
+
+### Added
+- **Editor LSP 结构大纲接入（1.113.0-rc3）** —— Go / TypeScript / JavaScript / Swift 的 Structure 侧栏和符号跳转现在优先使用 LSP `textDocument/documentSymbol` 返回的真实语义结构；语言服务器不可用、返回为空或刷新尚未完成时继续使用原有正则 outline 作为 fallback。
+- `EditorLanguageServiceManager` 新增 document symbols 请求，AppState 增加当前文件 IDE outline 缓存与刷新桥接，Structure 面板打开和 Symbol Jump 打开/编辑时会触发 LSP outline 刷新，并在结果仍匹配当前文件内容时替换本地 outline。
+- `EditorLanguageServiceTests` 扩展到 9 条，新增 LSP document symbol 嵌套结构到 outline 的映射测试，以及 manager 级 `textDocument/documentSymbol` 主流程测试。版本号从 **1.113.0-rc2** 提升为 **1.113.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.113.0-rc2 - 2026-07-01
+
+### Added
+- **Editor LSP 定义跳转接入（1.113.0-rc2）** —— Go / TypeScript / JavaScript / Swift 文件打开和编辑时会同步到 `EditorLanguageServiceManager` 管理的 LSP session；Command-click / 右键 Go to Definition 现在优先走 LSP `textDocument/definition`，找不到服务器、请求失败或无结果时自动回退到原有正则 resolver。
+- 新增 editor UTF-16 offset 到 LSP line/character 的位置转换，补齐 `EditorDefinitionRequest` 光标 offset 传递、LSP location 到现有 editor navigation 的桥接，以及 manager 级 session 复用、didOpen/didChange 版本递增逻辑。
+- `EditorLanguageServiceTests` 扩展到 7 条，新增 LSP position 转换和 manager definition 主流程测试，锁住 initialize → initialized → didOpen → definition 的第一批 IDE 通路。版本号从 **1.113.0-rc1** 提升为 **1.113.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.113.0-rc1 - 2026-07-01
+
+### Added
+- **第一批 IDE 语言服务底座（1.113.0-rc1）** —— 新增 `EditorLanguageServiceRegistry`，把 Go、TypeScript、JavaScript、Swift 标记为第一批 IDE 级语言，分别映射到 `gopls`、`typescript-language-server --stdio` 和 `sourcekit-lsp`，并记录 workspace marker、安装提示和 diagnostics / hover / definition / document symbols / completion 等本期能力。
+- 新增最小 LSP 协议模型、`Content-Length` JSON-RPC framing、进程 transport、可执行文件解析和 `LanguageServerClient`，支持 initialize、didOpen、didChange、didClose、hover、definition、document symbols 与 diagnostics 通知缓存；现有正则高亮/outline/definition 保持 fallback，后续 UI 接入走 LSP 优先。
+- 新增 `EditorLanguageServiceTests`，覆盖第一批语言 registry、workspace root 探测、LSP 帧解析、文档生命周期通知和 request/response 解码。版本号从 **1.112.0-rc5** 提升为 **1.113.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 文档位点。
+
+## 1.112.0-rc5 - 2026-07-01
+
+### Fixed
+- **Editor 光标点击定位闪动收敛（1.112.0-rc5）** —— 编辑器插入点竖线现在按字体实际 ascender/descender 高度居中绘制，不再跟随整行 line fragment 撑得偏高；点击不同位置移动光标时，selection change 只重绘旧/新当前行附近，避免把整个 text view 标记为需要刷新导致轻微闪动。
+- 版本号从 **1.112.0-rc4** 提升为 **1.112.0-rc5**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway 文档位点。
+
+## 1.112.0-rc4 - 2026-07-01
+
+### Fixed
+- **智能审批改为 AI 判断正常运维命令（1.112.0-rc4）** —— `run_command` 的非 typed-confirmation 网络/远端命令不再因为 `ssh`、`curl -X POST`、Docker/nginx 运维动作等直接退回人工审批；智能审批会把这类命令送到 safety judge，由 AI 判断是否属于正常开发/部署/运维工作。
+- Safety judge 提示词从“只有只读才 YES”改为“正常工作且非恶意可 YES”：启动 Docker、重启/重载 nginx、添加 nginx 站点等正常运维可以通过；清盘、广泛删除、读私钥/泄露密钥、隐藏持久化、关闭安全控制、无边界 root/远端交互 shell 等仍为 NO。`rm -rf /`、读 `~/.ssh/id_rsa` 等 typed-confirmation 命令继续硬性要求人工确认。
+- UI 文案同步为“AI 批准正常命令”，并增加回归测试锁住 `ssh ... docker run` 可进入 AI judge、破坏性/偷密钥命令不可进入 judge。版本号从 **1.112.0-rc3** 提升为 **1.112.0-rc4**。
+
+## 1.112.0-rc3 - 2026-07-01
+
+### Fixed
+- **Agent 验证中不再自动切到任务监控侧栏（1.112.0-rc3）** —— 前台 `run_command` 的「验证中」状态继续显示在 composer / 状态行，但不再把右侧侧边栏自动切到「任务监控」；真正需要右栏承载的后台 job、媒体任务、待办、工作文件、学习事件和上下文压缩仍保留自动展开能力。
+- `AgentTaskMonitorSnapshot` 增加独立的自动展开摘要，自动展开逻辑只比较这份摘要，避免已有待办时因为前台验证状态变化顺手抢右栏；`AgentBackgroundJobsTests` 增加回归覆盖。版本号从 **1.112.0-rc2** 提升为 **1.112.0-rc3**。
+
+## 1.112.0-rc2 - 2026-07-01
+
+### Fixed
+- **Agent 浅色皮肤在系统 dark mode 下保持可读（1.112.0-rc2）** —— `mist-forest` 和 `rice-paper` 两个浅色自定义皮肤现在显式使用 light color scheme，不再在 macOS dark mode 下继承白色 `.primary/.secondary` 文字，修复 `/goal` / Agent 窗口浅底白字几乎不可读的问题。
+- `EditorCoreBehaviorTests` 增加皮肤 color scheme 回归测试，锁住 system 皮肤继续跟随系统、浅色皮肤固定 light、暗色皮肤固定 dark 的对比度约束；版本号从 **1.112.0-rc1** 提升为 **1.112.0-rc2**。
+
+## 1.112.0-rc1 - 2026-06-30
+
+### Added
+- **受保护机密批量插入（1.112.0-rc1）** —— Agent Composer 的“插入受保护机密”弹窗现在一次最多支持 3 个密码/Token；每行独立填写标签和机密内容，插入后会把多个 `${secret:...}` 占位符按顺序追加到输入框。
+- 弹窗新增用法提示，明确“每行一个密码或 Token，插入后把占位符放到命令、请求头或表单字段需要的位置”；真实值仍只保存在本机 Keychain，本地工具执行前才解析。
+- `AgentToolsCoreTests` 增加批量机密插入回归测试，锁住空行跳过、最多 3 个和第四个不会保存/解析的边界；版本号从 **1.111.0-rc1** 提升为 **1.112.0-rc1**。
+
+## 1.111.0-rc1 - 2026-06-30
+
+### Added
+- **Browser Ops HAR / API / 性能诊断（1.111.0-rc1）** —— 内嵌浏览器新增 `embedded_browser_requests`、`embedded_browser_export_har`、`embedded_browser_storage`、`embedded_browser_performance` 和 `embedded_browser_failed_resources`，覆盖 fetch/XHR AJAX API、脱敏请求/响应头、HAR 文件导出、同源 cookie/storage/IndexedDB 概况、页面导航/绘制/资源性能，以及失败资源聚合。
+- WKWebView 诊断脚本现在会在页面启动时包装 `fetch` 与 `XMLHttpRequest`，捕获 method、URL、status、耗时、MIME、响应大小、请求头和响应头；`authorization`、`cookie`、`set-cookie`、token、secret、API key 等敏感头会在采集层脱敏。
+- Browser Ops 专家提示和门禁测试同步扩展，确保新诊断工具仍只在激活 Browser Ops 后暴露；版本号从 **1.110.0-rc1** 提升为 **1.111.0-rc1**。
+
+## 1.110.0-rc1 - 2026-06-30
+
+### Added
+- **Browser Ops 诊断工具（1.110.0-rc1）** —— 内嵌浏览器新增 `embedded_browser_snapshot`、`embedded_browser_wait_for`、`embedded_browser_eval`、`embedded_browser_console` 和 `embedded_browser_network`，补齐 DOM 元素探测、等待页面变化、受控 JS 检查、console/error/rejection 读取，以及 Performance Resource Timing 网络资源耗时、大小和估算速度。
+- Browser 面板 WKWebView 会在页面启动时注入轻量诊断脚本，捕获 `console.debug/log/info/warn/error`、`window.error` 和 `unhandledrejection` 到本地环形缓冲；网络读取基于浏览器原生 performance entries，不额外代理或下载资源。
+- `XeditTests` 扩展 Browser Ops 专家门禁断言，确认 console、network、snapshot 等新工具仍只在激活 Browser Ops 后暴露；这是 Browser Ops 的新增诊断能力，版本号从 **1.109.0-rc498** 提升为 **1.110.0-rc1**。
+
+## 1.109.0-rc498 - 2026-06-30
+
+### Added
+- **侧边栏内嵌浏览器与浏览器专家包（1.109.0-rc498）** —— Composer 专家入口新增 Browser Ops，可像短剧专家一样按会话激活；激活后才显示右侧“Browser”面板，并暴露 `embedded_browser_*` 与 `chrome_*` 浏览器操作工具。
+- 右侧 Browser 面板内置 WKWebView、地址栏、前进/后退/刷新和截图按钮；Agent 可对可见内嵌浏览器执行导航、读取页面、CSS selector 点击、填写文本和截图保存。Chrome bridge 工具保留给用户真实 Chrome 会话、登录态和已有标签页。
+- `XeditTests` 增加专家门禁回归测试，锁住默认不暴露浏览器/Chrome 操作工具、激活 Browser Ops 后才开放的边界；版本号从 **1.109.0-rc497** 提升为 **1.109.0-rc498**。
+
+## 1.109.0-rc497 - 2026-06-30
+
+### Fixed
+- **编译告警清理：AVFoundation 弃用 + run-script 每次重跑（1.109.0-rc497）** —— 接续 rc 系列的告警清理。① 7 个 workflow（MeetingNotes / Transcribe / VideoClip / VideoExtract / VideoGif / VideoSummary / VideoThumbnail）里的 `AVURLAsset.duration`（macOS 13 起弃用）改为异步 `try? await asset.load(.duration)`，行为不变；TranscribeWorkflow 的同步 IIFE 顺手重写成 async 取值。② `Re-sign ONNX dylib (Release only)` 这条 run-script build phase 之前没声明 `inputPaths/outputPaths`，被 Xcode 判为「无输出 → 每次 build 都跑」；补上源 dylib 输入与产物 dylib 输出后可做依赖分析、Release 下能跳过。编译告警 25 → 17（累计 43 → 17，剩余为 onnxruntime C 互操作 16 + AppIntents 元数据提示 1，风险高/无害，暂留）。
+- 版本号从 **1.109.0-rc496** 提升为 **1.109.0-rc497**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway 同步。
+
+## 1.109.0-rc496 - 2026-06-30
+
+### Fixed
+- **侧边栏终端 SSH 主机来源透明化（1.109.0-rc496）** —— 新建终端菜单不再让本机保存过的 SSH runtime 像 App 内置环境一样混在本地终端下面；菜单显式标注“已配置的 SSH 主机”，空配置时显示无主机状态，并提供“管理 SSH 主机...”入口直达 Settings → Runtimes。
+- `AgentRuntimeStore` 增加隔离 defaults 的回归测试，确认空配置不会自动种下 `q3` 这类个人主机；保存团队主机后也只读取已保存的配置。
+- 版本号从 **1.109.0-rc495** 提升为 **1.109.0-rc496**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc495 - 2026-06-30
+
+### Fixed
+- **终端捷径改名不再反复触发 Keychain 授权（1.109.0-rc495）** —— 已经落盘的受保护输入片段在改名、排序、pretty JSON 保存时只保留 Keychain 引用，不再逐段读取再写回，避免改一个标题弹多次“允许访问机密信息”。
+- 回放同一个终端捷径时会按 Keychain account 缓存受保护片段，同一次回放里同一引用最多读取一次；`WillDeepTests` 增加“改名不碰 Keychain”和“回放缓存读取”回归测试。
+- 版本号从 **1.109.0-rc494** 提升为 **1.109.0-rc495**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc494 - 2026-06-30
+
+### Added
+- **终端录制捷径可编辑（1.109.0-rc494）** —— 终端捷径菜单新增“编辑”，会用 WillDeep 现有编辑器打开 `Application Support/WillDeep/terminal-shortcuts/shortcuts.json` 并定位到当前捷径，用户可直接修改录制内容。
+- 捷径 JSON 改为 pretty printed，保存该文件后终端捷径列表会自动从磁盘重载；如果 JSON 格式错误，列表继续使用保存前的可用版本并提示用户修正。
+- `WillDeepTests` 增加终端捷径编辑文件格式与重载回归测试；版本号从 **1.109.0-rc493** 提升为 **1.109.0-rc494**。
+
+## 1.109.0-rc493 - 2026-06-30
+
+### Fixed
+- **请求详情面板长文本截断（1.109.0-rc493）** —— Agent 错误卡片展开详情时不再直接渲染完整超长 request summary / request body；展示层会对超长单行和超长段落做中间省略，保留头尾关键信息，避免 SwiftUI 文本布局卡顿。
+- 每个详情 section 新增复制完整内容按钮，排查时仍可取到未截断原文；`AgentToolsCoreTests` 增加截断预览回归测试。
+- 版本号从 **1.109.0-rc492** 提升为 **1.109.0-rc493**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc492 - 2026-06-30
+
+### Fixed
+- **侧边栏终端快照只读最新一屏（1.109.0-rc492）** —— `terminal_snapshot` 不再把最近 400 行 scrollback/history 一起塞进模型上下文，默认只读取 active tab live 底部可见屏幕，避免旧命令输出干扰当前判断。
+- 快照 payload 标题改为 `latest visible screen`，默认 `max_characters` 从 16000 降到 6000、上限从 40000 降到 12000；工具描述同步说明默认不包含历史滚动内容。
+- 版本号从 **1.109.0-rc491** 提升为 **1.109.0-rc492**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc491 - 2026-06-30
+
+### Fixed
+- **SSH 远端只读命令识别（1.109.0-rc491）** —— `run_command` 现在会跳过 `ssh` 外壳、按远端真实命令判断风险；`ssh host cat /var/log/...`、`ssh host ping ...` 这类只读远端命令不再被本地 workspace 路径检查误判为写操作。
+- 远端危险命令和敏感路径仍保持拦截：交互式 `ssh host` 继续需要用户批准，`ssh host "rm -rf ..."` 需要危险确认，`ssh host "cat ~/.ssh/id_rsa"` 仍按敏感路径升级。
+- `AgentToolsCoreTests` 新增 SSH 远端命令风险和授权签名回归测试，锁住 `ssh git status` 的窄签名与远端路径判断边界。
+- 版本号从 **1.109.0-rc490** 提升为 **1.109.0-rc491**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc490 - 2026-06-30
+
+### Security
+- **Agent secret 占位符加固（1.109.0-rc490）** —— `${secret:...}` ID 改为纯随机 32 位 hex，不再把用户填写的 label slug 暴露给模型；Agent 专用 secret 以 base64 envelope 存入 Keychain，解析时还原原文，避免通用凭据保存链路 trim 掉首尾空格这类可能属于密码本体的字符。
+- URL encode transform 改为 query value 级严格 percent-encoding，并在结果脱敏时同时覆盖严格编码、旧 queryAllowed 编码、base64 和原文；`AgentToolsCoreTests` 新增本地执行工具解析 / 委托型 AI 执行器不解析的边界测试。
+- 版本号从 **1.109.0-rc489** 提升为 **1.109.0-rc490**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc489 - 2026-06-30
+
+### Added
+- **终端工具支持总是允许（1.109.0-rc489）** —— `terminal_send_command` 和 `terminal_send_control` 现在会生成 always-allow 签名，审批卡片可显示“总是允许”。终端命令按完整命令行记忆，终端控制键按具体控制键记忆，例如 `ctrl_c` 不会顺带允许 `enter`。
+- `AgentToolsCoreTests` 新增终端工具签名回归测试，锁住终端命令和不同控制键的授权边界。
+- 版本号从 **1.109.0-rc488** 提升为 **1.109.0-rc489**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc488 - 2026-06-30
+
+### Added
+- **Agent 受保护机密占位符（1.109.0-rc488）** —— Composer 新增“插入受保护机密”入口，把用户输入的密码/Token 原样封装后保存到本机 Keychain，只把带随机 ID 的 `${secret:...}` 占位符放进对话；`run_command`、终端发送、MCP 调用、Lark CLI 和 Chrome 输入等本地执行工具会在执行前解析占位符，委托给外部 AI 执行器的工具不会解析明文。
+
+### Security
+- 工具结果、后台任务命令/输出、终端工具摘要和 tool error 都会对真实机密、URL 编码值、base64 值和占位符做统一脱敏；XCTest 环境下 `AgentCredentialStore` 默认使用内存凭据仓库，避免测试宿主触发真实 `com.willdeep.credentials` 钥匙串授权弹窗。
+- 版本号从 **1.109.0-rc487** 提升为 **1.109.0-rc488**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc487 - 2026-06-30
+
+### Fixed
+- **本轮 Agent 变更归因（1.109.0-rc487）** —— Agent 每轮开始不再把整个 git worktree 的历史脏文件写入会话；工具执行后改用前后快照签名归因本轮实际变化路径，右侧“产物”和底部“xx 个文件已更改”只展示当前会话/本轮 Agent 引发的文件。
+- 审查 diff 预览也改为按已归因文件路径执行 `git diff`，不再把未归因的用户本地改动一起带进 diff 窗口。
+- `GitWorktreeCoreTests` 新增归因过滤、基线变化路径和 diff 预览限域回归测试。
+- 版本号从 **1.109.0-rc486** 提升为 **1.109.0-rc487**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc486 - 2026-06-30
+
+### Changed
+- **变更文件列表默认收起（1.109.0-rc486）** —— Agent composer 上方不再默认显示“前 3 个已变更文件”卡片；吸附的“xx 个文件已更改 +x -y 审查”栏在“审查”后新增展开/收起图标，用户点展开后才显示文件列表，点收起后隐藏。
+- 展开状态改为按 Agent session/runtime 保存，切换会话不会互相串状态；“审查”仍打开完整 diff 预览。
+- 版本号从 **1.109.0-rc485** 提升为 **1.109.0-rc486**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc485 - 2026-06-30
+
+### Fixed
+- **审查 diff 窗口不抢焦点（1.109.0-rc485）** —— Agent composer 的“审查”入口和弹出的 worktree diff 预览窗口中，标题、复制/关闭按钮、分隔线、滚动 diff 文本和外层容器均显式 `.focusable(false)`，避免窗口打开后把焦点环落到任一组件上。
+- 版本号从 **1.109.0-rc484** 提升为 **1.109.0-rc485**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc484 - 2026-06-30
+
+### Fixed
+- **等待审批不自动打开右侧栏（1.109.0-rc484）** —— tool call 进入 `pendingApproval` / `awaitingConfirm` / `awaitingUserAnswer` 时，审批卡片已经以内联形式显示在 chat 区；任务监控不再因为“仅等待用户审批”自动展开右侧栏。
+- 右侧任务监控仍可在用户手动打开时展示等待审批状态；后台任务、上下文压缩、媒体任务、待办、工作文件和学习事件等仍会按原逻辑自动展开。
+- `AgentBackgroundJobsTests` 新增 snapshot 回归测试，锁住“等待审批是可见监控内容，但不是自动开栏内容”的区别。
+- 版本号从 **1.109.0-rc483** 提升为 **1.109.0-rc484**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc483 - 2026-06-30
+
+### Fixed
+- **终端录制捷径落盘持久化（1.109.0-rc483）** —— 终端录制生成的捷径从 UserDefaults 迁到 `Application Support/WillDeep/terminal-shortcuts/shortcuts.json` 文件存储；首次读取会自动迁移旧版 `com.willdeep.terminalShortcuts.v1` 数据，退出 App 后重新进入仍能恢复录制内容。
+- 终端捷径改名会立即写回同一份 JSON 文件，重新启动后继续显示改名后的标题；受保护输入仍只保存 Keychain 引用，捷径 JSON 不写入密码/Token 明文。
+- `WillDeepTests` 增加终端捷径文件落盘和改名持久化回归测试。
+- 版本号从 **1.109.0-rc482** 提升为 **1.109.0-rc483**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway 同步。
+
+## 1.109.0-rc482 - 2026-06-30
+
+### Fixed
+- **Composer 打字回显卡顿 / 启动 CPU 跑满（1.109.0-rc482）** —— `sample` 采样定位到 debug 版主线程约 90% 时间在重建 composer 底部 picker pill（Workspace/Model/Mode/Approval/Execution/Overflow）的 SwiftUI view-list。根因：每次击键写入 `activeRuntime.input`（`@Published`），其 `objectWillChange` 经 `subscribeToActiveRuntime` 转发成 `AppState.objectWillChange`，重渲染所有 `appState` 观察者——包括整排 pill，且被 `ComposerAdaptiveControlStrip` 的 `ViewThatFits` 放大 3×。修复：打字路径用 `suppressActiveRuntimeForward` 抑制这条转发（输入缓冲 `runtime.input` 仍实时更新，发送/外部读取无感知；仅在输入空↔非空翻转时放行一次，让 `SendStopButton.canSend` 更新）。配套：slash 命令面板改由 `ComposerTextEditor` 协调器经 `onSlashQueryChange` 推送查询过滤（只在缓冲以 `/` 开头时更新，避免普通打字churn `@State` 又触发重渲染）；Plan banner 的「继续打字即留在 Plan 模式」从 `onChange(of: appState.agentInput)` 改走 `ComposerCard` 的 `onUserEdit` 回调。打字时若 slash 面板未开则几乎零重渲染（采样验证：pill 重建降 5～13×，`_makeViewList` 11000→1637）。
+- **窗口切换 / 焦点变化时 composer 卡顿（1.109.0-rc482）** —— 窗口重新显示时 SwiftUI 必然重建 composer view 树，而 `ComposerAdaptiveControlStrip` 原先用 `ViewThatFits` 在三套布局变体间按窗口宽度挑一套，代价是**每次重建都要把每个变体整建一遍来测量**（采样：窗口切换时 `_makeViewList` 7854 次、占主线程一半多）。改为**固定单套布局**：Workspace / Model / Mode 固定展示，审批 / 执行器 / 插件 / 专家固定收进「更多 …」弹层（`ComposerOverflowControl` 新增 `.approval`，复用既有 `composer.overflow.approval` 文案），彻底去掉 `ViewThatFits` 与宽度自适应。采样验证：窗口切换时 composer 重建 `_makeViewList` 7854→0，主线程回到空闲。
+- 版本号从 **1.109.0-rc481** 提升为 **1.109.0-rc482**。pbxproj / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway 同步。
+
+## 1.109.0-rc481 - 2026-06-29
+
+### Fixed
+- **Agent 窗口打开迟疑与标题串名（1.109.0-rc481）** —— Agent singleton 窗口现在会标记自己的 `NSWindow.identifier` 并持续恢复标题为 `WillDeep Agent`，编辑器文件名更新不会再误写到 Agent 窗口标题。
+- Composer 的 workspace/runtime/model picker 改为维护菜单快照缓存；SwiftUI 布局 Agent 窗口时不再反复读取远端 runtime descriptor、排序 workspace 列表或重算 ad-hoc 模型分组，减少点击 Agent 模式后的主线程布局抖动。
+- **终端输入与侧栏切换卡顿（1.109.0-rc481）** —— 左侧会话列表和右侧面板显隐不再对整棵 Agent 布局做隐式动画；终端 session/controller 改由终端面板局部观察，不再经 `AppState` 把每次字符/标题/tab 状态变化广播给全局；终端字体/Nerd Font 枚举改为进程级缓存，终端 tab 状态通知合并到下一轮 runloop，降低终端字符显示和侧栏切换时的 SwiftUI 重排压力。
+- **启动内存占用（1.109.0-rc481）** —— 语音 ONNX 模型启动预热改为默认关闭；用过语音后仍可在 Settings → Voice 手动打开预热，以更高 idle memory 换取 push-to-talk 即刻响应。
+- 版本号从 **1.109.0-rc480** 提升为 **1.109.0-rc481**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 同步。
+
+## 1.109.0-rc480 - 2026-06-29
+
+### Fixed
+- **右侧侧栏打开延迟（1.109.0-rc480）** —— Agent 右侧侧栏打开时不再同步 `setFrame(display: true)` 强制窗口立即重绘；终端侧栏首次挂载时延后启动默认本地 shell，让侧栏壳子先显示，减少点击后约 1 秒才出现的体感延迟。
+- 版本号从 **1.109.0-rc479** 提升为 **1.109.0-rc480**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc479 - 2026-06-29
+
+### Fixed
+- **终端录制 echo 查询缓存（1.109.0-rc479）** —— 终端录制期间连续普通键入复用 echo 状态缓存，不再每个按键都查询 PTY；收到非预期回显输出、缓存过期或重新启动终端时才重新读取 echo 状态，继续保证 `Password:` 等不回显输入按受保护片段记录。
+- 版本号从 **1.109.0-rc478** 提升为 **1.109.0-rc479**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc478 - 2026-06-29
+
+### Fixed
+- **终端非录制输入延迟（1.109.0-rc478）** —— Agent 右侧终端在普通打字时不再执行录制用的 echo 状态检查和输入字节复制，只有真正开始录制后才检测 echo 并记录受保护输入，降低侧边栏终端键入时的 CPU 与延迟。
+- 版本号从 **1.109.0-rc477** 提升为 **1.109.0-rc478**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc477 - 2026-06-29
+
+### Changed
+- **Composer 更多设置专家入口（1.109.0-rc477）** —— “专家”不再固定占用 composer 底部空间，改为进入“更多设置”；专家列表使用开关组件表达单向激活，未激活可打开，已激活保持开启并禁用，避免误关。
+- Composer 底部控制行新增自适应布局：宽度充足时会逐步把执行器、插件、专家从“更多设置”里直接放出来显示，窄屏时仍收进“更多设置”，减少侧栏/输入区挤压。
+- 版本号从 **1.109.0-rc476** 提升为 **1.109.0-rc477**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc476 - 2026-06-29
+
+### Added
+- **终端捷径录制（1.109.0-rc476）** —— Agent 右侧终端面板新增录制按钮，可把当前终端输入字节和输入间隔记录为可回放捷径，停止后显示在终端标签上方。
+- 终端捷径支持在当前活动终端回放，并可通过捷径菜单改名或删除；回放期间不会被再次录进新捷径。
+
+### Security
+- 录制入口在写入 PTY 前检查终端 echo 状态；登录/密码等不回显输入保存为受保护片段，持久化时只在捷径 JSON 中留下 Keychain 引用。
+- 回放受保护片段前会再次检查当前终端是否仍处于 echo-off；如果已经回到普通可回显输入，WillDeep 不会把该片段打出来。
+- `WillDeepTests` 新增终端录制回归测试，验证 echo-off 输入不会落入捷径 JSON，且仍可通过受保护事件恢复。
+
+### Changed
+- 版本号从 **1.109.0-rc475** 提升为 **1.109.0-rc476**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc475 - 2026-06-29
+
+### Changed
+- **专家单向激活与侧栏门禁（1.109.0-rc475）** —— composer 专家入口从可反复开关改为会话内只允许“未激活 → 已激活”；已激活专家在菜单中保持勾选并禁用，避免误关后让模型工具面突然收窄。
+- 短剧右侧面板现在复用专家可用性判断：未激活短剧专家时，侧栏菜单不再显示“短剧”，外部短剧打开请求也会被消费并拒绝。
+
+### Fixed
+- `WillDeepTests` 扩展专家回归测试，覆盖短剧工具过滤、短剧侧栏门禁和重复激活不回退。
+- 版本号从 **1.109.0-rc474** 提升为 **1.109.0-rc475**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc474 - 2026-06-29
+
+### Added
+- **Composer 专家激活（1.109.0-rc474）** —— composer 底部新增“专家”入口，按会话激活可选专家包；短剧制作专家默认关闭，开启后才向模型暴露 `short_drama_*` 工具和短剧专家提示。
+- Agent 会话新增 `activeExperts` 持久化字段，切换历史会话后专家激活状态保持不丢。
+
+### Fixed
+- **No workspace 会话迁移（1.109.0-rc474）** —— 没有 workspace 时已经聊过的会话，选择 workspace 后会原地绑定到该 workspace，不再把旧内容留在 “No workspace” 分组并另开一条会话。
+- `WillDeepTests` 新增 no-workspace 历史会话迁移和短剧专家工具过滤回归测试。
+- 版本号从 **1.109.0-rc473** 提升为 **1.109.0-rc474**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc473 - 2026-06-29
+
+### Fixed
+- **编辑器软换行行号与当前行高亮（1.109.0-rc473）** —— 行号尺现在只在逻辑行起始 fragment 绘制行号，长行软换行出来的延续视觉行不再重复显示同一个行号。
+- 当前行高亮改为按光标所在 TextKit glyph fragment 对齐正文，不再因为逻辑行号相同而把软换行延续行、下一行行号区或行号与文本之间的小缝一起染上高亮色。
+- `EditorCoreBehaviorTests` 新增 TextKit 软换行布局回归测试，守住“软换行延续 fragment 不产生新行号”的行为。
+- 版本号从 **1.109.0-rc472** 提升为 **1.109.0-rc473**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc472 - 2026-06-29
+
+### Fixed
+- **编辑器 Paper 当前行高亮色（1.109.0-rc472）** —— Paper 主题当前行高亮从不透明米灰改为低透明品牌绿洗色，正文区和行号栏继续复用同一主题色，避免当前行在浅色编辑器里呈现灰脏条带感。
+- `EditorCoreBehaviorTests` 新增回归测试，守住 Paper 当前行高亮为低透明、偏品牌绿的轻量提示色。
+- 短剧 MVP 指针文档同步到当前 rc；本版本不新增短剧制作能力，rc471 的 handoff todo summary 验收口径继续保留。
+- 版本号从 **1.109.0-rc471** 提升为 **1.109.0-rc472**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc471 - 2026-06-29
+
+### Changed
+- **短剧 handoff todo summary（1.109.0-rc471）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在输出 `handoff_todo_summary`，汇总交接待办总数、阶段分布、manual/provider/verify/release 数量、证据路径数、复验命令数、缺证据待办数、是否需要机器重放和是否存在 release 待办。
+- Markdown `Handoff Todos` 小节顶部会直接显示 todo 摘要，接手人不用先读完整 JSON 才知道当前包是“补人工证据/补 provider 证据/重跑机器验收/可 release”哪种状态。
+- `scripts/short_drama_mvp_handoff_bundle_contract_test.rb` 新增 trial 和 ready release 的 todo summary 检查，确保摘要与 `handoff_todos` 数量、阶段、证据路径和复验命令一致。
+- `scripts/version_consistency.rb` 新增守门，确保 handoff bundle 持续保留 `handoff_todo_summary`、`build_handoff_todo_summary`、`machine_replay_required`、`release_ready_todo_present` 和 contract 中的 summary 检查。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc471 — 短剧 handoff todo summary`。
+- 版本号从 **1.109.0-rc470** 提升为 **1.109.0-rc471**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc470 - 2026-06-29
+
+### Changed
+- **短剧 handoff todo evidence（1.109.0-rc470）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 的 `handoff_todos` 现在为每条待办输出 `evidence_paths` 和 `verification_command`，Markdown `Handoff Todos` 小节会直接列出 Evidence 与 Verify。
+- manual/provider smoke 待办会指向对应的 manual/provider JSON、脱敏指南或 smoke evidence 报告；ready release 待办会保留 release 阶段证据路径和 handoff bundle contract 复验命令。
+- `scripts/short_drama_mvp_handoff_bundle_contract_test.rb` 新增 `handoff todos point at evidence files` 检查，并加强 release todo 的 evidence/verification 断言。
+- `scripts/version_consistency.rb` 新增守门，确保 handoff bundle 持续保留 `todo_evidence_paths`、`verification_command`、`evidence_paths` 和 contract 中的 todo evidence 检查。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc470 — 短剧 handoff todo evidence`。
+- 版本号从 **1.109.0-rc469** 提升为 **1.109.0-rc470**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。
+
+## 1.109.0-rc469 - 2026-06-29
+
+### Changed
+- **短剧 handoff todos（1.109.0-rc469）** —— `scripts/short_drama_mvp_handoff_bundle.rb` 现在会把 readiness、pending reasons 和 smoke evidence next actions 收敛成 `handoff_todos`，每条待办包含 `order`、`phase`、`kind`、`title`、`detail`、`command` 和 `items`。
+- 默认 trial handoff 会产出 `manual_smoke`、`provider_smoke` 和 `verify` 阶段，ready release 会产出 `release_candidate_handoff` 待办，交接人不用在多个报告小节中手动拼行动顺序。
+- `scripts/short_drama_mvp_handoff_bundle_contract_test.rb` 新增 handoff todo 合约检查，守住 default trial 的 manual/provider/verify 阶段和 ready release 的 release 待办。
+- `scripts/version_consistency.rb` 新增守门，确保 handoff bundle 持续保留 `handoff_todos`、`build_handoff_todos`、`## Handoff Todos`、`regenerate_acceptance_and_handoff` 和 contract 中的 todo 检查。
+- `SHORT_DRAMA_AI_MVP_CUTOFF.md`、`SHORT_DRAMA_AI_MVP_TRYOUT.md` 和 `MANUAL_TEST_QUEUE.md` 同步把当前人工验收入口更新为 `1.109.0-rc469 — 短剧 handoff todos`。
+- 版本号从 **1.109.0-rc468** 提升为 **1.109.0-rc469**。pbxproj×6 / Go agent / Help Info.plist / README badge×2 / product-overview / Mobile Gateway / Agent Harness 与短剧验收指针同步。

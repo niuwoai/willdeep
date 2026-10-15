@@ -6,7 +6,7 @@ import CoreFoundation
 /// outside this boundary and must not be booked a second time.
 @MainActor
 enum AgentModelRequestAccounting {
-    static func run<T>(ledger: AgentModelRequestLedger?, configuration: AgentConfiguration,
+    static func runAccounted<T>(ledger: AgentModelRequestLedger?, configuration: AgentConfiguration,
                        requestBody: Data? = nil,
                        onEvent: @escaping @Sendable (AgentClientEvent) async -> Void,
                        operation: (@escaping @Sendable (AgentClientEvent) async -> Void) async throws -> T) async throws -> T {
@@ -26,7 +26,7 @@ enum AgentModelRequestAccounting {
 
     /// Production adapters must send the returned request, not their original
     /// encoding. Each internal fallback/retry receives a fresh reservation.
-    static func run<T>(ledger: AgentModelRequestLedger?, configuration: AgentConfiguration,
+    static func runAccounted<T>(ledger: AgentModelRequestLedger?, configuration: AgentConfiguration,
                        request: URLRequest, format: AgentModelRequestFormat,
                        safelyQuantifiableInput: Bool = true,
                        ownerGate: AgentRequestOwnerGate? = nil,

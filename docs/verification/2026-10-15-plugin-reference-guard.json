@@ -1,0 +1,220 @@
+{
+  "version": "1.421.0-rc2",
+  "build": 922,
+  "scope": "test guard and version metadata only; Swift and pinned plugin implementations unchanged",
+  "interaction": {
+    "ok": true,
+    "group": "interaction",
+    "started_at": "2026-10-15T11:47:28Z",
+    "finished_at": "2026-10-15T11:47:31Z",
+    "duration_seconds": 2.958,
+    "steps": [
+      {
+        "name": "computer-use-helper",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.165,
+        "started_at": "2026-10-15T11:47:28Z",
+        "finished_at": "2026-10-15T11:47:28Z"
+      },
+      {
+        "name": "chrome-extension",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.143,
+        "started_at": "2026-10-15T11:47:28Z",
+        "finished_at": "2026-10-15T11:47:28Z"
+      },
+      {
+        "name": "chrome-extension-agent-tab",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.263,
+        "started_at": "2026-10-15T11:47:28Z",
+        "finished_at": "2026-10-15T11:47:28Z"
+      },
+      {
+        "name": "widget-side-panel",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.16,
+        "started_at": "2026-10-15T11:47:28Z",
+        "finished_at": "2026-10-15T11:47:29Z"
+      },
+      {
+        "name": "video-studio-reference-probe",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.891,
+        "started_at": "2026-10-15T11:47:29Z",
+        "finished_at": "2026-10-15T11:47:29Z"
+      },
+      {
+        "name": "plugin-command",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.41,
+        "started_at": "2026-10-15T11:47:29Z",
+        "finished_at": "2026-10-15T11:47:30Z"
+      },
+      {
+        "name": "roundtable-interaction",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.207,
+        "started_at": "2026-10-15T11:47:30Z",
+        "finished_at": "2026-10-15T11:47:30Z"
+      },
+      {
+        "name": "image-edit",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.333,
+        "started_at": "2026-10-15T11:47:30Z",
+        "finished_at": "2026-10-15T11:47:30Z"
+      },
+      {
+        "name": "media-task-refresh",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.245,
+        "started_at": "2026-10-15T11:47:30Z",
+        "finished_at": "2026-10-15T11:47:31Z"
+      },
+      {
+        "name": "media-import-context",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.141,
+        "started_at": "2026-10-15T11:47:31Z",
+        "finished_at": "2026-10-15T11:47:31Z"
+      }
+    ]
+  },
+  "reference_probe": {
+    "ok": true,
+    "checks": [
+      {
+        "name": "pinned planning and backend preserve ordered filePath",
+        "ok": true
+      },
+      {
+        "name": "only one local backend call and zero provider calls",
+        "ok": true
+      },
+      {
+        "name": "reference compiler restored after probe",
+        "ok": true
+      },
+      {
+        "name": "mediaURL substitution before ReferenceLegend is rejected",
+        "ok": true
+      },
+      {
+        "name": "mediaURL substitution after ReferenceLegend is rejected",
+        "ok": true
+      },
+      {
+        "name": "backend dropping reference_paths is rejected",
+        "ok": true
+      }
+    ],
+    "real_provider_requests": 0
+  },
+  "remote_ci_limitations": {
+    "missing_secret": "PLUGIN_SUBMODULES_TOKEN",
+    "self_hosted_runner_available": false,
+    "observed_run": 38728615967,
+    "remote_green_claimed": false
+  },
+  "real_provider_requests": 0,
+  "quality": {
+    "ok": true,
+    "group": "quality",
+    "started_at": "2026-10-15T11:48:17Z",
+    "finished_at": "2026-10-15T11:48:28Z",
+    "duration_seconds": 10.286,
+    "steps": [
+      {
+        "name": "complexity",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.843,
+        "started_at": "2026-10-15T11:48:17Z",
+        "finished_at": "2026-10-15T11:48:18Z"
+      },
+      {
+        "name": "version",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.163,
+        "started_at": "2026-10-15T11:48:18Z",
+        "finished_at": "2026-10-15T11:48:18Z"
+      },
+      {
+        "name": "i18n",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.27,
+        "started_at": "2026-10-15T11:48:18Z",
+        "finished_at": "2026-10-15T11:48:19Z"
+      },
+      {
+        "name": "i18n-locale",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.426,
+        "started_at": "2026-10-15T11:48:19Z",
+        "finished_at": "2026-10-15T11:48:19Z"
+      },
+      {
+        "name": "i18n-add-keys",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 1.503,
+        "started_at": "2026-10-15T11:48:19Z",
+        "finished_at": "2026-10-15T11:48:21Z"
+      },
+      {
+        "name": "bump-version",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 2.225,
+        "started_at": "2026-10-15T11:48:21Z",
+        "finished_at": "2026-10-15T11:48:23Z"
+      },
+      {
+        "name": "fast-test-entry",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.536,
+        "started_at": "2026-10-15T11:48:23Z",
+        "finished_at": "2026-10-15T11:48:23Z"
+      },
+      {
+        "name": "bundled-agent-rules",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.152,
+        "started_at": "2026-10-15T11:48:23Z",
+        "finished_at": "2026-10-15T11:48:24Z"
+      },
+      {
+        "name": "test-fixture-process-lifetime",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 0.777,
+        "started_at": "2026-10-15T11:48:24Z",
+        "finished_at": "2026-10-15T11:48:24Z"
+      },
+      {
+        "name": "project-build-guard",
+        "status": "passed",
+        "exit_status": 0,
+        "duration_seconds": 3.391,
+        "started_at": "2026-10-15T11:48:24Z",
+        "finished_at": "2026-10-15T11:48:28Z"
+      }
+    ]
+  }
+}

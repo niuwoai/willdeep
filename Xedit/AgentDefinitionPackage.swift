@@ -163,7 +163,7 @@ nonisolated struct AgentPackageV1: Codable, Equatable, Sendable {
 }
 
 /// Strict parser prevents JSONDecoder's duplicate-key and unknown-field acceptance.
-nonisolated indirect enum AgentCanonicalJSON: Equatable {
+nonisolated indirect enum AgentCanonicalJSON: Equatable, Sendable {
     case object([String: Self]), array([Self]), string(String), bool(Bool), null, number(String)
     func requireKeys(_ expected: Set<String>) throws {
         guard case .object(let fields) = self, Set(fields.keys) == expected else { throw AgentAssetError.invalidJSON }

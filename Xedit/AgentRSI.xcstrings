@@ -1,0 +1,358 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "实验契约或版本绑定无效": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实验契约或版本绑定无效"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid experiment contract or revision binding"
+          }
+        }
+      }
+    },
+    "真实模型评测尚未授权": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "真实模型评测尚未授权"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Real-model evaluation has not been approved"
+          }
+        }
+      }
+    },
+    "目标未执行或验证证据不完整": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标未执行或验证证据不完整"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The target did not run or verification evidence is incomplete"
+          }
+        }
+      }
+    },
+    "实验预算或尝试次数已用完": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实验预算或尝试次数已用完"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experiment budget or attempt limit reached"
+          }
+        }
+      }
+    },
+    "实验上传授权已撤销或过期": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实验上传授权已撤销或过期"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experiment upload grant was revoked or expired"
+          }
+        }
+      }
+    },
+    "账号已切换，请重新选择实验": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账号已切换，请重新选择实验"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The account changed. Select the experiment again."
+          }
+        }
+      }
+    },
+    "智能体实验": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "智能体实验"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent experiments"
+          }
+        }
+      }
+    },
+    "候选独立保存，不改变已安装或固定版本。当前仅运行免费离线验收，不能据此判断模型质量提升。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "候选独立保存，不改变已安装或固定版本。当前仅运行免费离线验收，不能据此判断模型质量提升。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Candidates are stored separately without changing installed or pinned revisions. Only free offline acceptance runs are available; they do not measure model quality."
+          }
+        }
+      }
+    },
+    "候选版本号": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "候选版本号"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Candidate version"
+          }
+        }
+      }
+    },
+    "候选指令": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "候选指令"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Candidate instructions"
+          }
+        }
+      }
+    },
+    "保存候选": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存候选"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save candidate"
+          }
+        }
+      }
+    },
+    "运行离线配对验收": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行离线配对验收"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run offline paired acceptance"
+          }
+        }
+      }
+    },
+    "请先选择用户定义。官方定义须先派生为用户副本再做实验。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先选择用户定义。官方定义须先派生为用户副本再做实验。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a user definition first. Fork an official definition to a user copy before experimenting."
+          }
+        }
+      }
+    },
+    "当前账号的候选": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前账号的候选"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Candidates for this account"
+          }
+        }
+      }
+    },
+    "离线执行证据完整": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离线执行证据完整"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline execution evidence is complete"
+          }
+        }
+      }
+    },
+    "离线证据不完整，不能通过": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离线证据不完整，不能通过"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline evidence is incomplete; acceptance failed"
+          }
+        }
+      }
+    },
+    "授权上传此候选定义和执行摘要到当前 some.im 账号；不上传工作区、原始对话或命令输出": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授权上传此候选定义和执行摘要到当前 some.im 账号；不上传工作区、原始对话或命令输出"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow this candidate definition and execution summaries to be uploaded to the current some.im account. Workspace files, raw conversations and command output are excluded."
+          }
+        }
+      }
+    },
+    "上传实验与证据": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上传实验与证据"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upload experiment and evidence"
+          }
+        }
+      }
+    },
+    "已保存的实验结果": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已保存的实验结果"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved experiment results"
+          }
+        }
+      }
+    },
+    "撤销上传授权": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撤销上传授权"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoke upload grant"
+          }
+        }
+      }
+    },
+    "实验预算已用完，已保留中途记录": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实验预算已用完，已保留中途记录"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The experiment budget is exhausted. Partial records were preserved."
+          }
+        }
+      }
+    },
+    "实验中途停止，已保留可核对记录": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实验中途停止，已保留可核对记录"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The experiment stopped. Verifiable records were preserved."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

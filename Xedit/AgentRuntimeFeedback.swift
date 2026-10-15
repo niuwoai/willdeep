@@ -26,10 +26,12 @@ extension AgentRuntime {
         dismissFeedbackReviewForNewInput()
         feedbackReviewSupersededTurnID = nil
         feedbackBudgetStopReason = nil
-        feedbackRunID = UUID()
+        executionEvidenceTrace = AgentExecutionTrace.current
+        feedbackRunID = executionEvidenceTrace?.seed.runID ?? UUID()
         feedbackTurnID = turnID
         feedbackProvider = provider
         feedbackModel = model
+        executionEvidenceTrace?.record("started") { $0.runtimeParameters = runtimeParameters }
         // History belongs to earlier runs. Only new/pending calls may settle
         // into this run's denominator, even when the whole array publishes.
         feedbackRecordedTools = Set(toolCalls.filter { $0.status.isTerminal }.map(\.id))
@@ -62,6 +64,11 @@ extension AgentRuntime {
             // Native completion is not an independently rerun verifier result.
             $0.verification = "unverified"
         }
+        executionEvidenceTrace?.record("finished") {
+            $0.status = reason
+            $0.runtimeParameters = runtimeParameters
+        }
+        executionEvidenceTrace = nil
         feedbackPreviousTurnID = feedbackTurnID
         feedbackRunID = nil
         feedbackTurnID = nil

@@ -12,6 +12,10 @@ enum AgentRoutedModelResponseObserver {
         let model = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !model.isEmpty, model.count <= 128,
               model.rangeOfCharacter(from: .newlines) == nil else { return }
+        AgentExecutionTrace.current?.record("model_routed") {
+            $0.requestID = AgentExecutionTrace.physicalRequestID
+            $0.provider = providerID; $0.model = model
+        }
         receive?(model)
     }
 }
