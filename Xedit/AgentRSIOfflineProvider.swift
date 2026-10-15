@@ -24,7 +24,7 @@ nonisolated final class AgentRSIOfflineProvider: URLProtocol, @unchecked Sendabl
     }
     @MainActor static func withTransport<T>(session: URLSession, host: String,
         operation: () async throws -> T) async throws -> T {
-        guard session.configuration.protocolClasses?.contains(where: { $0 == AgentRSIOfflineProvider.self }) == true,
+        guard session.configuration.protocolClasses?.contains(where: { $0 == AgentRSIOfflineProvider.self || $0 == AgentRSIFreeReviewProvider.self }) == true,
               trace(host: host) != nil else { throw AgentRSIError.paidNotApproved }
         return try await $injectedTransportHost.withValue(host, operation: operation)
     }
