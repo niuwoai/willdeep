@@ -1481,6 +1481,7 @@ enum AgentSubagentRunner {
             if (try? AgentWorkerContextBudget.validate(
                 messages: transcript, tools: toolList, limit: inputLimit
             )) == nil {
+                if AgentRSIApprovedBroker.current != nil { throw AgentRSIError.quota }
                 if compressionsUsed < AgentWorkerTranscriptCompression.maximumCompressionsPerRun {
                     compressionsUsed += 1
                     publishProgress(round: round, activity: .thinking)

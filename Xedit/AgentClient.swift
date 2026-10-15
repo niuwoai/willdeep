@@ -178,6 +178,11 @@ struct AgentClient {
         executionBudget: AgentToolExecutionBudget?, allowsEmptyTaskTakeover: Bool,
         onEmptyResponseRetry: (@MainActor (Int, Int) -> Void)?,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void) async throws {
+        if let broker = AgentRSIApprovedBroker.current {
+            try await broker.run(configuration: configuration, messages: messages, tools: tools,
+                ledger: requestLedger, ownerGate: executionBudget?.ownerGate, onEvent: onEvent)
+            return // No hidden empty-response retry, fallback or alternate adapter.
+        }
         try await AgentRoutedModelResponseObserver.$receive.withValue(onRoutedModel) {
             try await AgentEmptyResponseRetry.run(
                 providerID: configuration.providerID, model: configuration.model,
