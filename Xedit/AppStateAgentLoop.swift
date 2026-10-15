@@ -50,7 +50,7 @@ import os
 
 extension AppState {
     @MainActor
-    func runAgentLoop(
+    func runAgentLoopBody(
         for runtime: AgentRuntime,
         configuration: AgentConfiguration,
         providerSlotClaimID: UUID,

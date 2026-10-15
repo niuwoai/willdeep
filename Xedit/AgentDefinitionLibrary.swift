@@ -128,6 +128,12 @@ nonisolated struct AgentDefinitionLibrary {
     }
     @discardableResult
     func install(_ input: AgentPackageV1, source: Source, account: String? = nil, keys: [String: String] = [:], dirty: Bool = true) throws -> Installation {
+        try installRevision(input, source: source, account: account, keys: keys, dirty: dirty, resolvingBranch: false)
+    }
+    /// Only explicit cloud resolution may archive a concurrent same-version
+    /// branch. Ordinary edits retain the immutable semantic-version check.
+    private func installRevision(_ input: AgentPackageV1, source: Source, account: String?, keys: [String: String],
+                                 dirty: Bool, resolvingBranch: Bool) throws -> Installation {
         try beginMutation(); defer { endMutation() }
         let package = try AgentPackageV1.decode(input.encoded())
         if source == .official { try package.verify(keys: keys) }
@@ -141,7 +147,7 @@ nonisolated struct AgentDefinitionLibrary {
             definitionID: package.definition.definition_id, selected: package.sha256, revisions: [], source: source, account: account)
         for revision in installation.revisions {
             let previous = try self.package(revision: revision, account: account)
-            if previous.definition.version == package.definition.version, previous.sha256 != package.sha256 { throw AgentAssetError.immutableVersion }
+            if !resolvingBranch, previous.definition.version == package.definition.version, previous.sha256 != package.sha256 { throw AgentAssetError.immutableVersion }
         }
         if source == .official {
             // Verify host compatibility and trust changes before writing any envelope or selection.
@@ -211,16 +217,33 @@ nonisolated struct AgentDefinitionLibrary {
         try update(changed)
     }
     /// Explicit resolution preserves the other revision on disk and requires another sync.
-    func resolve(_ installation: Installation, keepLocal: Bool) throws {
+    func resolve(_ installation: Installation, keepLocal: Bool, newVersion: String? = nil) throws {
         try beginMutation(); defer { endMutation() }
         guard let remote = installation.conflict else { return }
+        guard let current = try state().installations.first(where: { $0.id == installation.id }),
+              current.selected == installation.selected, current.conflict == remote else { throw AgentAssetError.conflict }
         if keepLocal {
-            var changed = installation; changed.etag = remote.etag; changed.conflict = nil; changed.dirty = true
+            var changed = installation
+            let local = try package(revision: installation.selected, account: installation.account)
+            if let newVersion {
+                guard !newVersion.isEmpty, newVersion != local.definition.version, newVersion != remote.version else { throw AgentAssetError.immutableVersion }
+                var definition = local.definition; definition.version = newVersion
+                changed = try install(.unsigned(definition), source: .private, account: installation.account)
+            } else if local.definition.version == remote.version && local.sha256 != remote.sha256 {
+                throw AgentAssetError.immutableVersion
+            }
+            if let branch = remote.package {
+                let archived = try AgentPackageV1.decode(branch.encoded())
+                guard archived.definition.definition_id == installation.definitionID, archived.signature == nil else { throw AgentAssetError.invalidDefinition }
+                try secureWrite(archived.encoded(), to: packageURL(archived.sha256, account: installation.account))
+                if !changed.revisions.contains(archived.sha256) { changed.revisions.append(archived.sha256) }
+            }
+            changed.etag = remote.etag; changed.conflict = nil; changed.dirty = true
             try update(changed)
         } else {
             var changed = installation
             if let package = remote.package {
-                changed = try install(package, source: .private, account: installation.account, dirty: false)
+                changed = try installRevision(package, source: .private, account: installation.account, keys: [:], dirty: false, resolvingBranch: true)
             }
             changed.deleted = remote.deleted
             if remote.deleted { changed.enabled = false }

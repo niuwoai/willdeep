@@ -132,6 +132,10 @@ struct AgentGoalHostVerificationTests {
     @Test("分析按真实文件证据验收，不强制代码测试，回执与用量可持久化")
     func analysisReceipt() async throws {
         let f = try fixture(); defer { try? f.cleanup() }
+        let evidenceStore = AgentExecutionEvidenceStore(root: f.root.appendingPathComponent("execution-events"))
+        let runID = UUID()
+        f.runtime.executionEvidenceTrace = AgentExecutionTrace(store: evidenceStore,
+            seed: .init(runID: runID, rootRunID: runID, sessionID: f.runtime.id, mode: "root", kind: "started"))
         f.runtime.currentPlan = .init(status: .done, summary: "Verified analysis", stepTexts: ["Inspect evidence"])
         try readEvidence(f)
         installReviewer(f)
@@ -147,6 +151,8 @@ struct AgentGoalHostVerificationTests {
         #expect(try JSONDecoder().decode(AgentGoal.self, from: JSONEncoder().encode(goal)) == goal)
         #expect(f.runtime.session.hostWorkerRuns?.last?.source == .goalVerification)
         #expect(f.runtime.session.hostWorkerRuns?.last?.usage?.usageTokens == 123)
+        let hostReceipt = try #require(evidenceStore.events().first { $0.kind == "goal_verified" })
+        #expect(hostReceipt.verifierPassed == true && hostReceipt.verifierInputSHA256 != nil && hostReceipt.verifierEvidenceSHA256 != nil)
     }
 
     @Test("真实前台 Ruby 验证通过，且绑定源文件与验证脚本")
