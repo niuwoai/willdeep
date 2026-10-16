@@ -9,7 +9,9 @@ import SwiftUI
 import AppKit
 import Combine
 
+#if !AGENT_WORKSPACE_PREVIEW
 @main
+#endif
 struct WillDeepApp: App {
     @NSApplicationDelegateAdaptor(WillDeepAppDelegate.self) private var appDelegate
 
@@ -32,6 +34,10 @@ struct WillDeepApp: App {
         .commands {
             AgentOnlyCommands()
         }
+
+        Window(String(localized: "智能体工作区", table: "AgentWorkspace"), id: AgentWorkspaceWindowID.value) {
+            AgentWorkspaceSceneRoot()
+        }.defaultSize(width: 1380, height: 900)
 
         // Detached panels use retained AppKit hosts (AgentDetachedPanelRegistry).
 

@@ -50,6 +50,7 @@ struct AgentProfileSettingsView: View {
     }
 
     @EnvironmentObject private var appState: AppState
+    @Environment(\.openWindow) private var openWindow
 
     @State private var profiles: [AgentProfile] = []
     @State private var selectedID: String?
@@ -58,7 +59,6 @@ struct AgentProfileSettingsView: View {
     @State private var deleteTarget: AgentProfile?
     @State private var search = ""
     @State private var detailTab: DetailTab = .general
-    @State private var showsRegistry = false
 
     private let store = AgentProfileStore()
 
@@ -99,7 +99,10 @@ struct AgentProfileSettingsView: View {
                     }
                 }
                 Divider()
-                Button(String(localized: "智能体版本库与同步", table: "AgentRegistry")) { showsRegistry = true }
+                Button(String(localized: "智能体版本库与同步", table: "AgentRegistry")) {
+                    AgentWorkspaceNavigation.shared.select(.library)
+                    openWindow(id: AgentWorkspaceWindowID.value)
+                }
                     .buttonStyle(.plain)
                 Button(action: addProfile) { Label(L10n.AgentProfiles.addProfile, systemImage: "plus") }
                     .buttonStyle(.plain)
@@ -118,9 +121,6 @@ struct AgentProfileSettingsView: View {
         .onChange(of: filter) { _ in reconcileSelection() }
         .onChange(of: showsLegacyProfiles) { _ in reconcileSelection() }
         .onAppear(perform: reload)
-        .sheet(isPresented: $showsRegistry, onDismiss: reload) {
-            AgentRegistrySettingsView().environmentObject(appState)
-        }
         .alert(L10n.AgentProfiles.deleteTitle, isPresented: deleteAlertBinding) {
             Button(L10n.Automation.cancel, role: .cancel) { deleteTarget = nil }
             Button(L10n.SecretManager.deleteConfirm, role: .destructive) { commitDelete() }

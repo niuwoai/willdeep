@@ -5,112 +5,209 @@ import UniformTypeIdentifiers
 /// Exchange definitions are edited separately from legacy model overrides.
 struct AgentRegistrySettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appState: AppState
     @State private var installations: [AgentDefinitionLibrary.Installation] = []
     @State private var catalog: [AgentRegistryIndex.Item] = []
     @State private var selected: AgentDefinitionLibrary.Installation?
     @State private var draft = ""
     @State private var message = ""
     @State private var busy = false
+    @State private var operationGate = AgentWorkspaceOperationGate()
     @State private var advancedEditor = false
-    @State private var showExperiments = false
+    @State private var query = ""
+    @State private var sourceFilter = "all"
+    @State private var savedDraft = ""
+    @State private var pendingAction: (() -> Void)?
+    private var accountEpoch: UUID { AgentWorkspaceNavigation.shared.accountEpoch }
     @State private var conflictVersion: String?
     private let library: AgentDefinitionLibrary
+    private let embedded: Bool
+    private let allowsRemote: Bool
+    private let onExperiment: ((AgentPackageV1?) -> Void)?
+    private let providerEntries: [AgentProviderEntry]
 
-    init(library: AgentDefinitionLibrary = AgentDefinitionLibrary(), initialSelection: AgentDefinitionLibrary.Installation? = nil) {
+    init(library: AgentDefinitionLibrary = AgentDefinitionLibrary(), initialSelection: AgentDefinitionLibrary.Installation? = nil,
+         embedded: Bool = false, allowsRemote: Bool = true, providerEntries: [AgentProviderEntry] = [], onExperiment: ((AgentPackageV1?) -> Void)? = nil) {
         self.library = library
+        self.embedded = embedded; self.allowsRemote = allowsRemote; self.onExperiment = onExperiment
+        self.providerEntries = providerEntries
         _selected = State(initialValue: initialSelection)
         let data = initialSelection.flatMap { try? library.package(revision: $0.selected, account: $0.account).definitionEditorData() }
-        _draft = State(initialValue: data.map { String(decoding: $0, as: UTF8.self) } ?? "")
+        let initialDraft = data.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        _draft = State(initialValue: initialDraft); _savedDraft = State(initialValue: initialDraft)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(String(localized: "智能体版本库", table: "AgentRegistry")).font(.title2.bold())
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(String(localized: "智能体库", table: "AgentWorkspace")).font(.system(size: 28, weight: .bold))
+                    Text(String(localized: "管理定义、官方版本和跨端同步", table: "AgentWorkspace")).foregroundStyle(.secondary)
+                }
                 Spacer()
-                Button(String(localized: "完成", table: "AgentRegistry")) { dismiss() }
+                connectionBadge
+                if !embedded { Button(String(localized: "完成", table: "AgentRegistry")) { dismiss() } }
             }
-            Text(String(localized: "原生子智能体使用固定版本。定义与模型绑定分开；外部 CLI 不应用这些指令。", table: "AgentRegistry"))
-                .font(.caption).foregroundStyle(.secondary)
             HStack {
-                Button(String(localized: "创建", table: "AgentRegistry"), action: create)
-                Button(String(localized: "导入", table: "AgentRegistry"), action: importPackage)
+                Button { request(create) } label: { Label(String(localized: "创建智能体", table: "AgentWorkspace"), systemImage: "plus") }.buttonStyle(.borderedProminent)
+                Button(String(localized: "导入", table: "AgentRegistry")) { request(importPackage) }
                 Button(String(localized: "刷新官方目录", table: "AgentRegistry")) { perform { catalog = try await service().index().items } }
-                Button(String(localized: "同步私有智能体", table: "AgentRegistry")) { synchronize() }
-                Button(String(localized: "智能体实验", table: "AgentRSI")) { showExperiments = true }
+                    .disabled(!allowsRemote)
+                Spacer()
+                Button { synchronize() } label: { Label(String(localized: "同步私有智能体", table: "AgentRegistry"), systemImage: "arrow.triangle.2.circlepath") }
+                    .disabled(!allowsRemote)
             }.disabled(busy)
             HSplitView {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(installations) { installation in
-                            Button { choose(installation) } label: {
-                                VStack(alignment: .leading) {
-                                    Text(displayName(installation)).font(.headline)
-                                    Text(installation.definitionID).font(.caption).foregroundStyle(.secondary)
-                                    Text(installation.source.rawValue + " · " + String(installation.selected.prefix(12)))
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    if installation.conflict != nil { Text(String(localized: "同步冲突", table: "AgentRegistry")).foregroundStyle(.orange) }
-                                    if installation.deleted { Text(String(localized: "已删除", table: "AgentRegistry")).foregroundStyle(.secondary) }
-                                }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
-                            }.buttonStyle(.plain)
-                        }
-                        Divider()
-                        ForEach(catalog) { item in
-                            VStack(alignment: .leading) {
-                                Text(item.name["zh-Hans"] ?? item.name["en"] ?? item.definition_id)
-                                Text(item.version + " · " + item.purpose).font(.caption)
-                                Button(String(localized: "安装固定版本", table: "AgentRegistry")) {
-                                    perform {
-                                        let (package, keys) = try await service().official(item)
-                                        _ = try library.install(package, source: .official, keys: keys, dirty: false)
-                                    }
-                                }.disabled(busy)
-                            }
-                        }
-                    }.padding(8)
-                }.frame(minWidth: 220, idealWidth: 260, maxWidth: 340)
-                VStack(alignment: .leading, spacing: 8) {
-                    if let selected { controls(selected) }
-                    Toggle(String(localized: "高级 JSON 与技能正文", table: "AgentRegistry"), isOn: $advancedEditor).toggleStyle(.checkbox)
-                    if advancedEditor {
-                        Text(String(localized: "定义 JSON：修改指令、职责、工具或技能时增加 version，保存后形成新的不可变版本。", table: "AgentRegistry"))
-                            .font(.caption).foregroundStyle(.secondary)
-                        TextEditor(text: $draft).font(.system(.body, design: .monospaced))
-                            .disabled(selected?.source == .official)
-                    } else if !draft.isEmpty {
-                        definitionForm.disabled(selected?.source == .official)
-                    } else {
-                        Text(String(localized: "创建智能体或选择一个已有版本", table: "AgentRegistry")).foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    HStack {
-                        Button(String(localized: "保存并固定版本", table: "AgentRegistry"), action: saveDraft)
-                            .disabled(busy || selected?.source == .official || draft.isEmpty)
-                        Button(String(localized: "导出版本包", table: "AgentRegistry"), action: exportPackage).disabled(selected == nil)
-                    }
-                }.padding(8).frame(minWidth: 400)
+                libraryList
+                installationDetail
             }
             if !message.isEmpty { Text(message).font(.caption).textSelection(.enabled) }
             if busy { ProgressView().controlSize(.small) }
-        }.padding(18).frame(minWidth: 850, minHeight: 600)
+        }.padding(28).frame(minWidth: 850, minHeight: 600)
             .onAppear(perform: reload)
-            .sheet(isPresented: $showExperiments) {
-                AgentRSIExperimentsView(baseline: selected.flatMap { try? library.package(revision: $0.selected, account: $0.account) })
+            .onChange(of: draft) { _ in
+                if draft != savedDraft { AgentWorkspaceNavigation.shared.dirtySections.insert(.library) }
+                else { AgentWorkspaceNavigation.shared.dirtySections.remove(.library) }
             }
+            .confirmationDialog(String(localized: "有尚未保存的修改", table: "AgentWorkspace"), isPresented: Binding(
+                get: { pendingAction != nil }, set: { if !$0 { pendingAction = nil } })) {
+                    Button(String(localized: "放弃修改并继续", table: "AgentWorkspace"), role: .destructive) {
+                        let action = pendingAction; pendingAction = nil; action?()
+                    }
+                    Button(String(localized: "继续编辑", table: "AgentWorkspace"), role: .cancel) { pendingAction = nil }
+                }
             .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.sessionDidChangeNotification)) { _ in
-                selected = nil; draft = ""; conflictVersion = nil; reload()
+                operationGate.invalidate(); busy = false; selected = nil; draft = ""; savedDraft = ""; conflictVersion = nil; pendingAction = nil; message = ""; reload()
             }
+    }
+    private var libraryList: some View {
+                VStack(alignment: .leading, spacing: 12) {
+                    TextField(String(localized: "搜索名称或标识", table: "AgentWorkspace"), text: $query).textFieldStyle(.roundedBorder)
+                    Picker(String(localized: "来源", table: "AgentWorkspace"), selection: $sourceFilter) {
+                        Text(String(localized: "全部", table: "AgentWorkspace")).tag("all")
+                        Text(String(localized: "本机", table: "AgentWorkspace")).tag("local")
+                        Text(String(localized: "私有", table: "AgentWorkspace")).tag("private")
+                        Text(String(localized: "官方", table: "AgentWorkspace")).tag("official")
+                    }.labelsHidden().pickerStyle(.segmented)
+                    ScrollView {
+                      LazyVStack(alignment: .leading, spacing: 5) {
+                        ForEach(filteredInstallations) { installation in
+                            Button { request { choose(installation) } } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: installation.source == .official ? "checkmark.seal" : "person.crop.square").foregroundStyle(.blue).frame(width: 22)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(displayName(installation)).font(.system(size: 15, weight: .semibold)).lineLimit(2)
+                                        HStack {
+                                            Text(sourceTitle(installation.source.rawValue))
+                                            Text((try? library.package(revision: installation.selected, account: installation.account).definition.version) ?? "")
+                                        }.font(.system(size: 13)).foregroundStyle(.secondary)
+                                        if installation.conflict != nil { Text(String(localized: "同步冲突", table: "AgentRegistry")).foregroundStyle(.orange) }
+                                        if installation.deleted { Text(String(localized: "已删除", table: "AgentRegistry")).foregroundStyle(.secondary) }
+                                    }
+                                    Spacer(minLength: 0)
+                                }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                                    .background(selected?.id == installation.id ? Color.blue.opacity(0.09) : .clear, in: RoundedRectangle(cornerRadius: 9))
+                            }.buttonStyle(.plain)
+                        }
+                        if filteredInstallations.isEmpty {
+                            Text(String(localized: "没有匹配的智能体", table: "AgentWorkspace")).foregroundStyle(.secondary).padding(12)
+                        }
+                        if sourceFilter == "all" || sourceFilter == "official" {
+                          ForEach(filteredCatalog) { item in catalogRow(item) }
+                        }
+                      }
+                    }
+                }.padding(12).frame(minWidth: 250, idealWidth: 285, maxWidth: 320)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 12))
+    }
+    private var installationDetail: some View {
+                ScrollView {
+                  VStack(alignment: .leading, spacing: 16) {
+                    if let selected {
+                        HStack {
+                            Text(displayName(selected)).font(.system(size: 22, weight: .semibold))
+                            Spacer()
+                            Button(String(localized: "创建实验", table: "AgentWorkspace")) {
+                                onExperiment?(try? library.package(revision: selected.selected, account: selected.account))
+                            }.disabled(onExperiment == nil)
+                        }
+                    }
+                    if !draft.isEmpty {
+                        definitionForm.disabled(selected?.source == .official)
+                        if selected?.source == .official {
+                            Label(String(localized: "官方定义只读，请派生副本后编辑或实验", table: "AgentWorkspace"), systemImage: "lock").foregroundStyle(.secondary)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label(String(localized: "选择智能体，查看并编辑版本", table: "AgentWorkspace"), systemImage: "square.grid.2x2").font(.title3)
+                            Text(String(localized: "也可以创建定义、导入版本包，或刷新官方目录。", table: "AgentWorkspace")).foregroundStyle(.secondary)
+                        }.padding(.vertical, 44)
+                    }
+                    HStack {
+                        Button(String(localized: "保存并固定版本", table: "AgentRegistry"), action: saveDraft)
+                            .buttonStyle(.borderedProminent).disabled(busy || selected?.source == .official || draft.isEmpty)
+                        Button(String(localized: "导出版本包", table: "AgentRegistry"), action: exportPackage).disabled(selected == nil)
+                    }
+                    if let selected {
+                        Divider()
+                        controls(selected)
+                    }
+                    DisclosureGroup(String(localized: "高级：JSON、技能正文与版本哈希", table: "AgentWorkspace"), isExpanded: $advancedEditor) {
+                        if let selected { Text(selected.selected).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
+                        Text(String(localized: "定义 JSON：修改指令、职责、工具或技能时增加 version，保存后形成新的不可变版本。", table: "AgentRegistry"))
+                            .font(.caption).foregroundStyle(.secondary)
+                        TextEditor(text: $draft).font(.system(.body, design: .monospaced)).frame(minHeight: 220)
+                            .disabled(selected?.source == .official)
+                    }
+                  }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                }.background(.white, in: RoundedRectangle(cornerRadius: 12)).frame(minWidth: 480)
+    }
+    private var filteredInstallations: [AgentDefinitionLibrary.Installation] {
+        installations.filter { AgentWorkspacePresentation.matchesSource($0.source.rawValue, filter: sourceFilter)
+            && AgentWorkspacePresentation.matches(name: displayName($0), id: $0.definitionID, query: query) }
+    }
+    private var filteredCatalog: [AgentRegistryIndex.Item] {
+        catalog.filter { AgentWorkspacePresentation.matches(name: $0.name["zh-Hans"] ?? $0.name["en"] ?? "", id: $0.definition_id, query: query) }
+    }
+    private func catalogRow(_ item: AgentRegistryIndex.Item) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.name["zh-Hans"] ?? item.name["en"] ?? item.definition_id)
+            Text(item.version + " · " + item.purpose).font(.caption)
+            Button(String(localized: "安装固定版本", table: "AgentRegistry")) {
+                perform {
+                    let (package, keys) = try await service().official(item)
+                    _ = try library.install(package, source: .official, keys: keys, dirty: false)
+                }
+            }.disabled(busy || !allowsRemote)
+        }.padding(12)
+    }
+    private func sourceTitle(_ source: String) -> String {
+        switch source {
+        case "official": String(localized: "官方", table: "AgentWorkspace")
+        case "private": String(localized: "私有", table: "AgentWorkspace")
+        default: String(localized: "本机", table: "AgentWorkspace")
+        }
+    }
+    private var connectionBadge: some View {
+        Label(library.activeAccount == nil ? String(localized: "本机模式", table: "AgentWorkspace") : String(localized: "some.im · 已连接", table: "AgentWorkspace"),
+              systemImage: library.activeAccount == nil ? "desktopcomputer" : "checkmark.circle.fill")
+            .font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
     }
     private var definitionForm: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField(String(localized: "智能体标识", table: "AgentRegistry"), text: definitionBinding(\.definition_id))
-                .disabled(selected != nil)
-            TextField(String(localized: "名称", table: "AgentRegistry"), text: Binding(
-                get: { decodedDraft?.name["zh-Hans"] ?? decodedDraft?.name["en"] ?? "" },
-                set: { value in editDefinition { $0.name["zh-Hans"] = value } }))
-            TextField(String(localized: "版本号", table: "AgentRegistry"), text: definitionBinding(\.version))
-            TextField(String(localized: "适用任务", table: "AgentRegistry"), text: definitionBinding(\.purpose))
+            LabeledContent(String(localized: "智能体标识", table: "AgentRegistry")) {
+                TextField(String(localized: "智能体标识", table: "AgentRegistry"), text: definitionBinding(\.definition_id)).labelsHidden().disabled(selected != nil)
+            }
+            LabeledContent(String(localized: "名称", table: "AgentRegistry")) {
+                TextField(String(localized: "名称", table: "AgentRegistry"), text: Binding(
+                    get: { decodedDraft?.name["zh-Hans"] ?? decodedDraft?.name["en"] ?? "" },
+                    set: { value in editDefinition { $0.name["zh-Hans"] = value } })).labelsHidden()
+            }
+            LabeledContent(String(localized: "版本号", table: "AgentRegistry")) {
+                TextField(String(localized: "版本号", table: "AgentRegistry"), text: definitionBinding(\.version)).labelsHidden()
+            }
+            LabeledContent(String(localized: "适用任务", table: "AgentRegistry")) {
+                TextField(String(localized: "适用任务", table: "AgentRegistry"), text: definitionBinding(\.purpose)).labelsHidden()
+            }
             Picker(String(localized: "基础职责", table: "AgentRegistry"), selection: definitionBinding(\.base_role)) {
                 Text(String(localized: "通用调查", table: "AgentRegistry")).tag("generalist")
                 Text(String(localized: "实现", table: "AgentRegistry")).tag("implementer")
@@ -166,7 +263,9 @@ struct AgentRegistrySettingsView: View {
             })).toggleStyle(.checkbox)
             Menu(String(localized: "固定版本 / 回滚", table: "AgentRegistry")) {
                 ForEach(installation.revisions, id: \.self) { revision in
-                    Button(revision.prefix(12).description) { change { try library.select(revision, installation: installation) } }
+                    Button(((try? library.package(revision: revision, account: installation.account).definition.version) ?? "") + " · " + String(revision.prefix(8))) {
+                        request { change { try library.select(revision, installation: installation) } }
+                    }
                 }
             }
         }.disabled(busy)
@@ -174,12 +273,13 @@ struct AgentRegistrySettingsView: View {
             Button(String(localized: "派生副本", table: "AgentRegistry")) {
                 change { _ = try library.fork(installation, id: "user/" + UUID().uuidString.lowercased()) }
             }
-            if installation.source == .local {
+            if installation.source == .local && allowsRemote {
                 Button(String(localized: "加入私有同步", table: "AgentRegistry")) {
                     perform {
                         let client = try authenticatedService(); let token = client.token
+                        let epoch = accountEpoch
                         let identity = try await client.identity()
-                        guard sessionMatches(client) else { throw AgentAssetError.authentication }
+                        guard epoch == accountEpoch, sessionMatches(client) else { throw AgentAssetError.authentication }
                         let account = identity.account(origin: client.origin)
                         try library.recordVerifiedActivation(identity: identity, origin: client.origin, sessionFingerprint: AgentPackageV1.hash(Data(token.utf8)))
                         _ = try library.share(installation, account: account)
@@ -194,14 +294,14 @@ struct AgentRegistrySettingsView: View {
                 set: { id in
                     change {
                         var changed = installation
-                        if let id, let entry = appState.agentProviderLibrary.entries.first(where: { $0.id == id }) {
+                        if let id, let entry = providerEntries.first(where: { $0.id == id }) {
                             changed.binding = .init(preferredProviderEntryID: id, preferredProviderID: entry.providerID, model: entry.flashPrimary, contextWindowTokens: nil)
                         } else { changed.binding = .inheritsParent }
                         try library.update(changed)
                     }
                 })) {
                     Text(String(localized: "继承当前会话模型", table: "AgentRegistry")).tag(nil as UUID?)
-                    ForEach(appState.agentProviderLibrary.entries) { entry in Text(entry.displayName + " · " + entry.flashPrimary).tag(Optional(entry.id)) }
+                    ForEach(providerEntries) { entry in Text(entry.displayName + " · " + entry.flashPrimary).tag(Optional(entry.id)) }
                 }
             TextField(String(localized: "模型 ID（可选）", table: "AgentRegistry"), text: Binding(
                 get: { installation.binding.model ?? "" }, set: { model in
@@ -246,17 +346,23 @@ struct AgentRegistrySettingsView: View {
     private func reload() {
         do {
             installations = try library.visibleInstallations()
-            if let selected, let current = installations.first(where: { $0.id == selected.id }) { self.selected = current }
+            if let selected, let current = installations.first(where: { $0.id == selected.id }) {
+                if selected.selected != current.selected { choose(current) } else { self.selected = current }
+            }
         } catch { message = error.localizedDescription }
     }
     private func choose(_ installation: AgentDefinitionLibrary.Installation) {
         selected = installation
         conflictVersion = nil
-        do { draft = String(data: try library.package(revision: installation.selected, account: installation.account).definitionEditorData(), encoding: .utf8) ?? "" }
+        do {
+            draft = String(data: try library.package(revision: installation.selected, account: installation.account).definitionEditorData(), encoding: .utf8) ?? ""
+            savedDraft = draft; AgentWorkspaceNavigation.shared.dirtySections.remove(.library)
+        }
         catch { message = error.localizedDescription }
     }
     private func create() {
         selected = nil
+        savedDraft = ""
         let definition = AgentDefinitionV1(schema: AgentDefinitionV1.schemaID, definition_id: "user/" + UUID().uuidString.lowercased(),
             version: "1.0.0-rc1", name: ["en": "My agent", "zh-Hans": String(localized: "我的智能体", table: "AgentRegistry")],
             purpose: "Review a bounded task and report evidence.", base_role: "reviewer", instructions: "Inspect the task and report actionable findings with evidence.",
@@ -271,12 +377,14 @@ struct AgentRegistrySettingsView: View {
             installation.pinned = true
             try library.update(installation)
             selected = installation
+            savedDraft = draft
+            AgentWorkspaceNavigation.shared.dirtySections.remove(.library)
         }
     }
     private func importPackage() {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        change { selected = try library.install(AgentPackageV1.decode(Data(contentsOf: url)), source: .local) }
+        change { choose(try library.install(AgentPackageV1.decode(Data(contentsOf: url)), source: .local)) }
     }
     private func exportPackage() {
         guard let selected else { return }
@@ -293,8 +401,9 @@ struct AgentRegistrySettingsView: View {
     private func synchronize() {
         perform {
             let client = try authenticatedService()
+            let epoch = accountEpoch
             _ = try await AgentRegistrySync(library: library, service: client, sessionStillCurrent: {
-                sessionMatches(client)
+                epoch == accountEpoch && sessionMatches(client)
             }).synchronize()
         }
     }
@@ -305,12 +414,21 @@ struct AgentRegistrySettingsView: View {
     private func change(_ action: () throws -> Void) {
         do { try action(); message = ""; reload() } catch { message = error.localizedDescription }
     }
+    private func request(_ action: @escaping () -> Void) {
+        if draft != savedDraft { pendingAction = action } else { action() }
+    }
     private func perform(_ action: @escaping @MainActor () async throws -> Void) {
         busy = true
+        let ticket = operationGate.begin(scope: .init(owner: library.activeAccount ?? "local", epoch: accountEpoch))
         Task { @MainActor in
-            defer { busy = false; reload() }
-            do { try await action(); message = String(localized: "操作完成", table: "AgentRegistry") }
-            catch { message = error.localizedDescription }
+            await operationGate.execute(ticket, current: { .init(owner: library.activeAccount ?? "local", epoch: accountEpoch) }, action: action) { result in
+                busy = false
+                switch result {
+                case .success: message = String(localized: "操作完成", table: "AgentRegistry")
+                case .failure(let error): message = error.localizedDescription
+                }
+                reload()
+            }
         }
     }
 }
