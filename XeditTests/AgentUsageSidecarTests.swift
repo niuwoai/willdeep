@@ -225,6 +225,32 @@ struct AgentUsageSidecarTests {
         }
     }
 
+    @Test("复用统计写语句后可清空可选字段、替换工具列表并删除重建")
+    func databaseReusedStatementsDoNotLeakPreviousBindings() throws {
+        var session = makeRichSession()
+        let root = try makeScanLibrary([])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try #require(AgentUsageDatabase(url: AgentUsageDatabase.defaultURL(in: root)))
+        let stamp = AgentUsageSourceStamp(fileSize: 123, modificationTime: 456)
+        #expect(database.upsert(AgentUsageSessionSnapshot(session: session), signature: stamp))
+        session.providerDisplayName = nil
+        session.messages = [AgentMessage(role: .user, content: "replacement")]
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let expected = try decoder.decode(
+            AgentUsageSessionSnapshot.self,
+            from: encoder.encode(AgentUsageSessionSnapshot(session: session))
+        )
+        #expect(database.upsert(expected, signature: stamp))
+        #expect(database.loadAll() == [expected])
+        #expect(database.delete(id: session.id))
+        #expect(database.loadAll().isEmpty)
+        #expect(database.replaceAll(with: [(expected, stamp)]))
+        #expect(database.loadAll() == [expected])
+    }
+
     @Test("不同目录的同 ID 会话并发扫描不串库，侧车留在各自目录")
     func concurrentLibrariesKeepIdenticalIDsIsolated() async throws {
         let first = makeRichSession()

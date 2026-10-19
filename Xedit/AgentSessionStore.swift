@@ -1098,7 +1098,9 @@ nonisolated enum AgentSessionStore {
             // is stale and has to be rebuilt.
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            // Machine-only derived cache: formatting and sorting every key
+            // dominated repeated saves of long transcripts in CPU samples.
+            encoder.outputFormatting = []
             let data = try encoder.encode(entry)
             try coordinatedWrite(data, to: destination)
         } catch {

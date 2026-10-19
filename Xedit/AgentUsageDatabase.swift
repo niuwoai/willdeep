@@ -73,6 +73,9 @@ nonisolated final class AgentUsageDatabase {
 
     private var handle: OpaquePointer?
     private let lock = NSLock()
+    // Only fixed write SQL reaches this cache, under `lock`. Reuse the same
+    // VM for every history row instead of parsing/compiling thousands of INSERTs.
+    private var writeStatements: [String: OpaquePointer] = [:]
 
     // MARK: - 生命周期
 
@@ -100,6 +103,7 @@ nonisolated final class AgentUsageDatabase {
     }
 
     deinit {
+        for statement in writeStatements.values { sqlite3_finalize(statement) }
         if let handle { sqlite3_close_v2(handle) }
     }
 
@@ -558,8 +562,11 @@ nonisolated final class AgentUsageDatabase {
     }
 
     private func executeBinding(_ sql: String, _ bindings: [Binding]) -> Bool {
-        guard let statement = prepare(sql) else { return false }
-        defer { sqlite3_finalize(statement) }
+        guard let statement = writeStatement(for: sql) else { return false }
+        defer {
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+        }
         for (offset, binding) in bindings.enumerated() {
             let index = Int32(offset + 1)
             switch binding {
@@ -583,6 +590,13 @@ nonisolated final class AgentUsageDatabase {
             }
         }
         return sqlite3_step(statement) == SQLITE_DONE
+    }
+
+    private func writeStatement(for sql: String) -> OpaquePointer? {
+        if let statement = writeStatements[sql] { return statement }
+        guard let statement = prepare(sql) else { return nil }
+        writeStatements[sql] = statement
+        return statement
     }
 
     private func prepare(_ sql: String) -> OpaquePointer? {

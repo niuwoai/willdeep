@@ -1014,7 +1014,7 @@ enum AgentMCPBridge {
         private let serverID: String
         private let onServerRequest: ServerRequestHandler
         private let condition = NSCondition()
-        private var buffer = Data()
+        private var framer = AgentMCPLineFramer()
         private var lines: [String] = []
         /// 宿主正在替服务端办、还没答复的反向请求数。
         private var pendingHostRequests = 0
@@ -1031,10 +1031,7 @@ enum AgentMCPBridge {
             guard !data.isEmpty else { return }
             var serverRequests: [MCPJSONMessage] = []
             condition.lock()
-            buffer.append(data)
-            while let newlineIndex = buffer.firstIndex(of: 0x0A) {
-                let lineData = buffer.prefix(upTo: newlineIndex)
-                buffer.removeSubrange(buffer.startIndex...newlineIndex)
+            for lineData in framer.append(data) {
                 if let line = String(data: lineData, encoding: .utf8),
                    !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     if let data = line.data(using: .utf8),
