@@ -82,6 +82,8 @@ struct SettingsInformationArchitectureTests {
             .ai,
             .localModels,
             .agentProfiles,
+            .agentLibrary,
+            .agentExperiments,
             .agentTools,
             .runtimes,
             .integrations,
@@ -92,6 +94,10 @@ struct SettingsInformationArchitectureTests {
             .dataAndDiagnostics,
         ])
         #expect(SettingsGroup.agentAppearance.tabs == [.agentAppearance])
+        #expect(SettingsGroup.agentLibrary.tabs == [.agentLibrary])
+        #expect(SettingsGroup.agentExperiments.tabs == [.agentExperiments])
+        #expect(EditorSettingsTab.agentLibrary.group == .agentLibrary)
+        #expect(EditorSettingsTab.agentExperiments.group == .agentExperiments)
         #expect(EditorSettingsTab.agentAppearance.group == .agentAppearance)
         #expect(SettingsGroup.allCases.suffix(3) == [.agentAppearance, .general, .dataAndDiagnostics])
         // 1.376.0-rc2：「更新」这一组此前既叫「更新」又装着隐私与诊断导出，
@@ -117,6 +123,48 @@ struct SettingsInformationArchitectureTests {
         #expect(SettingsGroup.accountAndDevices.tabs == [.someIM, .mobileGateway])
         // 连接器 hub 是集成组唯一的 pane;每个外部集成是 hub 里的子连接器。
         #expect(SettingsGroup.integrations.tabs == [.connectors])
+    }
+
+    @Test("离开设置内的未保存智能体编辑页必须先确认")
+    @MainActor
+    func settingsWorkspaceNavigationProtectsDraftUntilExplicitDiscard() {
+        let workspace = AgentWorkspaceNavigation()
+        let settings = EditorSettingsNavigation(workspaceNavigation: workspace)
+        settings.selectedTab = .agentLibrary
+        #expect(workspace.section == .library)
+        workspace.dirtySections.insert(.library)
+        settings.selectedTab = .agentExperiments
+        #expect(settings.selectedTab == .agentLibrary)
+        #expect(workspace.pendingSettingsTab == .agentExperiments)
+        workspace.cancelPendingNavigation()
+        #expect(workspace.dirtySections.contains(.library))
+        #expect(settings.selectedTab == .agentLibrary)
+        settings.selectedTab = .agentExperiments
+        // SwiftUI dismisses the sheet before invoking its button action.
+        workspace.navigationConfirmationPresented = false
+        workspace.discardAndContinue()
+        #expect(settings.selectedTab == .agentExperiments)
+        #expect(workspace.section == .experiments)
+        #expect(workspace.dirtySections.isEmpty)
+        workspace.dirtySections.insert(.experiments)
+        settings.selectedTab = .updates
+        #expect(settings.selectedTab == .agentExperiments)
+        workspace.discardAndContinue()
+        #expect(settings.selectedTab == .updates)
+    }
+
+    @Test("账号切换撤销尚未确认的设置跳转")
+    @MainActor
+    func accountChangeCancelsPendingSettingsNavigation() {
+        let workspace = AgentWorkspaceNavigation()
+        let settings = EditorSettingsNavigation(workspaceNavigation: workspace)
+        settings.selectedTab = .agentLibrary
+        workspace.dirtySections.insert(.library)
+        settings.selectedTab = .updates
+        workspace.accountChanged()
+        workspace.discardAndContinue()
+        #expect(settings.selectedTab == .agentLibrary)
+        #expect(workspace.pendingSettingsTab == nil)
     }
 
     @Test("every settings pane belongs to exactly one group")

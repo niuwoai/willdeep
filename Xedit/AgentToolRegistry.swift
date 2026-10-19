@@ -1930,7 +1930,7 @@ AgentToolDescriptor(
         ),
         AgentToolDescriptor(
             name: "schedule_task",
-            description: "Schedule a recurring task that runs on its own later, by continuing this conversation in the background, and shows an inline card in this transcript. Use when the user asks for something to happen repeatedly or to be watched over time (\"每30分钟看一下\", \"每天早上汇总\", \"盯着 X 直到 Y\"). Provide `prompt` (what each run should do). Give a schedule via either `interval_minutes` OR `daily_at` (HH:MM). Optionally give a `goal`: when set, each run is told to check whether the goal is met and, if so, call `complete_scheduled_task` to stop future triggers while retaining the task and its history. Returns a task_id; the card lets the user open the task's detail. This does NOT run anything now — use run_command / a workflow for immediate work.",
+            description: "Schedule future recurring work by continuing this conversation in the background; show an inline transcript card. Use for repeated tasks or monitoring. Set `prompt` and either `interval_minutes` or `daily_at` (HH:MM). Optional `goal`: each run checks completion and calls `complete_scheduled_task` when met, retaining configuration and history. Returns task_id; the card opens task details. This does NOT run anything now — use run_command / a workflow for immediate work.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "The instruction each scheduled run executes (as the first user message of a fresh session). Make it self-contained.", required: true),
@@ -1952,7 +1952,7 @@ AgentToolDescriptor(
         ),
         AgentToolDescriptor(
             name: "update_plan",
-            description: "Record checklist progress for the active plan. Call this the moment a step's status changes — in the SAME round as your other tool calls, not at the end of the reply. WillDeep's visible step counter only moves when this lands, so a long tool-heavy turn that reports nothing until it finishes leaves the user watching \"step 1 of 7\" for an hour. Mark a step in_progress before you start its tool calls and done (or failed / skipped) once its evidence is in. Steps you did not touch can be omitted; unknown step numbers and unreadable statuses are reported back to you rather than silently dropped. This tool only updates an EXISTING plan — create one with a numbered ```plan block first.",
+            description: "Update an EXISTING plan created with a numbered ```plan block. Mark a step in_progress before its tool calls, then record done/failed/skipped with evidence in the SAME round, not in the final reply. Omit untouched steps; unknown step numbers and unreadable statuses are reported, never silently dropped.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "updates", type: .stringArray, description: "One entry per step you are updating, each `<step number>: <status>` — e.g. [\"1: done\", \"2: in_progress\"]. The number is the 1-based position in the active plan. Status is one of pending, in_progress, done, skipped, failed.", required: true),

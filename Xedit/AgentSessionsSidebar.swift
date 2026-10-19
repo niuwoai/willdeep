@@ -310,7 +310,6 @@ private struct AgentSidebarHoverScope<Content: View>: View {
 
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
-    @Environment(\.openWindow) private var openWindow
     @ObservedObject private var pluginRegistry = AgentPluginRegistry.shared
     @State private var editingProject: AgentProjectEditorTarget?
     @State private var expandedWorkspaces = AgentSidebarWorkspaceStateStore.load(.expandedWorkspaces)
@@ -378,7 +377,6 @@ struct AgentSessionsSidebar: View {
                 // the bounded eager layout is the safer trade-off here.
                 VStack(alignment: .leading, spacing: 0) {
                     primaryActions
-                    agentWorkspaceNavigation
                     AgentPluginPrimaryNavigationSection()
                     Spacer().frame(height: 18)
                     if appState.agentPrimaryDestination == .dispatchBoard {
@@ -521,22 +519,6 @@ struct AgentSessionsSidebar: View {
         case .none:
             EmptyView()
         }
-    }
-
-    private var agentWorkspaceNavigation: some View {
-        VStack(spacing: 2) {
-            ForEach(AgentWorkspaceSection.allCases) { section in
-                Button {
-                    AgentWorkspaceNavigation.shared.select(section)
-                    openWindow(id: AgentWorkspaceWindowID.value)
-                } label: {
-                    Label(section.title, systemImage: section.symbol)
-                        .font(.system(size: 14, weight: .medium))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14).padding(.vertical, 7)
-                }.buttonStyle(.plain).accessibilityIdentifier("sidebar-agent-" + section.rawValue)
-            }
-        }.padding(.vertical, 6)
     }
 
     private var sessionUnavailableAlertMessage: String {

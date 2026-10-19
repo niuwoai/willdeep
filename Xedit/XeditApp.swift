@@ -35,10 +35,6 @@ struct WillDeepApp: App {
             AgentOnlyCommands()
         }
 
-        Window(String(localized: "智能体工作区", table: "AgentWorkspace"), id: AgentWorkspaceWindowID.value) {
-            AgentWorkspaceSceneRoot()
-        }.defaultSize(width: 1380, height: 900)
-
         // Detached panels use retained AppKit hosts (AgentDetachedPanelRegistry).
 
         WindowGroup(for: TerminalShortcutEditorRequest.self) { $request in

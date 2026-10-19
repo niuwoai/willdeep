@@ -791,10 +791,10 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "放弃修改并关闭" } }
       }
     },
-    "先保存当前修改，或明确放弃后关闭工作区。": {
+    "先保存当前修改，或明确放弃后关闭窗口。": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Save your changes first, or explicitly discard them before closing the workspace." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "先保存当前修改，或明确放弃后关闭工作区。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Save your changes first, or explicitly discard them before closing the window." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "先保存当前修改，或明确放弃后关闭窗口。" } }
       }
     },
     "高级：执行证据与哈希": {

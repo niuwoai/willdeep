@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Installs only on the workspace window; the production AppDelegate is untouched.
+/// Protects the Settings window (and isolated QA preview) without replacing AppDelegate.
 @MainActor struct AgentWorkspaceWindowCloseGuard: NSViewRepresentable {
     @ObservedObject var navigation: AgentWorkspaceNavigation
 
@@ -38,12 +38,15 @@ import SwiftUI
         }
 
         func windowShouldClose(_ sender: NSWindow) -> Bool {
+            // Settings may use a system scene or the fallback controller.
+            // Associate confirmation with the window actually being closed.
+            navigation.closeWorkspaceWindow = { [weak self] requestID in self?.closeAfterDialogDismisses(requestID) }
             guard navigation.closeIntent.request(isDirty: !navigation.dirtySections.isEmpty) else { return false }
             return original?.windowShouldClose?(sender) ?? true
         }
         func windowWillClose(_ notification: Notification) {
             let delegate = original
-            navigation.dirtySections.removeAll(); navigation.pending = nil
+            navigation.dirtySections.removeAll(); navigation.cancelPendingNavigation()
             navigation.closeIntent.continueEditing()
             delegate?.windowWillClose?(notification)
         }

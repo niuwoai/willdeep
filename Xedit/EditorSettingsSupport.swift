@@ -80,6 +80,8 @@ enum EditorSettingsTab: Hashable {
     case localModels
     case notifications
     case subagents
+    case agentLibrary
+    case agentExperiments
     case someIM
     case replicate
     case localAgents
@@ -116,6 +118,8 @@ extension EditorSettingsTab {
         // window, round budget and preloaded skills of every trade are set,
         // which is configuration people return to, not a corner of "AI".
         case .subagents: return .agentProfiles
+        case .agentLibrary: return .agentLibrary
+        case .agentExperiments: return .agentExperiments
         case .skills, .mcp, .tools, .secrets: return .agentTools
         case .localAgents, .remoteRuntimes: return .runtimes
         case .terminal: return .terminal
@@ -139,6 +143,8 @@ extension EditorSettingsTab {
         case .agent: return L10n.Settings.tabAgent
         case .notifications: return L10n.AgentNotifications.Settings.tabTitle
         case .subagents: return L10n.AgentProfiles.tabTitle
+        case .agentLibrary: return AgentWorkspaceSection.library.title
+        case .agentExperiments: return AgentWorkspaceSection.experiments.title
         case .someIM: return L10n.Settings.tabSomeIM
         case .replicate: return L10n.Settings.tabReplicate
         case .localAgents: return L10n.Settings.tabLocalAgents
@@ -155,6 +161,14 @@ extension EditorSettingsTab {
         case .pet: return L10n.DesktopPet.settingsTabTitle
         }
     }
+
+    var workspaceSection: AgentWorkspaceSection? {
+        switch self {
+        case .agentLibrary: .library
+        case .agentExperiments: .experiments
+        default: nil
+        }
+    }
 }
 
 /// Top-level Settings groupings. Each becomes one tab in the Settings window;
@@ -164,6 +178,8 @@ enum SettingsGroup: Hashable, Identifiable {
     case ai
     case localModels
     case agentProfiles
+    case agentLibrary
+    case agentExperiments
     case agentTools
     case runtimes
     case integrations
@@ -178,6 +194,8 @@ enum SettingsGroup: Hashable, Identifiable {
         .ai,
         .localModels,
         .agentProfiles,
+        .agentLibrary,
+        .agentExperiments,
         .agentTools,
         .runtimes,
         .integrations,
@@ -201,6 +219,8 @@ enum SettingsGroup: Hashable, Identifiable {
         case .localModels: return [.localModels]
         case .ai: return [.agent, .notifications, .memory, .rules]
         case .agentProfiles: return [.subagents]
+        case .agentLibrary: return [.agentLibrary]
+        case .agentExperiments: return [.agentExperiments]
         case .agentTools: return [.skills, .mcp, .tools, .secrets]
         case .accountAndDevices: return [.someIM, .mobileGateway]
         case .runtimes: return [.localAgents, .remoteRuntimes]
@@ -220,6 +240,8 @@ enum SettingsGroup: Hashable, Identifiable {
         case .localModels: return L10n.Settings.LocalModel.pageTitle
         case .ai: return L10n.Settings.groupAI
         case .agentProfiles: return L10n.AgentProfiles.tabTitle
+        case .agentLibrary: return AgentWorkspaceSection.library.title
+        case .agentExperiments: return AgentWorkspaceSection.experiments.title
         case .agentTools: return L10n.Settings.groupAgentTools
         case .accountAndDevices: return L10n.Settings.groupAccountAndDevices
         case .runtimes: return L10n.Settings.groupRuntimes
@@ -237,6 +259,8 @@ enum SettingsGroup: Hashable, Identifiable {
         case .localModels: return "cpu"
         case .ai: return "sparkles"
         case .agentProfiles: return "person.2.badge.gearshape"
+        case .agentLibrary: return AgentWorkspaceSection.library.symbol
+        case .agentExperiments: return AgentWorkspaceSection.experiments.symbol
         case .agentTools: return "wrench.and.screwdriver"
         case .accountAndDevices: return "person.crop.circle.badge.checkmark"
         case .runtimes: return "network"
@@ -250,11 +274,25 @@ enum SettingsGroup: Hashable, Identifiable {
 final class EditorSettingsNavigation: ObservableObject {
     static let shared = EditorSettingsNavigation()
 
-    @Published var selectedTab: EditorSettingsTab = .updates
+    @Published private var currentTab: EditorSettingsTab = .updates
+    private let workspaceNavigation: AgentWorkspaceNavigation
+    var selectedTab: EditorSettingsTab {
+        get { currentTab }
+        set {
+            guard newValue != currentTab else { return }
+            workspaceNavigation.navigateSettings(from: currentTab, to: newValue) { [weak self] in
+                guard let self else { return }
+                if let section = newValue.workspaceSection { workspaceNavigation.section = section }
+                currentTab = newValue
+            }
+        }
+    }
     @Published var someIMBrowserLoginAutogenerateRequestID: UUID?
     private var fallbackSettingsWindowController: NSWindowController?
 
-    private init() {}
+    init(workspaceNavigation: AgentWorkspaceNavigation = .shared) {
+        self.workspaceNavigation = workspaceNavigation
+    }
 
     func open(_ tab: EditorSettingsTab, appState: AppState? = nil) {
         selectedTab = tab
@@ -418,12 +456,16 @@ struct RevealableSecretField: View {
 /// resizable + miniaturizable + zoom bits, drop the contentMaxSize
 /// cap, and give it a sensible content min size.
 struct SettingsWindowResizableEnforcer: NSViewRepresentable {
+    var minimumSize = NSSize(width: 760, height: 560)
     func makeNSView(context: Context) -> NSView {
-        EnforcerView()
+        let view = EnforcerView()
+        view.minimumSize = minimumSize
+        return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { Self.apply(to: nsView.window) }
+        (nsView as? EnforcerView)?.minimumSize = minimumSize
+        DispatchQueue.main.async { Self.apply(to: nsView.window, minimumSize: minimumSize) }
     }
 
     /// `viewDidMoveToWindow` fires exactly when the view is attached to the
@@ -432,13 +474,14 @@ struct SettingsWindowResizableEnforcer: NSViewRepresentable {
     /// view had a window and then silently no-op — leaving the panel stuck at
     /// its default non-resizable styleMask (the "can't drag the corners" bug).
     private final class EnforcerView: NSView {
+        var minimumSize = NSSize(width: 760, height: 560)
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            SettingsWindowResizableEnforcer.apply(to: window)
+            SettingsWindowResizableEnforcer.apply(to: window, minimumSize: minimumSize)
         }
     }
 
-    fileprivate static func apply(to window: NSWindow?) {
+    fileprivate static func apply(to window: NSWindow?, minimumSize: NSSize) {
         guard let window else { return }
         var mask = window.styleMask
         mask.insert(.resizable)
@@ -446,7 +489,12 @@ struct SettingsWindowResizableEnforcer: NSViewRepresentable {
         mask.insert(.closable)
         mask.insert(.titled)
         window.styleMask = mask
-        window.contentMinSize = NSSize(width: 760, height: 560)
+        window.contentMinSize = minimumSize
+        if let currentSize = window.contentView?.bounds.size,
+           currentSize.width < minimumSize.width || currentSize.height < minimumSize.height {
+            window.setContentSize(NSSize(width: max(currentSize.width, minimumSize.width),
+                                         height: max(currentSize.height, minimumSize.height)))
+        }
         window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                                        height: CGFloat.greatestFiniteMagnitude)
         window.isMovableByWindowBackground = false

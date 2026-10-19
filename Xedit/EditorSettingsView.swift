@@ -11,6 +11,7 @@ import AppKit
 struct EditorSettingsView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var settingsNavigation = EditorSettingsNavigation.shared
+    @ObservedObject private var workspaceNavigation = AgentWorkspaceNavigation.shared
     @State private var cliInstallState: CommandLineToolInstallState = .notInstalled
     @State private var cliStatusMessage = ""
     @State private var isInstallingCLI = false
@@ -75,20 +76,31 @@ struct EditorSettingsView: View {
             settingsContent
         }
         .frame(
-            minWidth: 760,
-            idealWidth: 920,
+            minWidth: settingsMinimumSize.width,
+            idealWidth: settingsNavigation.selectedTab.workspaceSection == nil ? 920 : 1200,
             maxWidth: .infinity,
-            minHeight: 560,
+            minHeight: settingsMinimumSize.height,
             idealHeight: 700,
             maxHeight: .infinity
         )
         .background(SettingsKeyboardShortcutHandler())
-        .background(SettingsWindowResizableEnforcer())
+        .background(SettingsWindowResizableEnforcer(minimumSize: settingsMinimumSize))
         .settingsFocusDisabled()
+        .modifier(AgentWorkspaceNavigationGuard())
+        .onChange(of: workspaceNavigation.section) { section in
+            guard settingsNavigation.selectedTab.workspaceSection != nil else { return }
+            settingsNavigation.selectedTab = section == .library ? .agentLibrary : .agentExperiments
+        }
         .onAppear {
             refreshCLIState()
             refreshLocalAgentDiscovery()
         }
+    }
+
+    private var settingsMinimumSize: NSSize {
+        settingsNavigation.selectedTab.workspaceSection == nil
+            ? NSSize(width: 760, height: 560)
+            : NSSize(width: 1100, height: 700)
     }
 
     private var settingsSidebar: some View {
@@ -123,6 +135,7 @@ struct EditorSettingsView: View {
                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .settingsFocusDisabled()
                     .help(group.title)
+                    .accessibilityIdentifier("settings-group-\(String(describing: group))")
                 }
             }
             .padding(.horizontal, 10)
@@ -293,6 +306,8 @@ struct EditorSettingsView: View {
         case .agent: agentSettings
         case .notifications: AgentAttentionSettingsView()
         case .subagents: AgentProfileSettingsView()
+        case .agentLibrary, .agentExperiments:
+            AgentWorkspaceSettingsPage(providerEntries: appState.agentProviderLibrary.entries)
         case .someIM: SomeIMIntegrationSettingsView()
         // Deep-links to `.replicate` land on the unified connectors hub
         // with the Replicate sub-connector preselected.

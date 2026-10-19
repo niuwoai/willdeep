@@ -50,7 +50,6 @@ struct AgentProfileSettingsView: View {
     }
 
     @EnvironmentObject private var appState: AppState
-    @Environment(\.openWindow) private var openWindow
 
     @State private var profiles: [AgentProfile] = []
     @State private var selectedID: String?
@@ -100,8 +99,7 @@ struct AgentProfileSettingsView: View {
                 }
                 Divider()
                 Button(String(localized: "智能体版本库与同步", table: "AgentRegistry")) {
-                    AgentWorkspaceNavigation.shared.select(.library)
-                    openWindow(id: AgentWorkspaceWindowID.value)
+                    EditorSettingsNavigation.shared.selectedTab = .agentLibrary
                 }
                     .buttonStyle(.plain)
                 Button(action: addProfile) { Label(L10n.AgentProfiles.addProfile, systemImage: "plus") }

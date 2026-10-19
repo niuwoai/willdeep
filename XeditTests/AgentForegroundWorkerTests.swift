@@ -36,14 +36,29 @@ struct AgentForegroundWorkerTests {
                 .appendingPathComponent("Xedit/AppStateAgentToolMessages.swift"),
             encoding: .utf8
         )
-        let forcing = try #require(source.range(of: "!AgentSubagentSchedulingPolicy.mustRunInForeground(profileID: profile.id)"))
+        let forcing = try #require(source.range(of: "!AgentSubagentSchedulingPolicy.mustRunInForeground(profileID: profile.permissionRoleID)"))
         let resolution = try #require(source.range(of: "var profile = AgentSubagentProfileStore.resolvedProfile("))
-        let convergence = try #require(source.range(of: "AgentOpsConvergencePolicy.shouldReturnToParent(profileID: profile.id,"))
+        let convergence = try #require(source.range(of: "AgentOpsConvergencePolicy.shouldReturnToParent(profileID: profile.permissionRoleID,"))
         let backgroundBranch = try #require(source.range(of: "        if runInBackground {"))
         #expect(resolution.lowerBound < forcing.lowerBound)
         #expect(forcing.lowerBound < convergence.lowerBound)
         #expect(forcing.lowerBound < backgroundBranch.lowerBound)
-        #expect(source.contains("foregroundOnlyNotice(profileID: profile.id)"))
+        #expect(source.contains("foregroundOnlyNotice(profileID: profile.permissionRoleID)"))
+    }
+
+    @Test("注册智能体按基础运维角色保持前台执行")
+    func registeredOpsProfileIsForegroundOnly() {
+        let profile = AgentSubagentProfile(
+            id: "custom-operations", purpose: "Inspect operations", toolNames: [],
+            capabilityPromptSection: "", maxRounds: 1, toolPayloadCharacterLimit: 100,
+            registrySnapshot: AgentRevisionSnapshot(
+                definitionID: "custom-operations", revision: "test",
+                baseRole: AgentSubagentProfileCatalog.opsRunnerID, lockedSkills: []
+            )
+        )
+        #expect(profile.id != profile.permissionRoleID)
+        #expect(AgentSubagentSchedulingPolicy.mustRunInForeground(profileID: profile.permissionRoleID))
+        #expect(!AgentSubagentSchedulingPolicy.foregroundOnlyNotice(profileID: profile.permissionRoleID).isEmpty)
     }
 
     @Test("spawn_agent 的参数说明写明运维 Worker 总在前台")
