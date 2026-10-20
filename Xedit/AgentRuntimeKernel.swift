@@ -539,7 +539,20 @@ final class AgentRuntimeKernel: ObservableObject {
     /// synchronous initializer for deterministic fixtures.
     static let shared = AgentRuntimeKernel(loadPersisted: false)
 
-    @Published private(set) var events: [AgentKernelEvent]
+    @Published private(set) var events: [AgentKernelEvent] {
+        didSet { pendingUserActionIndex = nil }
+    }
+
+    private struct PendingUserActions {
+        var count = 0
+        var countBySource: [AgentKernelEventSource: Int] = [:]
+        var latestEventIndex: Int
+    }
+
+    // Shared by every window/session. Rebuild once after a journal mutation,
+    // rather than walking and copying the entire journal for each badge.
+    private var pendingUserActionIndex: [UUID: PendingUserActions]?
+    private(set) var pendingUserActionIndexBuildCount = 0
 
     private let persistsEvents: Bool
     private let now: () -> Date
@@ -682,23 +695,33 @@ final class AgentRuntimeKernel: ObservableObject {
     }
 
     func pendingUserActionCount(for runtimeID: UUID) -> Int {
-        events.lazy.filter {
-            $0.runtimeID == runtimeID
-                && $0.audience.includesUser
-                && $0.isAwaitingUserAction
-        }.count
+        ensurePendingUserActionIndex()
+        return pendingUserActionIndex?[runtimeID]?.count ?? 0
     }
 
     func pendingUserActionCount(
         for runtimeID: UUID,
         excluding source: AgentKernelEventSource
     ) -> Int {
-        events.lazy.filter {
-            $0.runtimeID == runtimeID
-                && $0.source != source
-                && $0.audience.includesUser
-                && $0.isAwaitingUserAction
-        }.count
+        ensurePendingUserActionIndex()
+        guard let summary = pendingUserActionIndex?[runtimeID] else { return 0 }
+        return summary.count - summary.countBySource[source, default: 0]
+    }
+
+    private func ensurePendingUserActionIndex() {
+        guard pendingUserActionIndex == nil else { return }
+        var summaries: [UUID: PendingUserActions] = [:]
+        for index in events.indices where events[index].isAwaitingUserAction {
+            let event = events[index]
+            summaries[event.runtimeID, default: PendingUserActions(latestEventIndex: index)].count += 1
+            summaries[event.runtimeID]?.countBySource[event.source, default: 0] += 1
+            if let latest = summaries[event.runtimeID]?.latestEventIndex,
+               events[latest].updatedAt < event.updatedAt {
+                summaries[event.runtimeID]?.latestEventIndex = index
+            }
+        }
+        pendingUserActionIndex = summaries
+        pendingUserActionIndexBuildCount += 1
     }
 
     private func pendingExternalUserActionCount(for runtimeID: UUID) -> Int {
@@ -876,9 +899,9 @@ final class AgentRuntimeKernel: ObservableObject {
     }
 
     func latestPendingUserAction(for runtimeID: UUID) -> AgentKernelEvent? {
-        events.lazy
-            .filter { $0.runtimeID == runtimeID && $0.isAwaitingUserAction }
-            .max { $0.updatedAt < $1.updatedAt }
+        ensurePendingUserActionIndex()
+        guard let index = pendingUserActionIndex?[runtimeID]?.latestEventIndex else { return nil }
+        return events[index]
     }
 
     func removeEvents(for runtimeID: UUID) {

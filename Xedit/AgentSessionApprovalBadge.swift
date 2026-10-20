@@ -200,9 +200,11 @@ final class AgentDockBadgeCoordinator: ObservableObject {
     private var watchedRuntimeObjects: [ObjectIdentifier: [AgentSession.ID: ObjectIdentifier]] = [:]
     private var runtimeSubscriptions: [ObjectIdentifier: [AgentSession.ID: AnyCancellable]] = [:]
     private var refreshTask: Task<Void, Never>?
+    private static let refreshCoalescingInterval: Duration = .milliseconds(50)
+    private(set) var refreshCount = 0
     private var lastBadgeLabel: String?
 
-    private init() {}
+    init() {}
 
     /// Whether `appState` is in the tracked set. Every `track(appStates:)`
     /// call replaces the whole set, so tests use this to re-assert their
@@ -260,6 +262,8 @@ final class AgentDockBadgeCoordinator: ObservableObject {
     }
 
     func clear() {
+        refreshTask?.cancel()
+        refreshTask = nil
         appStateSubscriptions.values.forEach { $0.cancel() }
         kernelSubscriptions.values.forEach { $0.cancel() }
         runtimeListSubscriptions.values.forEach { $0.cancel() }
@@ -275,14 +279,21 @@ final class AgentDockBadgeCoordinator: ObservableObject {
     }
 
     private func scheduleRefresh() {
-        refreshTask?.cancel()
+        guard refreshTask == nil else { return }
         refreshTask = Task { @MainActor [weak self] in
-            await Task.yield()
-            self?.refreshNow()
+            do {
+                try await Task.sleep(for: Self.refreshCoalescingInterval)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.refreshTask = nil
+            self.refreshNow()
         }
     }
 
     private func refreshNow() {
+        refreshCount += 1
         refreshRuntimeSubscriptions()
         var approvalRequestCountBySessionID: [AgentSession.ID: Int] = [:]
         var archivedBySessionID: [AgentSession.ID: Bool] = [:]

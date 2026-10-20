@@ -5,6 +5,87 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentRuntimeKernelTests {
+    private func attentionEvent(
+        runtimeID: UUID,
+        source: AgentKernelEventSource = .system,
+        audience: AgentKernelEventAudience = .both,
+        dedupeKey: String? = nil
+    ) -> AgentKernelEvent {
+        AgentKernelEvent(
+            runtimeID: runtimeID, source: source, kind: .hostNotice,
+            audience: audience, title: "Attention", payload: "fixture",
+            dedupeKey: dedupeKey, requiresUserAction: true,
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    @Test("attention queries share one journal scan across sessions and repeated Dock refreshes")
+    func attentionIndexIsReusedAcrossSessions() {
+        let kernel = AgentRuntimeKernel(loadPersisted: false, persistsEvents: false)
+        let runtimeIDs = (0..<24).map { _ in UUID() }
+        for runtimeID in runtimeIDs {
+            kernel.publish(attentionEvent(runtimeID: runtimeID))
+            kernel.publish(attentionEvent(runtimeID: runtimeID, source: .approval))
+            kernel.publish(attentionEvent(runtimeID: runtimeID, audience: .model))
+        }
+        let initialBuilds = kernel.pendingUserActionIndexBuildCount
+        for _ in 0..<100 {
+            for runtimeID in runtimeIDs {
+                #expect(kernel.pendingUserActionCount(for: runtimeID) == 2)
+                #expect(kernel.pendingUserActionCount(for: runtimeID, excluding: .approval) == 1)
+                #expect(kernel.latestPendingUserAction(for: runtimeID)?.runtimeID == runtimeID)
+            }
+        }
+        #expect(kernel.pendingUserActionCount(for: UUID()) == 0)
+        #expect(kernel.pendingUserActionIndexBuildCount == initialBuilds + 1)
+    }
+
+    @Test("attention index invalidates after publish, dismiss, retain and removal")
+    func attentionIndexTracksJournalMutations() {
+        let kernel = AgentRuntimeKernel(loadPersisted: false, persistsEvents: false)
+        let firstID = UUID()
+        let secondID = UUID()
+        #expect(kernel.latestPendingUserAction(for: firstID) == nil)
+        let first = kernel.publish(attentionEvent(runtimeID: firstID))
+        #expect(kernel.pendingUserActionCount(for: firstID) == 1)
+        #expect(kernel.latestPendingUserAction(for: firstID)?.id == first.id)
+        kernel.dismiss(first.id)
+        #expect(kernel.pendingUserActionCount(for: firstID) == 0)
+        #expect(kernel.latestPendingUserAction(for: firstID) == nil)
+        kernel.publish(attentionEvent(runtimeID: secondID))
+        #expect(kernel.pendingUserActionCount(for: secondID) == 1)
+        kernel.retainEvents(for: [firstID])
+        #expect(kernel.pendingUserActionCount(for: secondID) == 0)
+        kernel.publish(attentionEvent(runtimeID: firstID))
+        #expect(kernel.pendingUserActionCount(for: firstID) == 1)
+        kernel.removeEvents(for: firstID)
+        #expect(kernel.latestPendingUserAction(for: firstID) == nil)
+    }
+
+    @Test("coalesced and source-resolved events update cached counts and latest attention")
+    func attentionIndexTracksReplacementAndSourceResolution() {
+        var timestamp = Date(timeIntervalSince1970: 1_790_000_000)
+        let kernel = AgentRuntimeKernel(
+            loadPersisted: false, persistsEvents: false, now: { timestamp }
+        )
+        let runtimeID = UUID()
+        let first = kernel.publish(attentionEvent(runtimeID: runtimeID, dedupeKey: "first"))
+        timestamp += 1
+        let second = kernel.publish(attentionEvent(runtimeID: runtimeID, dedupeKey: "second"))
+        #expect(kernel.pendingUserActionCount(for: runtimeID) == 2)
+        #expect(kernel.latestPendingUserAction(for: runtimeID)?.id == second.id)
+        timestamp += 1
+        kernel.publish(attentionEvent(runtimeID: runtimeID, dedupeKey: "first"))
+        #expect(kernel.pendingUserActionCount(for: runtimeID) == 2)
+        #expect(kernel.latestPendingUserAction(for: runtimeID)?.id == first.id)
+        let delivered = kernel.consumePendingModelEvents(for: runtimeID)
+        kernel.acknowledge(delivered.map(\.id))
+        #expect(kernel.pendingUserActionCount(for: runtimeID) == 2)
+        kernel.dismissPendingEvents(runtimeID: runtimeID, source: .system, keepingDedupeKeys: ["second"])
+        #expect(kernel.pendingUserActionCount(for: runtimeID) == 1)
+        #expect(kernel.latestPendingUserAction(for: runtimeID)?.id == second.id)
+    }
+
     @Test("default AppState instances share one process event kernel")
     func appStatesUseOneProcessKernelByDefault() {
         let first = AppState(loadSessionCatalog: false)

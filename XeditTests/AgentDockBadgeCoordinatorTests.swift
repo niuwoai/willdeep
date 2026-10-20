@@ -16,6 +16,45 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentDockBadgeCoordinatorTests {
+    private func waitForRefresh(_ coordinator: AgentDockBadgeCoordinator, count: Int) async throws {
+        // Other suites can occupy the main actor before the refresh task even
+        // starts sleeping. Wait for its result instead of assuming wall time
+        // gives this task a turn on the executor.
+        for _ in 0..<250 {
+            if coordinator.refreshCount >= count { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    @Test("突发刷新合并为一次执行，后续请求仍会触发新一轮刷新")
+    func refreshBurstsAreCoalesced() async throws {
+        let coordinator = AgentDockBadgeCoordinator()
+        defer { coordinator.clear() }
+        for _ in 0..<200 {
+            coordinator.track(appStates: [])
+        }
+        try await waitForRefresh(coordinator, count: 1)
+        #expect(coordinator.refreshCount == 1)
+        for _ in 0..<100 {
+            coordinator.track(appStates: [])
+        }
+        try await waitForRefresh(coordinator, count: 2)
+        #expect(coordinator.refreshCount == 2)
+    }
+
+    @Test("清理取消尚未执行的刷新，取消任务不会影响新一轮刷新")
+    func clearCancelsScheduledRefresh() async throws {
+        let coordinator = AgentDockBadgeCoordinator()
+        defer { coordinator.clear() }
+        coordinator.track(appStates: [])
+        coordinator.clear()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(coordinator.refreshCount == 0)
+        coordinator.track(appStates: [])
+        try await waitForRefresh(coordinator, count: 1)
+        #expect(coordinator.refreshCount == 1)
+    }
+
     private func pendingCall() -> AgentToolCall {
         AgentToolCall(
             messageID: UUID(), externalID: "dock-badge-fixture-\(UUID())",
