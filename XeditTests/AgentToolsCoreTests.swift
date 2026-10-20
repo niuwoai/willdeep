@@ -409,11 +409,13 @@ struct AgentToolsCoreTests {
     }
 
     @Test
-    func visualQAScreenshotToolRequiresApprovalAndDocumentsBoundary() throws {
+    func visualQAScreenshotToolDocumentsApprovalAndProviderBoundary() throws {
         let descriptor = try #require(AgentToolRegistry.descriptor(for: "visual_qa_screenshot"))
         #expect(descriptor.risk == .write)
         #expect(descriptor.description.contains("Image Understanding"))
         #expect(descriptor.description.contains("allow_vl"))
+        #expect(descriptor.description.contains("Runs automatically in Smart review"))
+        #expect(descriptor.description.contains("Strict mode requires confirmation"))
         #expect(descriptor.parameters.contains { $0.name == "path" && $0.required })
         #expect(descriptor.parameters.contains { $0.name == "allow_vl" && !$0.required })
     }

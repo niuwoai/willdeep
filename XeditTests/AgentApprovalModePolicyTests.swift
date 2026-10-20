@@ -4,6 +4,45 @@ import WillDeepCore
 @testable import WillDeep
 
 struct AgentApprovalModePolicyTests {
+    @Test("视觉检查自动通过智能审核，严格模式仍需确认")
+    @MainActor
+    func visualQAApprovalBoundary() async {
+        let appState = AppState()
+        let modes: [(AgentApprovalMode, AgentToolApprovalSource?)] = [
+            (.smart, .staticAllowlist),
+            (.workspaceAccess, .staticAllowlist),
+            (.fullAccess, .fullAccess),
+            (.requestEveryTime, nil),
+        ]
+        for allowVL: Bool? in [nil, false, true] {
+            var arguments: [String: AgentJSONValue] = [
+                "path": .string("tmp/design-src/source.png"),
+                "focus": .string("layout"),
+            ]
+            if let allowVL { arguments["allow_vl"] = .bool(allowVL) }
+            let risk = AgentToolRegistry.risk(for: "visual_qa_screenshot", arguments: arguments)
+            #expect(risk == .write)
+            for (mode, expected) in modes {
+                let source = await appState.autoApprovalSource(
+                    toolName: "visual_qa_screenshot",
+                    arguments: arguments,
+                    risk: risk,
+                    rootDirectory: nil,
+                    approvalMode: mode
+                )
+                #expect(source == expected, "mode=\(mode), allow_vl=\(String(describing: allowVL))")
+            }
+        }
+        let unrelatedWrite = await appState.autoApprovalSource(
+            toolName: "change_workspace",
+            arguments: ["path": .string("/tmp")],
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .smart
+        )
+        #expect(unrelatedWrite == nil)
+    }
+
     @Test("Smart review applies workspace files without git; Strict mode waits")
     @MainActor
     func workspacePatchBoundary() throws {

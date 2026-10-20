@@ -695,6 +695,14 @@ extension AppState {
             return nil
         }
 
+        // Visual QA reads an existing image and optionally uses the user's
+        // configured vision provider. Keep it write-tier so Strict still asks,
+        // but ordinary visual verification must not interrupt Smart review.
+        // This also covers local-only palette/OCR checks (allow_vl=false).
+        if toolName == "visual_qa_screenshot" {
+            return .staticAllowlist
+        }
+
         // A page script that only reads the DOM needs no card, even on a site
         // without a grant; anything else falls through to site authorization.
         // A script carrying a secret placeholder is never free: the page can

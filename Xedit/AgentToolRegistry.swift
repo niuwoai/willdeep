@@ -1179,7 +1179,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "visual_qa_screenshot",
-            description: "Inspect a screenshot or UI image for on-demand visual QA. Use only when the user explicitly asks for screenshot/UI/color/theme/accessibility/layout review, or after a fresh browser screenshot when visual verification is needed. Returns local palette/OCR/theme signals and, by default, may send the image to the configured Image Understanding provider for visual review; pass `allow_vl: false` for local-only inspection. Requires approval because VL analysis may send image bytes to a provider; the separate screenshot capture itself is read-only.",
+            description: "Inspect a screenshot or UI image for on-demand visual QA. Use only when the user explicitly asks for screenshot/UI/color/theme/accessibility/layout review, or after a fresh browser screenshot when visual verification is needed. Returns local palette/OCR/theme signals and, by default, may send the image to the configured Image Understanding provider for visual review; pass `allow_vl: false` for local-only inspection. Runs automatically in Smart review and Workspace Access; Strict mode requires confirmation. The separate screenshot capture itself is read-only.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Screenshot/image path. Prefer workspace-relative paths; absolute local paths are allowed for fresh tool captures or user-provided images.", required: true),
