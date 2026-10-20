@@ -92,6 +92,12 @@ enum AgentDockMenuLogic {
 }
 
 enum AgentDockReopenGesture {
+    /// Reopening a plugin or another dedicated page must preserve that page.
+    /// Only an already visible conversation opts into the double-click jump.
+    nonisolated static func canRevealPendingSession(from destination: AgentPrimaryDestination?) -> Bool {
+        destination == .conversation
+    }
+
     /// Matches the system double-click threshold closely enough without
     /// reading the user's mouse preferences on every Dock click. Anything
     /// slower is two separate "bring the app forward" clicks.
@@ -125,6 +131,12 @@ final class AgentDockAttentionController: NSObject {
     /// click was consumed as a double-click and navigation happened.
     @discardableResult
     func handleDockIconClick(at now: Date = Date()) -> Bool {
+        guard AgentDockReopenGesture.canRevealPendingSession(
+            from: EditorAppStateRegistry.shared.current?.agentPrimaryDestination
+        ) else {
+            lastDockClickAt = nil
+            return false
+        }
         let isDoubleClick = AgentDockReopenGesture.isDoubleClick(
             previousClick: lastDockClickAt,
             currentClick: now

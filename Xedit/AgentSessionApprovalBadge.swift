@@ -191,6 +191,8 @@ final class AgentDockBadgeCoordinator: ObservableObject {
     /// Every blocked session across all windows, newest first. Drives the
     /// Dock menu and the double-click jump, both of which are app-wide.
     @Published private(set) var allPendingEntries: [AgentPendingApprovalEntry] = []
+    /// Actionable requests, with the same cross-window deduplication as Dock.
+    @Published private(set) var pendingRequestCount = 0
 
     private var trackedAppStates: [ObjectIdentifier: AppState] = [:]
     private var appStateSubscriptions: [ObjectIdentifier: AnyCancellable] = [:]
@@ -274,6 +276,7 @@ final class AgentDockBadgeCoordinator: ObservableObject {
         kernelSubscriptions.removeAll()
         runtimeSubscriptions.removeAll()
         trackedAppStates.removeAll()
+        if pendingRequestCount != 0 { pendingRequestCount = 0 }
         updateDockBadge(label: nil)
         publishPendingEntries(blockedByAppState: [:])
     }
@@ -340,6 +343,7 @@ final class AgentDockBadgeCoordinator: ObservableObject {
                 partial += entry.value
             }
         }
+        if pendingRequestCount != count { pendingRequestCount = count }
         updateDockBadge(
             label: count > 0 ? String(count) : nil,
             windows: trackedAppStates.count,

@@ -223,6 +223,18 @@ struct AgentPendingApprovalQuickJumpTests {
 
     // MARK: - Dock gesture
 
+    @Test("插件等独立页面保留当前位置，不参与 Dock 连点跳会话")
+    func dockReopenPreservesDedicatedPages() {
+        for destination in [
+            AgentPrimaryDestination.plugin("demo.panel"), .pluginCenter,
+            .scheduledTasks, .dispatchBoard, .roundtable
+        ] {
+            #expect(!AgentDockReopenGesture.canRevealPendingSession(from: destination))
+        }
+        #expect(!AgentDockReopenGesture.canRevealPendingSession(from: nil))
+        #expect(AgentDockReopenGesture.canRevealPendingSession(from: .conversation))
+    }
+
     @Test
     func dockDoubleClickNeedsTwoClicksInsideTheWindow() {
         let first = Date()

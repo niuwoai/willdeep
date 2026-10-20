@@ -14,6 +14,27 @@ import Testing
 @MainActor
 @Suite
 struct AgentSidebarChatEntryTests {
+    @Test("会话导航入口显示待处理数，新会话操作不承载提醒")
+    func attentionBadgeFollowsNavigationContext() {
+        for destination in [
+            AgentPrimaryDestination.plugin("demo.panel"), .pluginCenter,
+            .scheduledTasks, .dispatchBoard, .roundtable
+        ] {
+            #expect(AgentConversationEntryAttention.badgeCount(
+                destination: destination, pendingRequestCount: 3
+            ) == 3)
+            #expect(AgentConversationEntryAttention.badgeCount(
+                destination: destination, pendingRequestCount: 0
+            ) == 0)
+        }
+        #expect(AgentConversationEntryAttention.badgeCount(
+            destination: .conversation, pendingRequestCount: 3
+        ) == 0)
+        #expect(AgentConversationEntryAttention.badgeCount(
+            destination: .pluginCenter, pendingRequestCount: -1
+        ) == 0)
+    }
+
     private func makeWorkspace() throws -> URL {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-chat-entry-\(UUID().uuidString)")

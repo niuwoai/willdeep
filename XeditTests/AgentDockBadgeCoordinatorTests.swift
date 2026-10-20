@@ -16,6 +16,39 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentDockBadgeCoordinatorTests {
+    @Test("导航徽标沿用 Dock 的请求数，跨窗口不重复，归档和清理后归零")
+    func publishedAttentionCountMatchesDockRequests() async throws {
+        let coordinator = AgentDockBadgeCoordinator()
+        defer { coordinator.clear() }
+        let kernel = AgentRuntimeKernel(loadPersisted: false, persistsEvents: false)
+        let first = AppState(runtimeKernel: kernel, loadSessionCatalog: false)
+        let second = AppState(runtimeKernel: kernel, loadSessionCatalog: false)
+        var session = AgentSession(title: "Badge fixture")
+        session.currentPlan = AgentPlan(status: .proposed, steps: [], summary: "Review")
+        first.agentSessions = [session]
+        second.agentSessions = [session]
+        kernel.publish(AgentKernelEvent(
+            runtimeID: session.id, source: .system, kind: .hostNotice,
+            audience: .user, title: "Attention", payload: "fixture", requiresUserAction: true
+        ))
+        coordinator.track(appStates: [first, second])
+        try await waitForRefresh(coordinator, count: 1)
+        #expect(coordinator.pendingRequestCount == 2)
+        #expect(coordinator.allPendingEntries.count == 1)
+        let nextRefresh = coordinator.refreshCount + 1
+        session.archivedAt = Date()
+        first.agentSessions = [session]
+        second.agentSessions = [session]
+        try await waitForRefresh(coordinator, count: nextRefresh)
+        #expect(coordinator.pendingRequestCount == 0)
+        session.archivedAt = nil
+        first.agentSessions = [session]
+        try await waitForRefresh(coordinator, count: coordinator.refreshCount + 1)
+        #expect(coordinator.pendingRequestCount == 2)
+        coordinator.clear()
+        #expect(coordinator.pendingRequestCount == 0)
+    }
+
     private func waitForRefresh(_ coordinator: AgentDockBadgeCoordinator, count: Int) async throws {
         // Other suites can occupy the main actor before the refresh task even
         // starts sleeping. Wait for its result instead of assuming wall time

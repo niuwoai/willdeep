@@ -583,23 +583,7 @@ struct AgentSessionsSidebar: View {
             // trailing button is the unconditional "new chat", so that intent
             // is still one click away from anywhere (as is ⌘N, which the menu
             // owns; the "⌘N" label this row used to show never actually fired).
-            SidebarActionRow(
-                icon: "bubble.left",
-                // 标题跟着语义走：在聊天页它就是「新会话」，在别处它是
-                // 「会话」＝回到最近那一次。行为本来就是这样分叉的
-                // （见 activateAgentConversationEntry），此前只有标题没跟上。
-                title: appState.agentConversationEntryTitle,
-                shortcut: nil,
-                isSelected: appState.agentPrimaryDestination == .conversation,
-                trailingIcon: "square.and.pencil",
-                trailingHelp: L10n.Sidebar.newChatAction,
-                trailingAction: {
-                    appState.startNewAgentSession()
-                    appState.agentComposerFocusRevision += 1
-                }
-            ) {
-                appState.activateAgentConversationEntry()
-            }
+            AgentConversationEntryRow()
             SidebarActionRow(
                 icon: "clock",
                 title: L10n.Automation.navigationTitle,
@@ -1735,6 +1719,7 @@ struct SidebarActionRow: View {
     let shortcut: String?
     var isDimmed: Bool = false
     var isSelected: Bool = false
+    var badgeCount: Int = 0
     /// Optional secondary action pinned to the row's trailing edge, for rows
     /// whose navigation and whose "make a new one" are different intents.
     var trailingIcon: String? = nil
@@ -1763,6 +1748,9 @@ struct SidebarActionRow: View {
                     // (e.g. "⌘N") 先挤掉而不是反过来。
                     .layoutPriority(1)
                 Spacer(minLength: 0)
+                if badgeCount > 0 {
+                    AgentConversationAttentionBadge(count: badgeCount)
+                }
                 if let shortcut {
                     Text(shortcut)
                         .font(.system(size: 10))
@@ -1771,6 +1759,7 @@ struct SidebarActionRow: View {
                         .fixedSize()
                 }
             }
+            .padding(.trailing, trailingAction == nil ? 0 : 26)
             .padding(.horizontal, 14)
             .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())

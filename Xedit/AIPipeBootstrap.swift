@@ -61,7 +61,8 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
     /// A single Dock click keeps its stock behavior (activate, restore
     /// windows) — returning true below is what performs it. A second click
-    /// inside the double-click window jumps to the session behind the badge.
+    /// inside the double-click window jumps to the session behind the badge
+    /// only when already viewing a conversation; dedicated pages stay open.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         MainActor.assumeIsolated {
             AgentDockAttentionController.shared.handleDockIconClick()
