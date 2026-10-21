@@ -13,6 +13,7 @@
 
 import Testing
 import Foundation
+import SQLite3
 @testable import WillDeep
 
 @Suite(.serialized)
@@ -249,6 +250,90 @@ struct AgentUsageSidecarTests {
         #expect(database.loadAll().isEmpty)
         #expect(database.replaceAll(with: [(expected, stamp)]))
         #expect(database.loadAll() == [expected])
+    }
+
+    private func wholeSecondSnapshot(_ session: AgentSession) throws -> AgentUsageSessionSnapshot {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(AgentUsageSessionSnapshot.self,
+                                  from: encoder.encode(AgentUsageSessionSnapshot(session: session)))
+    }
+
+    @Test("增量统计保存保留历史修改、工具替换、追加、重排和截断")
+    func incrementalUsageWritesPreserveEveryMutation() throws {
+        var session = makeRichSession()
+        let root = try makeScanLibrary([])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = AgentUsageDatabase.defaultURL(in: root)
+        let database = try #require(AgentUsageDatabase(url: url))
+        let reader = try #require(AgentUsageDatabase(url: url))
+        for step in 0..<7 {
+            switch step {
+            case 1: session.messages[1].completionTokens = 999
+            case 2: session.messages[1].toolCalls = []
+            case 3: session.messages.append(AgentMessage(role: .assistant, content: "new tail"))
+            case 4: session.messages.swapAt(0, 2)
+            case 5: session.messages.removeLast(2)
+            case 6: session.messages.removeAll(); session.providerDisplayName = nil
+            default: break
+            }
+            let expected = try wholeSecondSnapshot(session)
+            let stamp = AgentUsageSourceStamp(fileSize: UInt64(step + 1), modificationTime: Double(step))
+            #expect(database.upsert(expected, signature: stamp))
+            #expect(reader.loadAll() == [expected])
+            #expect(reader.storedSignatures()[session.id] == stamp)
+        }
+    }
+
+    @Test("另一连接写入或整库重建后不会沿用旧统计基线")
+    func externalWritesAndRebuildInvalidateIncrementalBaseline() throws {
+        let root = try makeScanLibrary([])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = AgentUsageDatabase.defaultURL(in: root)
+        let first = try #require(AgentUsageDatabase(url: url))
+        let other = try #require(AgentUsageDatabase(url: url))
+        let original = try wholeSecondSnapshot(makeRichSession())
+        var changed = original
+        changed.messages[0].contentCharacterCount += 100
+        let stamp = AgentUsageSourceStamp(fileSize: 1, modificationTime: 1)
+        #expect(first.upsert(original, signature: stamp))
+        #expect(other.upsert(changed, signature: stamp))
+        #expect(first.upsert(original, signature: stamp))
+        #expect(first.loadAll() == [original])
+        #expect(first.replaceAll(with: [(changed, stamp)]))
+        #expect(first.upsert(original, signature: stamp))
+        #expect(other.loadAll() == [original])
+    }
+
+    @Test("增量保存中途失败回滚完整快照，随后仍能重试")
+    func incrementalWriteFailureRollsBackAndCanRetry() throws {
+        let root = try makeScanLibrary([])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = AgentUsageDatabase.defaultURL(in: root)
+        let database = try #require(AgentUsageDatabase(url: url))
+        let original = try wholeSecondSnapshot(makeRichSession())
+        var changed = original
+        changed.messages[1].completionTokens = 999
+        let stamp = AgentUsageSourceStamp(fileSize: 1, modificationTime: 1)
+        #expect(database.upsert(original, signature: stamp))
+        var control: OpaquePointer?
+        #expect(sqlite3_open(url.path, &control) == SQLITE_OK)
+        defer { sqlite3_close(control) }
+        #expect(sqlite3_exec(control,
+            "CREATE TRIGGER reject_usage BEFORE INSERT ON messages WHEN NEW.completion_tokens = 999 BEGIN SELECT RAISE(ABORT, 'fixture'); END;",
+            nil, nil, nil) == SQLITE_OK)
+        // Prime a committed baseline after installing the external trigger;
+        // otherwise data_version would force the full rewrite path here.
+        #expect(database.upsert(original, signature: stamp))
+        let changedStamp = AgentUsageSourceStamp(fileSize: 2, modificationTime: 2)
+        #expect(!database.upsert(changed, signature: changedStamp))
+        #expect(database.loadAll() == [original])
+        #expect(database.storedSignatures()[original.id] == stamp)
+        #expect(sqlite3_exec(control, "DROP TRIGGER reject_usage;", nil, nil, nil) == SQLITE_OK)
+        #expect(database.upsert(changed, signature: changedStamp))
+        #expect(database.loadAll() == [changed])
     }
 
     @Test("不同目录的同 ID 会话并发扫描不串库，侧车留在各自目录")

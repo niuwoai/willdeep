@@ -76,6 +76,14 @@ nonisolated final class AgentUsageDatabase {
     // Only fixed write SQL reaches this cache, under `lock`. Reuse the same
     // VM for every history row instead of parsing/compiling thousands of INSERTs.
     private var writeStatements: [String: OpaquePointer] = [:]
+    // Keep a bounded, committed baseline, not the conversation's text. Streaming
+    // updates usually change one usage row; rewriting the prefix dominated rc7
+    // CPU profiles. A different SQLite connection invalidates this baseline.
+    private static let maximumCachedSessions = 4
+    private static let maximumCachedMessages = 4096
+    private var committedSnapshots: [UUID: AgentUsageSessionSnapshot] = [:]
+    private var snapshotOrder: [UUID] = []
+    private var committedDataVersion: Int64?
 
     // MARK: - 生命周期
 
@@ -200,11 +208,43 @@ nonisolated final class AgentUsageDatabase {
         defer { lock.unlock() }
         guard handle != nil else { return false }
         guard exec("BEGIN IMMEDIATE;") else { return false }
-        if writeSession(snapshot, signature: signature) {
-            return exec("COMMIT;")
+        let version = dataVersion()
+        if version == nil || version != committedDataVersion {
+            clearCommittedSnapshots()
+        }
+        if writeSession(snapshot, signature: signature, previous: committedSnapshots[snapshot.id]),
+           exec("COMMIT;") {
+            rememberCommitted(snapshot, dataVersion: version)
+            return true
         }
         _ = exec("ROLLBACK;")
+        clearCommittedSnapshots()
         return false
+    }
+
+    private func dataVersion() -> Int64? {
+        guard let statement = prepare("PRAGMA data_version;") else { return nil }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+        return sqlite3_column_int64(statement, 0)
+    }
+
+    private func clearCommittedSnapshots() {
+        committedSnapshots.removeAll()
+        snapshotOrder.removeAll()
+        committedDataVersion = nil
+    }
+
+    private func rememberCommitted(_ snapshot: AgentUsageSessionSnapshot, dataVersion: Int64?) {
+        committedDataVersion = dataVersion
+        snapshotOrder.removeAll { $0 == snapshot.id }
+        committedSnapshots.removeValue(forKey: snapshot.id)
+        guard snapshot.messages.count <= Self.maximumCachedMessages else { return }
+        committedSnapshots[snapshot.id] = snapshot
+        snapshotOrder.append(snapshot.id)
+        while snapshotOrder.count > Self.maximumCachedSessions {
+            committedSnapshots.removeValue(forKey: snapshotOrder.removeFirst())
+        }
     }
 
     /// 批量写入，一个事务包全部。回填几百个会话时逐条开事务会慢一个
@@ -213,6 +253,7 @@ nonisolated final class AgentUsageDatabase {
     func replaceAll(with entries: [(snapshot: AgentUsageSessionSnapshot, signature: AgentUsageSourceStamp)]) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        clearCommittedSnapshots()
         guard handle != nil else { return false }
         guard exec("BEGIN IMMEDIATE;") else { return false }
         guard exec("DELETE FROM message_tool_calls;"),
@@ -232,6 +273,7 @@ nonisolated final class AgentUsageDatabase {
     func delete(id: UUID) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        clearCommittedSnapshots()
         let key = id.uuidString
         // messages 靠外键级联，message_tool_calls 刻意没设外键（它按
         // (session_id, seq) 复合定位，加外键要多一个索引却换不来什么），
@@ -262,16 +304,25 @@ nonisolated final class AgentUsageDatabase {
 
     private func writeSession(
         _ snapshot: AgentUsageSessionSnapshot,
-        signature: AgentUsageSourceStamp
+        signature: AgentUsageSourceStamp,
+        previous: AgentUsageSessionSnapshot? = nil
     ) -> Bool {
         let key = snapshot.id.uuidString
         // 先清空这个会话的旧行。ON DELETE CASCADE 只管 messages，工具
         // 调用表刻意不设外键（它按 (session_id, seq) 复合定位，加外键
         // 要多一个索引却换不来什么），所以这里手动删。
-        guard executeBinding("DELETE FROM message_tool_calls WHERE session_id = ?;", [.text(key)]),
+        if previous == nil {
+            guard executeBinding("DELETE FROM message_tool_calls WHERE session_id = ?;", [.text(key)]),
               executeBinding("DELETE FROM messages WHERE session_id = ?;", [.text(key)]),
               executeBinding("DELETE FROM sessions WHERE id = ?;", [.text(key)]) else {
-            return false
+                return false
+            }
+        } else {
+            let tail: [Binding] = [.text(key), .integer(Int64(snapshot.messages.count))]
+            guard executeBinding("DELETE FROM message_tool_calls WHERE session_id = ? AND seq >= ?;", tail),
+                  executeBinding("DELETE FROM messages WHERE session_id = ? AND seq >= ?;", tail) else {
+                return false
+            }
         }
 
         let sessionExtras = SessionExtras(
@@ -301,12 +352,28 @@ nonisolated final class AgentUsageDatabase {
                 id, model_id, provider_id, provider_display_name, created_at, updated_at,
                 workspace_identifier, edited_file_count, artifact_count, is_managed_routing,
                 source_size, source_mtime, extras
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                model_id=excluded.model_id, provider_id=excluded.provider_id,
+                provider_display_name=excluded.provider_display_name,
+                created_at=excluded.created_at, updated_at=excluded.updated_at,
+                workspace_identifier=excluded.workspace_identifier,
+                edited_file_count=excluded.edited_file_count, artifact_count=excluded.artifact_count,
+                is_managed_routing=excluded.is_managed_routing,
+                source_size=excluded.source_size, source_mtime=excluded.source_mtime, extras=excluded.extras;
             """,
             sessionBindings
         ) else { return false }
 
         for (index, message) in snapshot.messages.enumerated() {
+            if let previous, index < previous.messages.count {
+                if previous.messages[index] == message { continue }
+                let row: [Binding] = [.text(key), .integer(Int64(index))]
+                guard executeBinding("DELETE FROM message_tool_calls WHERE session_id = ? AND seq = ?;", row),
+                      executeBinding("DELETE FROM messages WHERE session_id = ? AND seq = ?;", row) else {
+                    return false
+                }
+            }
             let extras = MessageExtras(
                 subagentProfileIDs: message.subagentProfileIDs,
                 subagentRuns: message.subagentRuns
