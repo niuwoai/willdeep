@@ -9,7 +9,8 @@
 
 - `AgentDefinitionRegistryTests`、`AgentWorkspacePresentationTests`、`AgentRSITests`：48/48 通过。
 - 覆盖候选 revision、原始指令、Worker 投影、只读工具边界及旧版本回退。
-- 本地浅色、深色组件截图已检查；实际安装版本的界面需另行验证，不能以组件截图代替。
+- 本地浅色、深色组件截图已检查；发布后另外在 `/Applications/WillDeep.app` 检查
+  智能体库和 RSI 实际界面，确认重复大标题消除、系统字体生效及 rc5 固定状态保留。
 
 ## 初次失败及处理
 
@@ -35,3 +36,19 @@
 真实模型工种靶场，不纳入已通过项。
 
 最终原始报告在 `build/fast-tests/`；脱敏机器摘要见 `tests.json`。
+
+## 发布及本机安装
+
+- 发布源码与 tag：`b19d95024c89f44bde06dafdca07adefa2a1918f` / `v1.422.0-rc9`。
+- App、DMG 均经 Apple 公证并 staple；本机严格签名和 Gatekeeper 验证通过。
+- 实际安装版本 `1.422.0-rc9 (931)`，可执行文件含 arm64 和 x86_64。
+- GitHub 公开预发布、版本化 DMG、latest 和 appcast 已更新；公开下载校验值与
+  GitHub 资产 digest 相同，见 `release.json`。Homebrew tap 已推送同一校验值。
+- Homebrew 显示 WillDeep 升级成功，但随后全局清理因另一个未信任 cask 返回非零；
+  没有扩大 tap 信任。安装结果通过版本、架构、签名、公证和实际启动单独核验。
+- 升级前 365 份会话已在本机私有目录备份；升级后 365 份全部可解析、无丢失。
+  364 份文件逐字节不变，另 1 份仅 `sidePanelState` 改变，消息内容不变。
+- 本机 `user/rsi-reviewer` rc5 保持启用且固定；原官方 rc1 停用、保留可回退。
+  不改变云端官方 head 或所有内置 reviewer 别名。
+
+本节为发布后的文档补充，版本 tag 保留指向实际构建源码，不移动已发布 tag。

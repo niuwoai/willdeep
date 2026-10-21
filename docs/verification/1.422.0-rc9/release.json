@@ -1,0 +1,23 @@
+{
+  "version": "1.422.0-rc9",
+  "build": 931,
+  "source_commit": "b19d95024c89f44bde06dafdca07adefa2a1918f",
+  "tag": "v1.422.0-rc9",
+  "architectures": ["arm64", "x86_64"],
+  "dmg_sha256": "d9facd9df533f0af834e739ae1c9765e60195f62a445ffd36c8890275f142dcb",
+  "dmg_bytes": 137203088,
+  "download_url": "https://img.niuwoai.com/mac-apps/WillDeep-1.422.0-rc9.dmg",
+  "release_url": "https://github.com/niuwoai/willdeep/releases/tag/v1.422.0-rc9",
+  "app_and_dmg_notarized": true,
+  "appcast_verified": true,
+  "homebrew_tap_updated": true,
+  "installed_bundle_verified": true,
+  "actual_settings_pages_checked": ["agent_library", "rsi_experiments"],
+  "session_files_before": 365,
+  "session_files_after": 365,
+  "session_files_missing": 0,
+  "session_json_valid": true,
+  "session_message_content_unchanged": true,
+  "reviewer_rc5_enabled_and_pinned": true,
+  "official_cloud_head_changed": false
+}
