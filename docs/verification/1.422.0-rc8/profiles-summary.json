@@ -1,0 +1,101 @@
+{
+  "query_time_utc": "2026-10-21T04:43:46Z",
+  "window_hours": 48,
+  "source": "some.im client_perf_reports; read-only query through QTerm MCP; sample download over the same authorized SSH connection",
+  "app_id": "willdeep",
+  "reports": 63,
+  "versions": {
+    "1.422.0-rc5": {
+      "reports": 18,
+      "peak_cpu_percent": 181.1
+    },
+    "1.422.0-rc7": {
+      "reports": 25,
+      "peak_cpu_percent": 279.6
+    },
+    "1.422.0-rc4": {
+      "reports": 14,
+      "peak_cpu_percent": 207.1
+    },
+    "1.421.0-rc2": {
+      "reports": 6,
+      "peak_cpu_percent": 197.5
+    }
+  },
+  "symbolicated_version": "1.422.0-rc7",
+  "symbolicated_reports": 25,
+  "architecture": "x86_64",
+  "matched_dsym_uuid": "4DF16326-6123-3906-B94F-9A0819D7A860",
+  "application_frames": {
+    "closure #1 in static AgentSessionStore.saveAsync(_:) (in WillDeep) (/<compiler-generated>:0)": {
+      "report_count": 8,
+      "max_inclusive_samples": 1580
+    },
+    "closure #1 in AgentContextUsageEstimateStore.schedule(appState:sessionID:immediate:) (in WillDeep) (AgentContextUsageControls.swift:41)": {
+      "report_count": 8,
+      "max_inclusive_samples": 201
+    },
+    "AppState.estimateAgentContextUsageSnapshot(for:) (in WillDeep) (AppStateAgentRequestEstimates.swift:385)": {
+      "report_count": 7,
+      "max_inclusive_samples": 177
+    },
+    "closure #2 in AppState.dispatchAgentMessage(for:text:images:textAttachments:attachedSkills:existingUserMessageID:source:) (in WillDeep) (AppStateAgentLoopDispatch.swift:386)": {
+      "report_count": 7,
+      "max_inclusive_samples": 124
+    },
+    "closure #1 in AppState.runAgentLoop(for:configuration:providerSlotClaimID:turnID:) (in WillDeep) (AppStateAgentExecutionEvidence.swift:9)": {
+      "report_count": 7,
+      "max_inclusive_samples": 124
+    },
+    "AppState.runAgentLoop(for:configuration:providerSlotClaimID:turnID:) (in WillDeep) (AppStateAgentExecutionEvidence.swift:4)": {
+      "report_count": 7,
+      "max_inclusive_samples": 124
+    },
+    "specialized static AgentSessionStore.writeUsageCatalogEntryBestEffort(for:sourceURL:) (in WillDeep) (AgentSessionStore.swift:1071)": {
+      "report_count": 6,
+      "max_inclusive_samples": 1296
+    },
+    "specialized static AgentSessionStore.writeUsageCatalogEntryBestEffort(_:in:) (in WillDeep) (AgentSessionStore.swift:1104)": {
+      "report_count": 6,
+      "max_inclusive_samples": 1261
+    },
+    "specialized static AgentSessionStore.writeUsageCatalogEntryBestEffort(for:sourceURL:) (in WillDeep) (/<compiler-generated>:0)": {
+      "report_count": 6,
+      "max_inclusive_samples": 405
+    },
+    "AgentUsageDatabase.upsert(_:signature:) (in WillDeep) (AgentUsageDatabase.swift:0)": {
+      "report_count": 6,
+      "max_inclusive_samples": 364
+    },
+    "protocol witness for Encodable.encode(to:) in conformance AgentUsageSessionSnapshot (in WillDeep) (/<compiler-generated>:0)": {
+      "report_count": 5,
+      "max_inclusive_samples": 674
+    },
+    "protocol witness for Encodable.encode(to:) in conformance AgentSessionStore.UsageCatalogEntry (in WillDeep) (/<compiler-generated>:0)": {
+      "report_count": 5,
+      "max_inclusive_samples": 674
+    },
+    "AgentSessionStore.UsageCatalogEntry.encode(to:) (in WillDeep) (/<compiler-generated>:0)": {
+      "report_count": 5,
+      "max_inclusive_samples": 674
+    },
+    "AgentUsageDatabase.writeSession(_:signature:) (in WillDeep) (AgentUsageDatabase.swift:346)": {
+      "report_count": 5,
+      "max_inclusive_samples": 185
+    },
+    "AgentSidebarHoverScope.body.getter (in WillDeep) (AgentSessionsSidebar.swift:304)": {
+      "report_count": 5,
+      "max_inclusive_samples": 79
+    },
+    "AppState.runAgentLoopBody(for:configuration:providerSlotClaimID:turnID:) (in WillDeep) (AppStateAgentLoop.swift:867)": {
+      "report_count": 5,
+      "max_inclusive_samples": 75
+    }
+  },
+  "limits": [
+    "Inclusive sample counts cannot be summed into CPU percentages.",
+    "Sampler wait frames are excluded from application hotspot claims.",
+    "Raw reports, installation identities, account fields and conversation data are not committed.",
+    "The benchmark measures usage database writes, not whole-application CPU reduction."
+  ]
+}

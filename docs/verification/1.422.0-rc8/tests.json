@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "status": "passed",
+  "source": "xcresult",
+  "xcresult": "build/fast-tests/XeditFastTests.xcresult",
+  "log": "build/fast-tests/xcodebuild.log",
+  "test_exit": 0,
+  "reasons": [],
+  "stats": {
+    "total": 5067,
+    "passed": 5066,
+    "failed": 0,
+    "skipped": 1,
+    "duration": 499.88
+  },
+  "log_stats": {
+    "total": 5067,
+    "passed": 5064,
+    "failed": 0,
+    "skipped": 3,
+    "duration": 466.275
+  },
+  "total_mismatch": false,
+  "failures": [],
+  "source_commit": "5d73a0a5",
+  "command": "ruby scripts/run_tests_fast.rb -parallel-testing-enabled NO",
+  "initial_parallel_attempt": {
+    "status": "failed and stopped",
+    "accepted_as_pass_evidence": false,
+    "note": "Multiple mock Provider first-contact timeouts and shared-state failures. Raw local logs preserved separately; serial run completed without product-code changes."
+  },
+  "guards": {
+    "version_consistency": "passed",
+    "core_boundary_files": 18,
+    "report_contract_checks": 75,
+    "diff_check": "passed"
+  },
+  "source_sha256": {
+    "Xedit/AgentUsageDatabase.swift": "1445916c2eb26033583930ad205220e14d5435923d460fdef5f964e7e1441012",
+    "XeditTests/AgentUsageSidecarTests.swift": "3280fc52e6abb22ba56ea4f5ad742ad29e9a3110ab31c2ff65583f6c7b83fcfc",
+    "Xedit.xcodeproj/project.pbxproj": "2df2e70a021ef5eb71de755376f594629f45aed1c7fe5cad94d57bee9d66c721"
+  }
+}
