@@ -38,29 +38,32 @@ struct AgentRSIExperimentsView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(String(localized: "RSI 实验", table: "AgentWorkspace")).font(.system(size: 28, weight: .bold))
-                    Text(String(localized: "改进一份候选，保留当前版本", table: "AgentWorkspace")).foregroundStyle(.secondary)
+                    if !embedded {
+                        Text(String(localized: "RSI 实验", table: "AgentWorkspace")).font(.title2.bold())
+                    }
+                    Text(String(localized: "改进一份候选，保留当前版本", table: "AgentWorkspace"))
+                        .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Label(owner == "local" ? String(localized: "本机模式", table: "AgentWorkspace") : String(localized: "some.im · 已连接", table: "AgentWorkspace"), systemImage: "checkmark.circle")
-                    .font(.system(size: 13)).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.secondary)
                 if !embedded { Button(String(localized: "完成", table: "AgentRegistry")) { dismiss() } }
             }
             steps
             DisclosureGroup {
                 Text(String(localized: "候选独立保存，不改变已安装或固定版本。当前仅运行免费离线验收，不能据此判断模型质量提升。", table: "AgentRSI"))
-                    .font(.system(size: 14)).foregroundStyle(.secondary)
+                    .font(.body).foregroundStyle(.secondary)
             } label: {
                 Label(String(localized: "免费离线验证", table: "AgentWorkspace"), systemImage: "checkmark.shield.fill")
-                    .font(.system(size: 14, weight: .medium)).foregroundStyle(.blue)
+                    .font(.body.weight(.medium)).foregroundStyle(.blue)
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 18) {
-                    Text(String(localized: "实验备注（仅本机）", table: "AgentWorkspace")).font(.system(size: 15, weight: .semibold))
+                    Text(String(localized: "实验备注（仅本机）", table: "AgentWorkspace")).font(.body.weight(.semibold))
                     TextField(String(localized: "实验备注（仅本机）", table: "AgentWorkspace"), text: $remark)
                         .textFieldStyle(.roundedBorder).disabled(!AgentWorkspacePresentation.eligible(baseline))
                 }
-                Text(String(localized: "保存在本机，不参与同步和评分", table: "AgentWorkspace")).font(.system(size: 13)).foregroundStyle(.secondary)
+                Text(String(localized: "保存在本机，不参与同步和评分", table: "AgentWorkspace")).font(.caption).foregroundStyle(.secondary)
             }
             HStack(alignment: .top, spacing: 18) {
                 baselineCard
@@ -76,15 +79,15 @@ struct AgentRSIExperimentsView: View {
                             Spacer()
                             Text(item["candidate_package"]["definition"]["version"].text ?? "").foregroundStyle(.secondary)
                             Button(String(localized: "编辑候选", table: "AgentWorkspace")) { loadCandidate(item) }
-                        }.padding(12).background(.white, in: RoundedRectangle(cornerRadius: 9))
+                        }.padding(12).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
                     }
                 }
             }
             if let result { resultCard(result) }
             recentExperiments
-            if !message.isEmpty { Text(message).font(.system(size: 14)).textSelection(.enabled) }
+            if !message.isEmpty { Text(message).font(.body).textSelection(.enabled) }
             if busy { ProgressView().controlSize(.small) }
-        }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+        }.padding(embedded ? 0 : 20).frame(maxWidth: .infinity, alignment: .leading)
       }.frame(minWidth: 680, minHeight: 540).disabled(busy)
             .onAppear { resetBaseline(); reload() }
             .onChange(of: requestedBaseline?.sha256) { _ in
@@ -117,9 +120,9 @@ struct AgentRSIExperimentsView: View {
     }
     private func step(_ number: String, _ title: String, complete: Bool) -> some View {
         HStack(spacing: 9) {
-            Text(number).font(.system(size: 14, weight: .semibold)).frame(width: 28, height: 28)
+            Text(number).font(.body.weight(.semibold)).frame(width: 28, height: 28)
                 .background(complete ? Color.blue : Color.gray.opacity(0.13), in: Circle()).foregroundStyle(complete ? Color.white : Color.secondary)
-            Text(title).font(.system(size: 14, weight: .medium))
+            Text(title).font(.body.weight(.medium))
             Spacer(minLength: 8)
         }
     }
@@ -127,9 +130,9 @@ struct AgentRSIExperimentsView: View {
         AgentWorkspaceCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label(String(localized: "当前基线", table: "AgentWorkspace"), systemImage: "doc.text").font(.system(size: 18, weight: .semibold))
+                    Label(String(localized: "当前基线", table: "AgentWorkspace"), systemImage: "doc.text").font(.headline)
                     Spacer()
-                    if let baseline { Text(baseline.definition.version).font(.system(size: 13)).foregroundStyle(.secondary) }
+                    if let baseline { Text(baseline.definition.version).font(.caption).foregroundStyle(.secondary) }
                 }.frame(height: 30)
                 Menu {
                     ForEach(available) { installation in
@@ -146,9 +149,9 @@ struct AgentRSIExperimentsView: View {
                     }.padding(10).background(Color.gray.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
                 }.menuStyle(.borderlessButton)
                 if let baseline {
-                    Label(String(localized: "固定版本，实验不会修改", table: "AgentWorkspace"), systemImage: "lock").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Label(String(localized: "固定版本，实验不会修改", table: "AgentWorkspace"), systemImage: "lock").font(.caption).foregroundStyle(.secondary)
                     ScrollView {
-                        Text(baseline.definition.instructions).font(.system(size: 14)).textSelection(.enabled)
+                        Text(baseline.definition.instructions).font(.body).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .topLeading).padding(12)
                     }.frame(height: 205).background(Color.gray.opacity(0.055), in: RoundedRectangle(cornerRadius: 7))
                         .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.gray.opacity(0.12)))
@@ -156,7 +159,7 @@ struct AgentRSIExperimentsView: View {
                         Text(baseline.definition.definition_id + "\n" + baseline.sha256).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                     }
                     if !AgentWorkspacePresentation.eligible(baseline) {
-                        Text(String(localized: "请先选择用户定义。官方定义须先派生为用户副本再做实验。", table: "AgentRSI")).font(.system(size: 14)).foregroundStyle(.secondary)
+                        Text(String(localized: "请先选择用户定义。官方定义须先派生为用户副本再做实验。", table: "AgentRSI")).font(.body).foregroundStyle(.secondary)
                         Button(String(localized: "派生副本", table: "AgentRegistry")) { forkBaseline() }
                     }
                 } else {
@@ -170,13 +173,13 @@ struct AgentRSIExperimentsView: View {
         AgentWorkspaceCard(highlighted: true) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label(String(localized: "候选版本", table: "AgentWorkspace"), systemImage: "pencil.and.outline").font(.system(size: 18, weight: .semibold)).foregroundStyle(.blue)
+                    Label(String(localized: "候选版本", table: "AgentWorkspace"), systemImage: "pencil.and.outline").font(.headline).foregroundStyle(.blue)
                     Spacer()
                     TextField(String(localized: "候选版本号", table: "AgentRSI"), text: $version).frame(width: 130)
                 }.frame(height: 30)
-                Text(baseline.map(packageName) ?? String(localized: "选择智能体基线", table: "AgentWorkspace")).font(.system(size: 15, weight: .semibold))
-                Text(String(localized: "候选指令", table: "AgentRSI")).font(.system(size: 14, weight: .semibold))
-                TextEditor(text: $instructions).font(.system(size: 14)).frame(height: 205)
+                Text(baseline.map(packageName) ?? String(localized: "选择智能体基线", table: "AgentWorkspace")).font(.body.weight(.semibold))
+                Text(String(localized: "候选指令", table: "AgentRSI")).font(.body.weight(.semibold))
+                TextEditor(text: $instructions).font(.body).frame(height: 205)
                     .padding(8).overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.gray.opacity(0.2)))
                 if let baseline, AgentWorkspacePresentation.eligible(baseline) {
                     HStack {
@@ -188,7 +191,7 @@ struct AgentRSIExperimentsView: View {
                         }
                     }
                 }
-                Label(String(localized: "仅保存候选，不替换或自动晋升基线", table: "AgentWorkspace"), systemImage: "arrow.triangle.branch").font(.system(size: 13)).foregroundStyle(.secondary)
+                Label(String(localized: "仅保存候选，不替换或自动晋升基线", table: "AgentWorkspace"), systemImage: "arrow.triangle.branch").font(.caption).foregroundStyle(.secondary)
             }.textFieldStyle(.roundedBorder).disabled(!AgentWorkspacePresentation.eligible(baseline))
         }
     }
@@ -215,7 +218,7 @@ struct AgentRSIExperimentsView: View {
     }
     private var recentExperiments: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "最近实验", table: "AgentWorkspace")).font(.system(size: 20, weight: .semibold))
+            Text(String(localized: "最近实验", table: "AgentWorkspace")).font(.headline)
             if experiments.isEmpty {
                 AgentWorkspaceCard {
                     Label(String(localized: "尚无实验记录，保存候选后可运行首次免费验证。", table: "AgentWorkspace"), systemImage: "flask").foregroundStyle(.secondary)
@@ -225,19 +228,19 @@ struct AgentRSIExperimentsView: View {
                 DisclosureGroup {
                     Text(experiment["experiment_id"].text ?? "").font(.caption).textSelection(.enabled)
                     ForEach(history.filter { $0["experiment_id"] == experiment["experiment_id"] }, id: \.canonical) { item in
-                        Text((item["task_id"].text ?? "") + " · " + armTitle(item["arm"].text) + " · " + evidenceStatusTitle(item["status"].text)).font(.system(size: 13)).textSelection(.enabled)
+                        Text((item["task_id"].text ?? "") + " · " + armTitle(item["arm"].text) + " · " + evidenceStatusTitle(item["status"].text)).font(.caption).textSelection(.enabled)
                     }
                     Text(experiment.canonical).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(experimentLabel(experiment)).font(.system(size: 15, weight: .semibold))
-                            Text(String(localized: "离线执行记录，不代表模型质量结论", table: "AgentWorkspace")).font(.system(size: 13)).foregroundStyle(.secondary)
+                            Text(experimentLabel(experiment)).font(.body.weight(.semibold))
+                            Text(String(localized: "离线执行记录，不代表模型质量结论", table: "AgentWorkspace")).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        if let date = AgentWorkspacePresentation.latestEvidenceDate(experiment, evidence: history) { Text(date).font(.system(size: 13)).foregroundStyle(.secondary) }
+                        if let date = AgentWorkspacePresentation.latestEvidenceDate(experiment, evidence: history) { Text(date).font(.caption).foregroundStyle(.secondary) }
                     }
-                }.padding(16).background(.white, in: RoundedRectangle(cornerRadius: 10))
+                }.padding(16).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }

@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "en",
   "strings": {
+  "专业指令在基础职责、宿主安全规则及锁定技能之上生效，并非完整系统提示词。": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Specialized instructions supplement the base role, host safety rules, and locked skills; they are not the complete system prompt."
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "专业指令在基础职责、宿主安全规则及锁定技能之上生效，并非完整系统提示词。"
+        }
+      }
+    }
+  },
+  "候选版本：可用于试用，不代表已通过质量晋升。": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Release candidate: available for trial; quality promotion has not been established."
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "候选版本：可用于试用，不代表已通过质量晋升。"
+        }
+      }
+    }
+  },
   "通过": {
     "localizations": {
       "en": {

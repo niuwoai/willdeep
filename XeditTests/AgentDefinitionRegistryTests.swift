@@ -6,6 +6,33 @@ import Testing
 @testable import WillDeep
 
 @Suite(.serialized) @MainActor struct AgentDefinitionRegistryTests {
+    private func evolvedReviewer() throws -> AgentPackageV1 {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        return try AgentPackageV1.decode(Data(contentsOf: root.appendingPathComponent("docs/agents/code-reviewer/1.0.0-rc5.json")))
+    }
+    @Test func evolvedReviewerProjectsExactRevisionAndPreservesReadOnlyTools() throws {
+        let package = try evolvedReviewer()
+        #expect(package.sha256 == "048fc6e294dd178b316f2bdf55800984dfed50bdec069c44f0a31232e8ec08eb")
+        #expect(package.definition.version == "1.0.0-rc5")
+        #expect(package.definition.instructions.utf8.count == 1453)
+        let profile = try AgentDefinitionLibrary.project(package, binding: .inheritsParent)
+        #expect(profile.registrySnapshot?.revision == package.sha256)
+        let worker = try #require(profile.asSubagentProfile())
+        #expect(worker.permissionRoleID == "reviewer")
+        let tools = worker.effectiveToolNames(writeAccessGranted: true)
+        #expect(!tools.contains("run_command") && !tools.contains("write_file") && !tools.contains("apply_patch"))
+        #expect(worker.capabilityPromptSection.contains(package.definition.instructions))
+    }
+    @Test func selectingEvolvedReviewerRetainsPreviousRevisionForRollback() throws {
+        let (library, root, defaults, suite) = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
+        let previous = try AgentPackageV1.unsigned(definition(id: "user/rsi-reviewer"))
+        _ = try library.install(previous, source: .local)
+        let evolved = try library.install(evolvedReviewer(), source: .local)
+        #expect(evolved.revisions.contains(previous.sha256))
+        try library.select(previous.sha256, installation: evolved)
+        #expect(try library.state().installations.first?.selected == previous.sha256)
+    }
     func definition(id: String = "user/reviewer") -> AgentDefinitionV1 {
         AgentDefinitionV1(schema: AgentDefinitionV1.schemaID, definition_id: id, version: "1.0.0-rc1",
             name: ["en": "Reviewer", "zh-Hans": "审查员"], purpose: "Review defects.", base_role: "reviewer",

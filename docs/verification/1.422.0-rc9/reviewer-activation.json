@@ -1,0 +1,19 @@
+{
+  "verified_at": "2026-10-21T16:40:57+08:00",
+  "definition_id": "user/rsi-reviewer",
+  "version": "1.0.0-rc5",
+  "revision": "048fc6e294dd178b316f2bdf55800984dfed50bdec069c44f0a31232e8ec08eb",
+  "enabled": true,
+  "pinned": true,
+  "source": "local",
+  "previous_official_version": "1.0.0-rc1",
+  "previous_enabled": false,
+  "previous_retained_for_rollback": true,
+  "instruction_utf8_bytes": 1453,
+  "tools": [
+    "workspace.read",
+    "repository.inspect"
+  ],
+  "official_cloud_head_changed": false,
+  "quality_promotion_claimed": false
+}

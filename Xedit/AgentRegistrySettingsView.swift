@@ -40,8 +40,11 @@ struct AgentRegistrySettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(String(localized: "智能体库", table: "AgentWorkspace")).font(.system(size: 28, weight: .bold))
-                    Text(String(localized: "管理定义、官方版本和跨端同步", table: "AgentWorkspace")).foregroundStyle(.secondary)
+                    if !embedded {
+                        Text(String(localized: "智能体库", table: "AgentWorkspace")).font(.title2.bold())
+                    }
+                    Text(String(localized: "管理定义、官方版本和跨端同步", table: "AgentWorkspace"))
+                        .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
                 connectionBadge
@@ -62,7 +65,7 @@ struct AgentRegistrySettingsView: View {
             }
             if !message.isEmpty { Text(message).font(.caption).textSelection(.enabled) }
             if busy { ProgressView().controlSize(.small) }
-        }.padding(28).frame(minWidth: 850, minHeight: 600)
+        }.padding(embedded ? 0 : 20).frame(minWidth: embedded ? nil : 850, minHeight: embedded ? nil : 600)
             .onAppear(perform: reload)
             .onChange(of: draft) { _ in
                 if draft != savedDraft { AgentWorkspaceNavigation.shared.dirtySections.insert(.library) }
@@ -95,11 +98,11 @@ struct AgentRegistrySettingsView: View {
                                 HStack(alignment: .top, spacing: 10) {
                                     Image(systemName: installation.source == .official ? "checkmark.seal" : "person.crop.square").foregroundStyle(.blue).frame(width: 22)
                                     VStack(alignment: .leading, spacing: 5) {
-                                        Text(displayName(installation)).font(.system(size: 15, weight: .semibold)).lineLimit(2)
+                                        Text(displayName(installation)).font(.body.weight(.semibold)).lineLimit(2)
                                         HStack {
                                             Text(sourceTitle(installation.source.rawValue))
                                             Text((try? library.package(revision: installation.selected, account: installation.account).definition.version) ?? "")
-                                        }.font(.system(size: 13)).foregroundStyle(.secondary)
+                                        }.font(.caption).foregroundStyle(.secondary)
                                         if installation.conflict != nil { Text(String(localized: "同步冲突", table: "AgentRegistry")).foregroundStyle(.orange) }
                                         if installation.deleted { Text(String(localized: "已删除", table: "AgentRegistry")).foregroundStyle(.secondary) }
                                     }
@@ -117,14 +120,14 @@ struct AgentRegistrySettingsView: View {
                       }
                     }
                 }.padding(12).frame(minWidth: 250, idealWidth: 285, maxWidth: 320)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
     }
     private var installationDetail: some View {
                 ScrollView {
                   VStack(alignment: .leading, spacing: 16) {
                     if let selected {
                         HStack {
-                            Text(displayName(selected)).font(.system(size: 22, weight: .semibold))
+                            Text(displayName(selected)).font(.title3.weight(.semibold))
                             Spacer()
                             Button(String(localized: "创建实验", table: "AgentWorkspace")) {
                                 onExperiment?(try? library.package(revision: selected.selected, account: selected.account))
@@ -132,7 +135,7 @@ struct AgentRegistrySettingsView: View {
                         }
                     }
                     if !draft.isEmpty {
-                        definitionForm.disabled(selected?.source == .official)
+                        definitionForm
                         if selected?.source == .official {
                             Label(String(localized: "官方定义只读，请派生副本后编辑或实验", table: "AgentWorkspace"), systemImage: "lock").foregroundStyle(.secondary)
                         }
@@ -159,7 +162,7 @@ struct AgentRegistrySettingsView: View {
                             .disabled(selected?.source == .official)
                     }
                   }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                }.background(.white, in: RoundedRectangle(cornerRadius: 12)).frame(minWidth: 480)
+                }.background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12)).frame(minWidth: 480)
     }
     private var filteredInstallations: [AgentDefinitionLibrary.Installation] {
         installations.filter { AgentWorkspacePresentation.matchesSource($0.source.rawValue, filter: sourceFilter)
@@ -190,10 +193,11 @@ struct AgentRegistrySettingsView: View {
     private var connectionBadge: some View {
         Label(library.activeAccount == nil ? String(localized: "本机模式", table: "AgentWorkspace") : String(localized: "some.im · 已连接", table: "AgentWorkspace"),
               systemImage: library.activeAccount == nil ? "desktopcomputer" : "checkmark.circle.fill")
-            .font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+            .font(.caption.weight(.medium)).foregroundStyle(.secondary)
     }
     private var definitionForm: some View {
         VStack(alignment: .leading, spacing: 10) {
+          Group {
             LabeledContent(String(localized: "智能体标识", table: "AgentRegistry")) {
                 TextField(String(localized: "智能体标识", table: "AgentRegistry"), text: definitionBinding(\.definition_id)).labelsHidden().disabled(selected != nil)
             }
@@ -206,7 +210,7 @@ struct AgentRegistrySettingsView: View {
                 TextField(String(localized: "版本号", table: "AgentRegistry"), text: definitionBinding(\.version)).labelsHidden()
             }
             LabeledContent(String(localized: "适用任务", table: "AgentRegistry")) {
-                TextField(String(localized: "适用任务", table: "AgentRegistry"), text: definitionBinding(\.purpose)).labelsHidden()
+                TextField(String(localized: "适用任务", table: "AgentRegistry"), text: definitionBinding(\.purpose), axis: .vertical).labelsHidden()
             }
             Picker(String(localized: "基础职责", table: "AgentRegistry"), selection: definitionBinding(\.base_role)) {
                 Text(String(localized: "通用调查", table: "AgentRegistry")).tag("generalist")
@@ -221,8 +225,21 @@ struct AgentRegistrySettingsView: View {
                 capabilityToggle("process.verify", title: String(localized: "命令验证", table: "AgentRegistry"))
                 capabilityToggle("repository.inspect", title: String(localized: "检查仓库", table: "AgentRegistry"))
             }
+          }.disabled(selected?.source == .official)
+            if let definition = decodedDraft, definition.version.contains("-rc") {
+                Label(String(localized: "候选版本：可用于试用，不代表已通过质量晋升。", table: "AgentWorkspace"), systemImage: "flask")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Text(String(localized: "专业指令", table: "AgentRegistry")).font(.headline)
-            TextEditor(text: definitionBinding(\.instructions)).frame(minHeight: 180)
+            if selected?.source == .official {
+                Text(decodedDraft?.instructions ?? "")
+                    .font(.body).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                TextEditor(text: definitionBinding(\.instructions)).font(.body).frame(minHeight: 180)
+            }
+            Text(String(localized: "专业指令在基础职责、宿主安全规则及锁定技能之上生效，并非完整系统提示词。", table: "AgentWorkspace"))
+                .font(.caption).foregroundStyle(.secondary)
             Text(String(localized: "权限由基础职责与本次授权共同限制；新增技能可通过高级编辑或导入版本包。", table: "AgentRegistry"))
                 .font(.caption).foregroundStyle(.secondary)
         }.textFieldStyle(.roundedBorder)

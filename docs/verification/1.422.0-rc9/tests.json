@@ -1,0 +1,10 @@
+{
+  "version": "1.422.0-rc9",
+  "build": 931,
+  "targeted": {"passed": 48, "failed": 0},
+  "full_final": {"total": 5069, "passed": 5068, "failed": 0, "skipped": 1, "exit_code": 0},
+  "skipped_scope": "Unapproved real-provider skill worker live-fire range",
+  "source_and_assertions_unchanged_during_retries": true,
+  "paid_model_evaluation_started": false,
+  "database_initial_failure_root_cause_confirmed": false
+}

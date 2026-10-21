@@ -152,8 +152,9 @@ struct AgentWorkspaceSettingsPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.975, green: 0.982, blue: 0.992))
-        .environment(\.colorScheme, .light)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .font(.body)
+        .controlSize(.regular)
     }
 }
 
@@ -186,7 +187,7 @@ struct AgentWorkspaceCard<Content: View>: View {
     }
     var body: some View {
         content.padding(16).frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(.white, in: RoundedRectangle(cornerRadius: 12))
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(highlighted ? Color.blue : Color.gray.opacity(0.18), lineWidth: 1))
     }
 }
