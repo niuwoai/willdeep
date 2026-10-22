@@ -79,6 +79,45 @@ struct AgentProviderLibraryTests {
     }
 
     @Test
+    func discoveredMagpieGatewayBuildsSelectableProviderEntry() {
+        let gateway = AgentDiscoveredLocalModelGateway(
+            id: "magpie",
+            displayName: "Magpie",
+            baseURL: "http://127.0.0.1:3425/v1",
+            apiKey: "magpie-willdeep",
+            modelIDs: ["openai/gpt-5", "anthropic/claude-sonnet"],
+            isMagpie: true
+        )
+
+        let entry = gateway.providerEntry()
+
+        #expect(entry?.providerID == AgentProviderPreset.customID)
+        #expect(entry?.apiKey == "magpie-willdeep")
+        #expect(entry?.flashPrimary == "openai/gpt-5")
+        #expect(entry?.flashAlternates == ["anthropic/claude-sonnet"])
+        #expect(entry?.customKindOverride == .openAIChat)
+    }
+
+    @Test
+    func discoveredOllamaGatewayKeepsLocalProviderCredentialFree() {
+        let gateway = AgentDiscoveredLocalModelGateway(
+            id: AgentProviderPreset.ollamaID,
+            displayName: "Ollama",
+            baseURL: "http://127.0.0.1:11434/v1",
+            apiKey: "local-gateway",
+            modelIDs: ["qwen3:8b"],
+            isMagpie: false
+        )
+
+        let entry = gateway.providerEntry()
+
+        #expect(entry?.providerID == AgentProviderPreset.ollamaID)
+        #expect(entry?.apiKey.isEmpty == true)
+        #expect(entry?.customKindOverride == nil)
+        #expect(entry?.flashPrimary == "qwen3:8b")
+    }
+
+    @Test
     func providerSelectionSuggestsCanonicalEditableDisplayName() {
         #expect(AgentProviderPreset.suggestedDisplayName(providerID: "deepseek") == "DeepSeek")
         #expect(AgentProviderPreset.suggestedDisplayName(providerID: " custom ") == "Custom")

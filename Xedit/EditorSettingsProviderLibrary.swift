@@ -219,25 +219,15 @@ struct AgentProviderLibrarySection: View {
     }
 
     private func connect(to gateway: AgentDiscoveredLocalModelGateway) {
-        guard let firstModel = gateway.modelIDs.first else { return }
-        let existing = appState.agentProviderLibrary.entries.first {
+        var existing = appState.agentProviderLibrary.entries.first {
             $0.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 .caseInsensitiveCompare(gateway.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) == .orderedSame
         }
-        let remainingModels = Array(gateway.modelIDs.dropFirst())
-        let isOllama = gateway.id == AgentProviderPreset.ollamaID
-        let entry = AgentProviderEntry(
-            id: existing?.id ?? UUID(),
-            providerID: isOllama ? AgentProviderPreset.ollamaID : AgentProviderPreset.customID,
-            displayName: gateway.displayName,
-            baseURL: gateway.baseURL,
-            apiKey: isOllama ? "" : gateway.apiKey,
-            flashPrimary: firstModel,
-            flashAlternates: remainingModels,
-            proPrimary: remainingModels.first ?? firstModel,
-            proAlternates: Array(remainingModels.dropFirst()),
-            customKindOverride: isOllama ? nil : .openAIChat
-        )
+        if let existingID = existing?.id {
+            appState.materializeProviderLibraryEntryAPIKey(id: existingID)
+            existing = appState.agentProviderLibrary.entries.first(where: { $0.id == existingID })
+        }
+        guard let entry = gateway.providerEntry(existing: existing) else { return }
         appState.upsertProviderLibraryEntry(entry)
         appState.setActiveProviderLibraryEntry(id: entry.id)
         selectedEntryID = entry.id

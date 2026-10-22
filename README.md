@@ -12,7 +12,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.423.0--rc2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.423.0--rc3-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 **[下载 WillDeep](https://willdeep.com)** · [阅读使用指南](docs/willdeep-tutorial/README.md) · [从源码构建](docs/DEVELOPMENT.md)
@@ -22,6 +22,22 @@
 </div>
 
 ---
+
+## 快速导航
+
+[产品能力](#为真实任务设计) · [适用场景](#适合这些工作) · [快速开始](#开始你的第一个任务) · [隐私与许可](#开放核心透明边界) · [English](#willdeep) · [日本語](#willdeep-日本語版)
+
+## WillDeep 能做什么
+
+| 工作环节 | 主要能力 |
+| --- | --- |
+| 规划与持续执行 | 计划、Goal 模式、上下文管理、预算和任务状态 |
+| 协作与工具 | Worker、Codex CLI、Claude Code、Skills、MCP 与插件 |
+| 工作区 | 本地项目、SSH 和自建 `willdeep-agent` 远端环境 |
+| 模型 | some.im、自定义 API、本地模型，并自动发现可用的 Magpie、Ollama 等本机网关 |
+| 审查与控制 | 审批模式、工作区边界、沙箱、Diff、测试输出和执行记录 |
+
+打开模型选择器时，WillDeep 会探测本机兼容网关并列出可用模型；探测不会改变当前会话的服务商，只有选择模型后才会切换。具体协议兼容性取决于网关和模型。
 
 ## 一个目标，一个完整的工作现场
 
@@ -57,7 +73,7 @@ WillDeep 也可连接 Codex CLI、Claude Code 等外部执行器，让已有工�
 
 ### 模型与扩展，由你选择
 
-使用 some.im 托管服务，或配置自己的 API Key、自定义 Provider 与本地模型。通过 Skills、MCP、工作流和插件，将现有工具与团队实践接入任务流程。
+使用 some.im 托管服务，或配置自己的 API Key、自定义 Provider 与本地模型。模型选择器会自动发现 Magpie、Ollama 等本机兼容网关，并显示其可用模型；只有选择模型后才会切换当前会话。通过 Skills、MCP、工作流和插件，将现有工具与团队实践接入任务流程。
 
 定时任务可承接重复工作；媒体工具与插件则把工作台延伸到代码之外。具体能力取决于所选模型、已安装扩展及运行环境。
 
@@ -90,7 +106,7 @@ WillDeep 也可连接 Codex CLI、Claude Code 等外部执行器，让已有工�
 
 [快速开始](docs/willdeep-tutorial/01-quick-start.md) · [完整图文教程](docs/willdeep-tutorial/README.md) · [构建与测试](docs/DEVELOPMENT.md)
 
-## 开放核心，透明边界
+## 开放核心、透明边界
 
 WillDeep 的核心代码按 [Apache License 2.0](LICENSE) 开源。你可以阅读实现、从源码构建，并根据许可证使用和修改代码；商业产品与服务边界见 [Open Core 说明](OPEN_CORE.md)。
 
@@ -130,6 +146,7 @@ WillDeep organizes conversations, workspaces, terminals, file changes, and execu
 - **Multi-agent collaboration:** Delegate research, implementation, verification, and review to Workers. Connect external executors such as Codex CLI and Claude Code.
 - **Local and remote workspaces:** Work with local projects, SSH environments, or a self-hosted `willdeep-agent` daemon, with terminals and results visible on your Mac.
 - **Model and tool choice:** Use some.im managed services, your own API keys, custom providers, or local models. Extend workflows through Skills, MCP, plugins, and scheduled tasks.
+- **Local gateways:** The model picker discovers compatible local gateways such as Magpie and Ollama and lists their available models. Discovery does not switch the current session; selecting a model does.
 - **Controlled execution:** Configure approval modes, workspace boundaries, and sandbox permissions. Inspect diffs, test output, artifacts, and execution records.
 
 Recovery support varies by task and executor. These controls reduce risk; they do not guarantee lossless recovery or risk-free execution.
@@ -178,6 +195,7 @@ WillDeep は、会話、ワークスペース、ターミナル、ファイル�
 - **複数 Agent の連携**：調査、実装、検証、レビューを Worker に委任できます。Codex CLI や Claude Code などの外部実行ツールにも対応します。
 - **ローカルとリモート**：ローカルのプロジェクト、SSH 環境、自分で運用する `willdeep-agent` daemon を接続し、Mac 上で実行状況と結果を確認できます。
 - **モデルと拡張の選択**：some.im のマネージドサービス、自分の API キー、カスタム Provider、ローカルモデルを選択できます。Skills、MCP、プラグイン、ワークフロー、定期実行で用途を広げられます。
+- **ローカルゲートウェイ**：モデル選択画面で Magpie、Ollama などの互換ゲートウェイを自動検出し、利用可能なモデルを表示します。検出だけでは現在の会話の接続先は変わらず、モデルを選択すると切り替わります。
 - **実行範囲の管理**：承認モード、ワークスペース境界、サンドボックス権限を設定し、Diff、テスト出力、成果物、実行記録を確認できます。
 
 復旧への対応はタスクや実行ツールによって異なります。これらの仕組みはリスクを減らすためのもので、完全な復旧や無リスクの実行を保証するものではありません。
