@@ -673,6 +673,19 @@ extension L10n {
             static let defaultTierLabel = String(localized: "settings.provider.default-tier", defaultValue: "Default tier")
             static let fetchModels = String(localized: "settings.provider.fetch-models", defaultValue: "Fetch Models")
             static let fetchingModels = String(localized: "settings.provider.fetching-models", defaultValue: "Fetching…")
+            static let localGateways = String(localized: "settings.provider.local-gateways", defaultValue: "Local model gateways")
+            static let findLocalGateways = String(localized: "settings.provider.find-local-gateways", defaultValue: "Scan local gateways")
+            static let searchingLocalGateways = String(localized: "settings.provider.searching-local-gateways", defaultValue: "Searching this Mac for model gateways…")
+            static let noLocalGateways = String(localized: "settings.provider.no-local-gateways", defaultValue: "No supported local gateways found.")
+            static let connectLocalGateway = String(localized: "settings.provider.connect-local-gateway", defaultValue: "Connect")
+            static func magpieWillDeepIdentity(_ version: String) -> String {
+                let template = String(localized: "settings.provider.magpie-willdeep-identity", defaultValue: "Usage is labeled WillDeep; requests include version %@.")
+                return String(format: template, version)
+            }
+            static func connectedLocalGateway(_ name: String) -> String {
+                let template = String(localized: "settings.provider.connected-local-gateway", defaultValue: "Connected to %@ and made it active.")
+                return String(format: template, name)
+            }
             static func modelListInvalidFormat(_ issue: String, _ actual: String, _ expected: String) -> String {
                 let template = String(
                     localized: "settings.provider.model-list-invalid-format",

@@ -28,7 +28,8 @@ import Testing
     }
     @Test func realWorkerNonStreamingBrokerPathUsesToolsAndObservedUsageWithoutNetwork() async throws {
         ApprovedBrokerFixture.configure(mode: "good")
-        let root = repository.appendingPathComponent("build/rsi-approved-free-tests/" + UUID().uuidString.lowercased())
+        let root = URL(fileURLWithPath: "/private/tmp/willdeep-rsi-approved-free-tests-" + UUID().uuidString.lowercased())
+        defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let shared = URL(fileURLWithPath: "/private/tmp/willdeep-agent-registry/bench/agent-rsi/reviewer-original-24-v1/suite.json")
         // Host-only corpus remains outside the Worker's randomized workspace.
@@ -68,6 +69,7 @@ import Testing
     @Test func fourToolRoundsAreBudgetExhaustedWithoutAFifthRequest() async throws {
         ApprovedBrokerFixture.configure(mode: "max-rounds")
         let input = try syntheticTrialInput()
+        defer { removeSyntheticTrialFiles(for: input) }
         let transport = URLSessionConfiguration.ephemeral; transport.protocolClasses = [ApprovedBrokerFixture.self]
         let session = URLSession(configuration: transport); defer { session.invalidateAndCancel() }
         let result = try await AgentRSIApprovedTrial.run(input, session: session)
@@ -84,6 +86,7 @@ import Testing
     @Test func missingUsageRemainsInfrastructureFailureInsteadOfBudgetExhaustion() async throws {
         ApprovedBrokerFixture.configure(mode: "missing-usage")
         let input = try syntheticTrialInput()
+        defer { removeSyntheticTrialFiles(for: input) }
         let transport = URLSessionConfiguration.ephemeral; transport.protocolClasses = [ApprovedBrokerFixture.self]
         let session = URLSession(configuration: transport); defer { session.invalidateAndCancel() }
         let result = try await AgentRSIApprovedTrial.run(input, session: session)
@@ -94,6 +97,7 @@ import Testing
     @Test func finalResponseOnFourthRoundIsNotBudgetExhausted() async throws {
         ApprovedBrokerFixture.configure(mode: "final-on-four")
         let input = try syntheticTrialInput()
+        defer { removeSyntheticTrialFiles(for: input) }
         let transport = URLSessionConfiguration.ephemeral; transport.protocolClasses = [ApprovedBrokerFixture.self]
         let session = URLSession(configuration: transport); defer { session.invalidateAndCancel() }
         let result = try await AgentRSIApprovedTrial.run(input, session: session)
@@ -102,7 +106,7 @@ import Testing
         #expect(result["raw_model_content"].text?.contains("has_defect") == true)
     }
     private func syntheticTrialInput() throws -> AgentRSIApprovedTrial.Input {
-        let root = repository.appendingPathComponent("build/rsi-approved-free-tests/" + UUID().uuidString.lowercased())
+        let root = URL(fileURLWithPath: "/private/tmp/willdeep-rsi-approved-free-tests-" + UUID().uuidString.lowercased())
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let shared = URL(fileURLWithPath: "/private/tmp/willdeep-agent-registry/bench/agent-rsi/reviewer-original-24-v1/suite.json")
         let golden = try AgentRSIOfflineRunner.golden()["candidate"]
@@ -117,6 +121,9 @@ import Testing
             "suite": .string(shared.path), "suite_sha256": .string(AgentRSIApprovedTrial.suiteSHA256), "task_id": suite["tasks"].elements[0]["task_id"],
             "broker_origin": .string("http://127.0.0.1:1"), "capability": .string("synthetic-capability"),
             "output_directory": .string(root.appendingPathComponent("trial").path)]).bytes)
+    }
+    private func removeSyntheticTrialFiles(for input: AgentRSIApprovedTrial.Input) {
+        try? FileManager.default.removeItem(at: input.directory.deletingLastPathComponent())
     }
     @Test func unknownUsageAndChangedRouteStopWithoutHiddenRetries() async throws {
         for mode in ["missing-usage", "wrong-approved-model", "missing-route"] {

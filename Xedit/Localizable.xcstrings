@@ -61517,6 +61517,55 @@
         }
       }
     },
+    "settings.provider.local-gateways" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local model gateways" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地模型网关" } }
+      }
+    },
+    "settings.provider.find-local-gateways" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan local gateways" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "扫描本地网关" } }
+      }
+    },
+    "settings.provider.searching-local-gateways" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Searching this Mac for model gateways…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在搜索这台 Mac 上的模型网关…" } }
+      }
+    },
+    "settings.provider.no-local-gateways" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No supported local gateways found." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未发现支持的本地网关。" } }
+      }
+    },
+    "settings.provider.connect-local-gateway" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接" } }
+      }
+    },
+    "settings.provider.magpie-willdeep-identity" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Usage is labeled WillDeep; requests include version %@." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用量将标记为 WillDeep，请求会附带版本 %@。" } }
+      }
+    },
+    "settings.provider.connected-local-gateway" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected to %@ and made it active." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接 %@ 并设为当前服务商。" } }
+      }
+    },
     "settings.provider.model-list-invalid-format" : {
       "extractionState" : "manual",
       "localizations" : {

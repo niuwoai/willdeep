@@ -42,7 +42,8 @@ import Testing
         #expect(throws: (any Error).self) { try AgentRSIFreeReviewContract.validate(Data([0xff])) }
     }
     @Test func publicFixturesExecuteNormalWorkerAndKeepFrozenDefinitionAndInstructions() async throws {
-        let root = repository.appendingPathComponent("build/rsi-free-review-v2")
+        let root = URL(fileURLWithPath: "/private/tmp/willdeep-rsi-free-review-v2-" + UUID().uuidString.lowercased())
+        defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let manifest = try AgentRSIFreeReview.manifest(), contract = try AgentRSIFreeReview.contract()
         let golden = try AgentRSIOfflineRunner.golden()["candidate"]["baseline_package"]
