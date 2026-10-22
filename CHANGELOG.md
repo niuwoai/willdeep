@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.423.0-rc2 - 2026-10-22
+
+### Fixed
+- 修正 RSI 测试夹具的输出目录，使其符合临时目录安全限制并可重复运行。
+
+## 1.423.0-rc1 - 2026-10-22
+
+### Added
+- 模型设置自动发现本机 Magpie、LM Studio、Jan、LocalAI、vLLM、LiteLLM 和 Ollama 网关；连接后写入 Provider 库并设为当前服务商。WillDeep 通过 `magpie-willdeep` 标识在 Magpie 用量页归类，客户端请求同时携带 WillDeep 版本号；切换服务商时应用该条目的协议设置。
+
 ## 1.422.0-rc9 - 2026-10-21
 
 ### Fixed

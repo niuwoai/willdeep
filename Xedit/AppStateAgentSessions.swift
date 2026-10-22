@@ -119,6 +119,7 @@ extension AppState {
         cfg.flashModel = entry.flashPrimary
         cfg.proModel = entry.proPrimary
         cfg.routingMode = entry.routingMode
+        cfg.customKindOverride = entry.customKindOverride
         if cfg.model.isEmpty { cfg.model = entry.flashPrimary }
         agentConfiguration = cfg.normalized
     }
