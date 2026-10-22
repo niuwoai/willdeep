@@ -27,6 +27,9 @@ struct AgentProviderLibrarySection: View {
 
     @State private var selectedEntryID: UUID?
     @State private var importMessage: String?
+    @State private var discoveredGateways: [AgentDiscoveredLocalModelGateway] = []
+    @State private var isDiscoveringGateways = false
+    @State private var gatewayDiscoveryMessage: String?
 
     private var selectedEntry: AgentProviderEntry? {
         guard let id = selectedEntryID else { return nil }
@@ -50,7 +53,10 @@ struct AgentProviderLibrarySection: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .onAppear(perform: ensureSelection)
+        .onAppear {
+            ensureSelection()
+            discoverLocalGateways()
+        }
         .onCompatibleChange(of: appState.agentProviderLibrary.activeID) { _, _ in
             ensureSelection()
         }
@@ -128,7 +134,114 @@ struct AgentProviderLibrarySection: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 3)
             }
+
+            localGatewayDiscovery
         }
+    }
+
+    private var localGatewayDiscovery: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(L10n.Settings.Provider.localGateways)
+                        .font(.caption.weight(.semibold))
+                    Spacer(minLength: 2)
+                    Button {
+                        discoverLocalGateways()
+                    } label: {
+                        if isDiscoveringGateways {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isDiscoveringGateways)
+                    .help(L10n.Settings.Provider.findLocalGateways)
+                }
+
+                if discoveredGateways.isEmpty {
+                    Text(gatewayDiscoveryMessage ?? L10n.Settings.Provider.searchingLocalGateways)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(discoveredGateways) { gateway in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(gateway.displayName)
+                                    .font(.caption.weight(.medium))
+                                    .lineLimit(1)
+                                Spacer(minLength: 2)
+                                Button(L10n.Settings.Provider.connectLocalGateway) {
+                                    connect(to: gateway)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(gateway.modelIDs.isEmpty)
+                            }
+                            Text(gateway.baseURL)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            if gateway.isMagpie {
+                                Text(L10n.Settings.Provider.magpieWillDeepIdentity(
+                                    AgentNetworkSupport.appVersionHeaderValue
+                                ))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if !gateway.modelSummary.isEmpty {
+                                Text(gateway.modelSummary)
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .padding(.top, 3)
+                    }
+                }
+            }
+        }
+        .padding(.top, 7)
+    }
+
+    private func discoverLocalGateways() {
+        guard !isDiscoveringGateways else { return }
+        isDiscoveringGateways = true
+        gatewayDiscoveryMessage = nil
+        Task {
+            let gateways = await AgentLocalModelGatewayDiscovery.discover()
+            discoveredGateways = gateways
+            gatewayDiscoveryMessage = gateways.isEmpty ? L10n.Settings.Provider.noLocalGateways : nil
+            isDiscoveringGateways = false
+        }
+    }
+
+    private func connect(to gateway: AgentDiscoveredLocalModelGateway) {
+        guard let firstModel = gateway.modelIDs.first else { return }
+        let existing = appState.agentProviderLibrary.entries.first {
+            $0.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                .caseInsensitiveCompare(gateway.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) == .orderedSame
+        }
+        let remainingModels = Array(gateway.modelIDs.dropFirst())
+        let isOllama = gateway.id == AgentProviderPreset.ollamaID
+        let entry = AgentProviderEntry(
+            id: existing?.id ?? UUID(),
+            providerID: isOllama ? AgentProviderPreset.ollamaID : AgentProviderPreset.customID,
+            displayName: gateway.displayName,
+            baseURL: gateway.baseURL,
+            apiKey: isOllama ? "" : gateway.apiKey,
+            flashPrimary: firstModel,
+            flashAlternates: remainingModels,
+            proPrimary: remainingModels.first ?? firstModel,
+            proAlternates: Array(remainingModels.dropFirst()),
+            customKindOverride: isOllama ? nil : .openAIChat
+        )
+        appState.upsertProviderLibraryEntry(entry)
+        appState.setActiveProviderLibraryEntry(id: entry.id)
+        selectedEntryID = entry.id
+        importMessage = L10n.Settings.Provider.connectedLocalGateway(gateway.displayName)
     }
 
     @ViewBuilder
