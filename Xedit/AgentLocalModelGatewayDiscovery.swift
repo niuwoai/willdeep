@@ -19,6 +19,34 @@ struct AgentDiscoveredLocalModelGateway: Identifiable, Equatable, Sendable {
     var modelSummary: String {
         modelIDs.isEmpty ? "" : modelIDs.prefix(3).joined(separator: ", ")
     }
+
+    func providerEntry(existing: AgentProviderEntry? = nil) -> AgentProviderEntry? {
+        guard let firstModel = modelIDs.first else { return nil }
+        let isOllama = id == AgentProviderPreset.ollamaID
+        let models = Array(modelIDs.dropFirst())
+        let providerID = existing?.providerID ?? (isOllama ? AgentProviderPreset.ollamaID : AgentProviderPreset.customID)
+        let existingKey = existing?.apiKey.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolvedKey = isOllama ? "" : (existingKey.isEmpty ? apiKey : existingKey)
+        let existingFlashModel = existing?.flashPrimary ?? ""
+        let flashPrimary = modelIDs.first(where: {
+            $0.caseInsensitiveCompare(existingFlashModel) == .orderedSame
+        }) ?? firstModel
+        return AgentProviderEntry(
+            id: existing?.id ?? UUID(),
+            providerID: providerID,
+            displayName: displayName,
+            baseURL: baseURL,
+            apiKey: resolvedKey,
+            flashPrimary: flashPrimary,
+            flashAlternates: models,
+            proPrimary: models.first ?? firstModel,
+            proAlternates: Array(models.dropFirst()),
+            routingMode: existing?.routingMode ?? .auto,
+            customKindOverride: providerID == AgentProviderPreset.customID
+                ? (existing?.customKindOverride ?? .openAIChat)
+                : nil
+        )
+    }
 }
 
 enum AgentLocalModelGatewayDiscovery {

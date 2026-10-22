@@ -419,6 +419,8 @@ struct ModelPickerPill: View {
     @State private var fetchedModelsByProvider: [UUID: [String]] = [:]
     @State private var loadingProviderIDs: Set<UUID> = []
     @State private var providerLoadFailures: Set<UUID> = []
+    @State private var isDiscoveringLocalGateways = false
+    @State private var localGatewayDiscoveryTask: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -499,7 +501,7 @@ struct ModelPickerPill: View {
                     .frame(width: 164, alignment: .leading)
                 modelSearchField
                 Button {
-                    isModelPanelPresented = false
+                    closeModelPanel()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
@@ -596,10 +598,25 @@ struct ModelPickerPill: View {
             Divider()
                 .padding(.vertical, 5)
 
-            Text(L10n.AgentModelPicker.providers)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text(L10n.AgentModelPicker.providers)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+                if isDiscoveringLocalGateways {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+            .padding(.horizontal, 7)
+
+            if isDiscoveringLocalGateways && entries.isEmpty {
+                HStack(spacing: 6) {
+                    Text(L10n.Settings.Provider.searchingLocalGateways)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
                 .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+            }
 
             ForEach(entries) { entry in
                 providerSourceButton(
@@ -1832,6 +1849,42 @@ struct ModelPickerPill: View {
         selectableProviderEntries.forEach { entry in
             refreshProviderCatalog(entry)
         }
+        discoverLocalGatewaysForPicker()
+    }
+
+    private func discoverLocalGatewaysForPicker() {
+        guard !isDiscoveringLocalGateways else { return }
+        isDiscoveringLocalGateways = true
+        localGatewayDiscoveryTask = Task { @MainActor in
+            defer {
+                isDiscoveringLocalGateways = false
+                localGatewayDiscoveryTask = nil
+            }
+            let gateways = await AgentLocalModelGatewayDiscovery.discover()
+            guard !Task.isCancelled, isModelPanelPresented else { return }
+            for gateway in gateways {
+                let normalizedURL = gateway.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                var existing = appState.agentProviderLibrary.entries.first {
+                    $0.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                        .caseInsensitiveCompare(normalizedURL) == .orderedSame
+                }
+                if let existingID = existing?.id {
+                    appState.materializeProviderLibraryEntryAPIKey(id: existingID)
+                    existing = appState.agentProviderLibrary.entries.first(where: { $0.id == existingID })
+                }
+                let entry: AgentProviderEntry
+                if let existing {
+                    entry = existing
+                } else {
+                    guard let discoveredEntry = gateway.providerEntry() else { continue }
+                    entry = discoveredEntry
+                    appState.upsertProviderLibraryEntry(discoveredEntry)
+                }
+                fetchedModelsByProvider[entry.id] = gateway.modelIDs
+                providerLoadFailures.remove(entry.id)
+            }
+            refreshMenuSnapshot()
+        }
     }
 
     private func refreshProviderCatalog(_ entry: AgentProviderEntry, force: Bool = false) {
@@ -1984,6 +2037,7 @@ struct ModelPickerPill: View {
     }
 
     private func closeModelPanel() {
+        localGatewayDiscoveryTask?.cancel()
         refreshMenuSnapshot()
         isModelPanelPresented = false
     }
