@@ -172,6 +172,7 @@ struct AgentMobileGatewayQueuedMessageSnapshot: Equatable {
     var imageCount: Int
     var textAttachmentCount: Int
     var sessionID: UUID
+    var text: String? = nil
 }
 
 struct AgentMobileGatewayMessageSnapshot: Equatable {
@@ -395,6 +396,7 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case patchApplyFailed(UUID, String)
     case jobNotFound(String)
     case queueMessageNotFound(UUID)
+    case queueMessageChanged
     case noWorkspace
     case workspaceUnavailable(String)
     case pathOutsideWorkspace(String)
@@ -446,6 +448,8 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "Background job not found: \(id)."
         case .queueMessageNotFound(let id):
             return "Queued message not found: \(id.uuidString)."
+        case .queueMessageChanged:
+            return "Queued message changed or started; refresh before editing."
         case .noWorkspace:
             return "No local workspace is available for this session."
         case .workspaceUnavailable(let message):

@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-10-22 | Target version: v1.423.0-rc3
+> Last updated: 2026-10-22 | Target version: v1.423.0-rc4
 
 ## Summary
 
@@ -120,8 +120,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.423.0-rc3`
-- `X-Server-Version: 1.423.0-rc3`
+- `X-App-Version: 1.423.0-rc4`
+- `X-Server-Version: 1.423.0-rc4`
 
 ### `GET /mobile/health`
 
@@ -133,7 +133,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.423.0-rc3",
+    "version": "1.423.0-rc4",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -356,7 +356,7 @@ Current desktop bridge behavior:
 - `state.snapshot` includes desktop worktree changed-file metadata, and `publishSnapshot()` also emits `worktree.updated` envelopes for current changed files.
 - `job.kill` resolves a session-scoped job handle and calls the existing `AgentJobRegistry.kill` path; it does not grant mobile process handles or shell access.
 - `file.read` reads only text files inside the selected local session workspace, rejects path escapes/directories/binary files, and returns `path`, `content`, `truncated`, and `byte_count` in an `ack` payload.
-- `queue.update` controls only the selected session queue through desktop AppState: `add` queues text and optional images, `remove` deletes a queued message by id, `clear` removes all queued messages for the session, and `send_now` promotes a queued message through the same Mac-side send-now path used by the desktop UI.
+- `queue.update` controls the owning session queue through desktop AppState: `add` queues text and optional images; `edit` requires `message_id`, complete new `text`, and snapshot `expected_text`; `remove` deletes a queued user message by id; `clear` removes pending operator input while retaining host instructions; `send_now` promotes a queued message through the Mac-side cancellation and serial consumption path. Edits retain attachments and context, reject stale or started messages, and expose full editable `text` alongside `text_preview` in queue snapshots. Legacy context without a safe user-text boundary has `text: null` and cannot be edited by the phone.
 
 ## Security Requirements
 

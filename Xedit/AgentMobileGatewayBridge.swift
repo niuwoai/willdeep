@@ -194,6 +194,19 @@ enum AgentMobileGatewayCommandRouter {
             case "queue.update":
                 let action = try requiredPayloadAction(from: envelope)
                 let messageID = try optionalPayloadUUID("id", aliases: ["message_id", "queued_id"], from: envelope)
+                let queueAction = action.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased().replacingOccurrences(of: "-", with: "_")
+                if ["edit", "update"].contains(queueAction) {
+                    let targetSession = try optionalSessionID(from: envelope) ?? controller.mobileGatewayActiveSessionID
+                    guard let messageID,
+                          let message = controller.mobileGatewayQueuedMessages.first(where: {
+                              $0.id == messageID && $0.sessionID == targetSession
+                          }),
+                          let original = message.text,
+                          envelope.payload["expected_text"]?.stringValue == original else {
+                        throw AgentMobileGatewayCommandError.queueMessageChanged
+                    }
+                }
                 let result = try controller.mobileGatewayUpdateQueue(
                     sessionID: try optionalSessionID(from: envelope),
                     action: action,
@@ -568,6 +581,7 @@ enum AgentMobileGatewayCommandRouter {
         .object([
             "id": .string(message.id.uuidString),
             "text_preview": .string(message.textPreview),
+            "text": message.text.map(AgentMobileGatewayJSON.string) ?? .null,
             "image_count": .int(message.imageCount),
             "text_attachment_count": .int(message.textAttachmentCount),
             "session_id": .string(message.sessionID.uuidString)

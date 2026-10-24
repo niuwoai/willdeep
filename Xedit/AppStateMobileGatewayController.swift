@@ -182,7 +182,8 @@ extension AppState: AgentMobileGatewayControlling {
                         textPreview: Self.mobileGatewayQueuedTextPreview(message),
                         imageCount: message.images.count,
                         textAttachmentCount: message.textAttachments.count,
-                        sessionID: runtime.id
+                        sessionID: runtime.id,
+                        text: Self.mobileGatewayEditableQueueText(message.text)
                     )
                 }
         }
@@ -946,6 +947,29 @@ extension AppState: AgentMobileGatewayControlling {
             .replacingOccurrences(of: "-", with: "_")
 
         switch normalizedAction {
+        case "edit", "update":
+            guard let messageID,
+                  let index = runtime.queuedMessages.firstIndex(where: {
+                      $0.id == messageID && $0.source == .operatorInput
+                  }) else {
+                throw AgentMobileGatewayCommandError.queueMessageChanged
+            }
+            let message = runtime.queuedMessages[index]
+            guard let text, text.utf8.count <= 1024 * 1024,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !message.images.isEmpty || !message.textAttachments.isEmpty else {
+                throw AgentMobileGatewayCommandError.missingText
+            }
+            guard Self.mobileGatewayEditableQueueText(message.text) != nil else {
+                throw AgentMobileGatewayCommandError.queueMessageChanged
+            }
+            if AgentAttachedPromptDisplay.transform(message.text).isSplicedPrelude,
+               let boundary = message.text.range(of: AgentAttachedPromptProtocol.userTextBoundary, options: .backwards) {
+                runtime.queuedMessages[index].text = String(message.text[..<boundary.upperBound]) + "\n\n" + text
+            } else {
+                runtime.queuedMessages[index].text = text
+            }
+            return .ok(sessionID: runtime.id, message: "Queued message updated")
         case "add":
             let prompt = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !prompt.isEmpty || !images.isEmpty else {
@@ -955,7 +979,7 @@ extension AppState: AgentMobileGatewayControlling {
             return .ok(sessionID: runtime.id, message: "Queued message added")
 
         case "clear":
-            runtime.queuedMessages.removeAll()
+            runtime.queuedMessages.removeAll { $0.source == .operatorInput }
             runtime.shouldConsumeQueueAfterStop = false
             return .ok(sessionID: runtime.id, message: "Queue cleared")
 
@@ -963,7 +987,7 @@ extension AppState: AgentMobileGatewayControlling {
             guard let messageID else {
                 throw AgentMobileGatewayCommandError.missingID("queue.update")
             }
-            guard let index = runtime.queuedMessages.firstIndex(where: { $0.id == messageID }) else {
+            guard let index = runtime.queuedMessages.firstIndex(where: { $0.id == messageID && $0.source == .operatorInput }) else {
                 throw AgentMobileGatewayCommandError.queueMessageNotFound(messageID)
             }
             runtime.queuedMessages.remove(at: index)
@@ -976,7 +1000,7 @@ extension AppState: AgentMobileGatewayControlling {
             guard let messageID else {
                 throw AgentMobileGatewayCommandError.missingID("queue.update")
             }
-            guard let index = runtime.queuedMessages.firstIndex(where: { $0.id == messageID }) else {
+            guard let index = runtime.queuedMessages.firstIndex(where: { $0.id == messageID && $0.source == .operatorInput }) else {
                 throw AgentMobileGatewayCommandError.queueMessageNotFound(messageID)
             }
             let message = runtime.queuedMessages.remove(at: index)
@@ -1064,6 +1088,14 @@ extension AppState: AgentMobileGatewayControlling {
             }
         }
         return "+\(added) -\(deleted)"
+    }
+
+    private static func mobileGatewayEditableQueueText(_ text: String) -> String? {
+        let display = AgentAttachedPromptDisplay.transform(text)
+        if display.isSplicedPrelude && !text.contains(AgentAttachedPromptProtocol.userTextBoundary) {
+            return nil
+        }
+        return AgentAttachedPromptDisplay.composerText(of: text)
     }
 
     private static func mobileGatewayQueuedTextPreview(_ message: AgentQueuedMessage) -> String {

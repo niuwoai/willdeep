@@ -641,6 +641,60 @@ struct AgentMobileGatewayBridgeTests {
     }
 
     @Test @MainActor
+    func queueEditKeepsAttachmentsAndContextAndRejectsStaleOrCrossSessionEdits() throws {
+        let appState = AppState(loadSessionCatalog: false)
+        let session = appState.startNewAgentSession()
+        let other = appState.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest([session.id, other.id]) }
+        let runtime = try #require(appState.agentRuntimes[session.id])
+        let image = AgentImageAttachment(mimeType: "image/png", dataBase64: "fixture")
+        let original = "用户输入\n" + String(repeating: "long text ", count: 90) + "end"
+        let prefix = AgentAttachedPromptProtocol.preludeHeader + "\n\ncontext fixture\n\n" + AgentAttachedPromptProtocol.userTextBoundary
+        let message = AgentQueuedMessage(text: prefix + "\n\n" + original, images: [image])
+        runtime.queuedMessages = [message]
+        let snapshot = try #require(appState.mobileGatewayQueuedMessages.first { $0.id == message.id })
+        #expect(snapshot.text == original)
+        if let path = ProcessInfo.processInfo.environment["WILLDEEP_QUEUE_MAC_FIXTURE"] {
+            let wire = AgentMobileGatewayCommandRouter.handle(
+                AgentMobileGatewayEnvelope(id: "queue-fixture", type: "session.list"), controller: appState, now: fixedDate)
+            try JSONEncoder().encode(wire).write(to: URL(fileURLWithPath: path))
+        }
+        func edit(_ id: UUID, expected: String, text: String) -> AgentMobileGatewayEnvelope {
+            AgentMobileGatewayCommandRouter.handle(
+                AgentMobileGatewayEnvelope(id: UUID().uuidString, type: "queue.update", sessionID: id.uuidString,
+                    payload: ["action": .string("edit"), "message_id": .string(message.id.uuidString),
+                              "text": .string(text), "expected_text": .string(expected)]),
+                controller: appState, now: fixedDate)
+        }
+        #expect(edit(other.id, expected: original, text: "wrong session").type == "command.error")
+        #expect(edit(session.id, expected: "stale", text: "wrong snapshot").type == "command.error")
+        #expect(edit(session.id, expected: original, text: "修改后的正文\nnext task").type == "ack")
+        #expect(runtime.queuedMessages.count == 1)
+        #expect(runtime.queuedMessages[0].id == message.id)
+        #expect(runtime.queuedMessages[0].images == message.images)
+        #expect(runtime.queuedMessages[0].text == prefix + "\n\n修改后的正文\nnext task")
+        #expect(edit(session.id, expected: original, text: "late retry").type == "command.error")
+        runtime.queuedMessages.removeAll()
+        #expect(edit(session.id, expected: "修改后的正文\nnext task", text: "already started").type == "command.error")
+    }
+
+    @Test @MainActor
+    func mobileQueueClearPreservesHostInstructionsAndOtherSession() throws {
+        let state = AppState(loadSessionCatalog: false)
+        let first = state.startNewAgentSession()
+        let second = state.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest([first.id, second.id]) }
+        let firstRuntime = try #require(state.agentRuntimes[first.id])
+        let secondRuntime = try #require(state.agentRuntimes[second.id])
+        let internalMessage = AgentQueuedMessage(text: "internal", source: .hostInstruction)
+        firstRuntime.queuedMessages = [AgentQueuedMessage(text: "operator"), internalMessage]
+        secondRuntime.queuedMessages = [AgentQueuedMessage(text: "other")]
+        _ = try state.mobileGatewayUpdateQueue(sessionID: first.id, action: "clear", messageID: nil, text: nil, images: [])
+        #expect(firstRuntime.queuedMessages == [internalMessage])
+        #expect(secondRuntime.queuedMessages.count == 1)
+    }
+
+    @Test @MainActor
     func appStateFileReadUsesWorkspacePathGuard() throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_mobile_gateway_workspace_\(UUID().uuidString)")
