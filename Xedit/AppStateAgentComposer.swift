@@ -192,9 +192,10 @@ extension AppState {
         // Background Workers can wait for a decision after the parent reply
         // finishes. A new message supersedes those gates too, not just gates
         // owned by an actively responding parent. Settle before dispatch.
-        let closedDecision = closeBlockingAgentToolDecision(for: runtime, reason: "New message sent")
+        let hasHumanWait = hasDeferredHumanWait(for: runtime)
+        let closedDecision = hasHumanWait ? false : closeBlockingAgentToolDecision(for: runtime, reason: "New message sent")
 
-        if runtime.isResponding {
+        if runtime.isResponding || hasHumanWait {
             // The directive belongs to this message, not to whatever turn is
             // still streaming — park it on the queue entry and clear the
             // staging slot so the in-flight turn is unaffected.
@@ -211,6 +212,9 @@ extension AppState {
                     panelStateMentions: panelStateMentions
                 )
             )
+            runtime.session.automaticWakeSuppressedAfterUserStop = false
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+            if hasHumanWait { scheduleDeferredHumanGateWork(for: runtime) }
             if closedDecision {
                 runtime.shouldConsumeQueueAfterStop = true
                 runtime.requestTask?.cancel()

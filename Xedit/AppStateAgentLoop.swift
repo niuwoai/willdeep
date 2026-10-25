@@ -297,6 +297,11 @@ extension AppState {
 
         var toolRound = 0
         while true {
+            if !runtime.pendingIndependentReports.isEmpty {
+                runtime.messages.append(contentsOf: runtime.pendingIndependentReports)
+                runtime.pendingIndependentReports.removeAll()
+                persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+            }
             defer { toolRound += 1 }
             guard !Task.isCancelled, runtime.acceptsResponseEvents(for: turnID) else {
                 shouldResumePendingEventsAtTurnEnd = false

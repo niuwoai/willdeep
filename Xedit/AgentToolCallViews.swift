@@ -31,6 +31,12 @@ struct AgentToolCallCard: View {
     @State private var commandCopied = false
 
     var body: some View {
+        if let (runtime, _) = appState.runtimeAndToolCallIndex(containing: call.id) {
+            AgentHumanGateContainer(runtime: runtime, callID: call.id, isBlocking: call.status.isBlockingForUserDecision) { expandedBody }
+        } else { expandedBody }
+    }
+
+    private var expandedBody: some View {
         VStack(alignment: .leading, spacing: isAuthorizationNotice ? 0 : (isInteractive ? 6 : 3)) {
             if !isAttentionNotice {
                 HStack(spacing: 6) {

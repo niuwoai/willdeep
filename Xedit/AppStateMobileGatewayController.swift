@@ -71,7 +71,7 @@ struct AgentMobileGatewayRepoProbeCache {
 @MainActor private var agentState_mobileGatewayRepoProbes = AgentMobileGatewayRepoProbeCache()
 
 extension AppState: AgentMobileGatewayControlling {
-    var mobileGatewaySessions: [AgentSession] { agentSessions }
+    var mobileGatewaySessions: [AgentSession] { agentSessions.filter { $0.presentationScope != .deferredTask } }
     var mobileGatewayActiveSessionID: UUID? { activeAgentSessionID }
     var mobileGatewayPendingToolApprovals: [AgentMobileGatewayToolApprovalSnapshot] {
         agentRuntimes.values.flatMap { runtime in
@@ -83,13 +83,14 @@ extension AppState: AgentMobileGatewayControlling {
                 }
                 .map { call in
                     AgentMobileGatewayToolApprovalSnapshot(
+                        parked: runtime.parkedGateIDs.contains(call.id),
                         id: call.id.uuidString,
                         title: mobileGatewayToolTitle(for: call),
                         summary: mobileGatewayToolSummary(for: call),
                         toolName: call.toolName,
                         inputPreview: Self.mobileGatewayArgumentsPreview(call.arguments),
                         requiresConfirmation: call.status == .awaitingConfirm,
-                        sessionID: runtime.id
+                        sessionID: runtime.deferredParentRuntimeID ?? runtime.id
                     )
                 }
         }
@@ -204,7 +205,7 @@ extension AppState: AgentMobileGatewayControlling {
                         role: message.role.rawValue,
                         content: Self.mobileGatewayMessageContentPreview(message),
                         createdAt: message.createdAt,
-                        sessionID: runtime.id
+                        sessionID: runtime.deferredParentRuntimeID ?? runtime.id
                     )
                 }
         }
@@ -233,7 +234,8 @@ extension AppState: AgentMobileGatewayControlling {
     }
 
     func mobileGatewayRuntimeIsResponding(sessionID: UUID) -> Bool {
-        agentRuntimes[sessionID]?.isResponding ?? false
+        guard let runtime = agentRuntimes[sessionID] else { return false }
+        return deferredGroup(for: runtime).contains { $0.isResponding || $0.isAwaitingProviderSlot || !$0.toolDecisionWaiters.isEmpty }
     }
 
     var mobileGatewayWorkspaceList: [AgentMobileGatewayWorkspaceSnapshot] {
@@ -941,6 +943,7 @@ extension AppState: AgentMobileGatewayControlling {
         images: [AgentImageAttachment]
     ) throws -> AgentMobileGatewayCommandResult {
         let runtime = try mobileGatewayRuntime(sessionID: sessionID)
+        defer { persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false) }
         let normalizedAction = action
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
@@ -963,6 +966,8 @@ extension AppState: AgentMobileGatewayControlling {
             guard Self.mobileGatewayEditableQueueText(message.text) != nil else {
                 throw AgentMobileGatewayCommandError.queueMessageChanged
             }
+            runtime.queuedMessages[index].independentOfHumanWait = nil
+            runtime.deferredDependencyChecks.removeValue(forKey: messageID)
             if AgentAttachedPromptDisplay.transform(message.text).isSplicedPrelude,
                let boundary = message.text.range(of: AgentAttachedPromptProtocol.userTextBoundary, options: .backwards) {
                 runtime.queuedMessages[index].text = String(message.text[..<boundary.upperBound]) + "\n\n" + text
@@ -996,7 +1001,7 @@ extension AppState: AgentMobileGatewayControlling {
             }
             return .ok(sessionID: runtime.id, message: "Queued message removed")
 
-        case "send_now":
+        case "send_now", "run_independently":
             guard let messageID else {
                 throw AgentMobileGatewayCommandError.missingID("queue.update")
             }
@@ -1008,7 +1013,8 @@ extension AppState: AgentMobileGatewayControlling {
             if activeAgentSessionID != runtime.id {
                 selectAgentSession(id: runtime.id)
             }
-            sendQueuedAgentMessageNow(id: messageID)
+            if normalizedAction == "run_independently" { runQueuedAgentMessageIndependently(id: messageID) }
+            else { sendQueuedAgentMessageNow(id: messageID) }
             return .ok(sessionID: runtime.id, message: "Queued message sent")
 
         default:

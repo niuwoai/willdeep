@@ -167,7 +167,19 @@ final class AgentRuntime: ObservableObject, Identifiable {
         prefersVisibleTerminal = true
         loadedToolPacks.insert(.terminal)
     }
-    @Published var queuedMessages: [AgentQueuedMessage] = []
+    @Published var queuedMessages: [AgentQueuedMessage] = [] {
+        didSet { session.pendingMessages = queuedMessages }
+    }
+    @Published var parkedGateIDs: Set<UUID> = []
+    @Published var deferredChildren: [AgentRuntime] = []
+    var deferredParentRuntimeID: UUID?
+    var gatePresentationDates: [UUID: Date] = [:]
+    var deferredGateMonitor: Task<Void, Never>?
+    var deferredGateMonitorID: UUID?
+    var deferredDependencyChecks: [UUID: String] = [:]
+    var expeditedIndependentMessages: Set<UUID> = []
+    var pendingIndependentReports: [AgentMessage] = []
+    var providerSlotSuspendedForHumanWait = false
 
     // MARK: - Turn lifecycle
 
@@ -639,6 +651,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Init
 
     init(session: AgentSession) {
+        self.queuedMessages = session.pendingMessages
         self.localSandboxDisabled = !(session.sandboxEnabled ?? true)
         self.id = session.id
         self.session = session

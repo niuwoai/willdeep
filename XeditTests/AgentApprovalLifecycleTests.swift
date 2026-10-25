@@ -5,13 +5,14 @@ import Testing
 @Suite("审批生命周期", .serialized)
 @MainActor
 struct AgentApprovalLifecycleTests {
-    @Test("主聊天空闲时发送消息结束后台询问，旧确认不能影响下一条询问")
-    func newMessageSupersedesIdleWorkerDecision() async throws {
+    @Test("新消息保留后台询问，回答按请求身份恢复且不能影响下一条询问")
+    func newMessageRetainsIdleWorkerDecision() async throws {
         let app = AppState()
         app.skillRoutingCatalogForTesting = []
         let session = app.startNewAgentSession()
         defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(app.agentRuntimes[session.id])
+        defer { runtime.deferredGateMonitor?.cancel(); runtime.cancelToolDecisions(reason: "Test cleanup") }
         let first = call(status: .awaitingConfirm)
         runtime.toolCalls = [first]
         let oldDecision = Task { await app.awaitToolDecision(for: runtime, forCallID: first.id) }
@@ -19,10 +20,11 @@ struct AgentApprovalLifecycleTests {
         runtime.isResponding = false
         runtime.input = "Leave that operation for now"
         app.sendAgentMessage()
-        runtime.requestTask?.cancel()
+        #expect(runtime.toolCalls.first(where: { $0.id == first.id })?.status == .awaitingConfirm)
+        #expect(runtime.toolDecisionWaiters[first.id] != nil)
+        #expect(runtime.queuedMessages.last?.text == "Leave that operation for now")
+        app.resolveAgentToolCallDecision(id: first.id, decision: .denied(reason: "explicit user decision"))
         #expect(!approved(await oldDecision.value))
-        #expect(runtime.toolCalls.first(where: { $0.id == first.id })?.status == .denied)
-        #expect(runtime.toolDecisionWaiters[first.id] == nil)
 
         let second = call(status: .awaitingConfirm)
         runtime.toolCalls.append(second)

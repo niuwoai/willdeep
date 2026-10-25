@@ -61,6 +61,10 @@ extension AppState {
     ) {
         guard runtime.currentProviderSlotClaim?.id == claimID else { return }
         runtime.currentProviderSlotClaim = nil
+        if runtime.providerSlotSuspendedForHumanWait {
+            runtime.providerSlotSuspendedForHumanWait = false
+            return
+        }
         releaseProviderSlot(providerID: providerID)
     }
 

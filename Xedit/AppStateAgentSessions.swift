@@ -1347,6 +1347,7 @@ extension AppState {
         for runtime: AgentRuntime,
         pausingOwningDispatchProject: Bool = true
     ) {
+        stopDeferredHumanGateWork(for: runtime)
         cancelPendingGoalLaunchRecovery(for: runtime)
         cancelGoalWakeForUserStop(runtime)
         runtime.goalAuthorizationRevision = UUID()
@@ -1533,6 +1534,7 @@ extension AppState {
 
         let message = runtime.queuedMessages.remove(at: sourceIndex)
         runtime.queuedMessages.insert(message, at: targetIndex)
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
     }
 
     func editQueuedAgentMessage(id: AgentQueuedMessage.ID) {
@@ -1542,6 +1544,7 @@ extension AppState {
 
         let message = runtime.queuedMessages.remove(at: index)
         stageQueuedMessage(message, in: runtime)
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
     }
 
     /// Moves one queued direction into a fresh sidebar conversation while
@@ -1561,6 +1564,7 @@ extension AppState {
             return
         }
         stageQueuedMessage(message, in: destinationRuntime)
+        persistAgentSession(runtime: sourceRuntime, touchUpdatedAt: false, moveToFront: false)
     }
 
     private func stageQueuedMessage(_ message: AgentQueuedMessage, in runtime: AgentRuntime) {
@@ -1584,6 +1588,15 @@ extension AppState {
 
         let message = runtime.queuedMessages.remove(at: index)
         runtime.queuedMessages.insert(message, at: 0)
+
+        if hasDeferredHumanWait(for: runtime) {
+            runtime.session.automaticWakeSuppressedAfterUserStop = false
+            runtime.expeditedIndependentMessages.insert(id)
+            runtime.deferredDependencyChecks.removeValue(forKey: id)
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+            scheduleDeferredHumanGateWork(for: runtime)
+            return
+        }
 
         if runtime.isResponding {
             closeBlockingAgentToolDecision(for: runtime, reason: "Sending queued message")
@@ -2316,6 +2329,13 @@ extension AppState {
         }
         protectedIDs.formUnion(pendingDispatchQueue.map(\.runtimeID))
         protectedIDs.formUnion(titleSummarizationsInFlight)
+        // A retained group owns live continuations even when its root reply
+        // has ended or the user selects another chat.
+        for runtime in agentRuntimes.values where runtime.deferredGateMonitor != nil
+            || runtime.deferredChildren.contains(where: { $0.isResponding || $0.isAwaitingProviderSlot || !$0.toolDecisionWaiters.isEmpty }) {
+            protectedIDs.insert(runtime.id)
+            protectedIDs.formUnion(runtime.deferredChildren.map(\.id))
+        }
         // 圆桌运行/等待答复时，其 runtime 承载聊天卡片的实时观察源，不能按空闲逐出。
         protectedIDs.formUnion(agentRuntimes.values.filter {
             $0.messages.contains { message in

@@ -252,7 +252,11 @@ extension AppState {
     /// Messages the user queued while the agent was busy.
     var agentQueuedMessages: [AgentQueuedMessage] {
         get { activeRuntime?.queuedMessages ?? [] }
-        set { activeRuntime?.queuedMessages = newValue }
+        set {
+            guard let runtime = activeRuntime else { return }
+            runtime.queuedMessages = newValue
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+        }
     }
 
     /// Per-session concrete model override.

@@ -769,6 +769,7 @@ struct QueuedMessagesList: View {
     var baseFontSize: CGFloat = NSFont.systemFontSize
     var onEdit: (AgentQueuedMessage) -> Void = { _ in }
     var onSendNow: (AgentQueuedMessage) -> Void = { _ in }
+    var onRunIndependently: (AgentQueuedMessage) -> Void = { _ in }
     var onRemove: (AgentQueuedMessage) -> Void = { _ in }
     var onOpenInSideChat: (AgentQueuedMessage) -> Void = { _ in }
     var onCloseQueue: () -> Void = {}
@@ -783,6 +784,7 @@ struct QueuedMessagesList: View {
                     baseFontSize: baseFontSize,
                     onEdit: { onEdit(message) },
                     onSendNow: { onSendNow(message) },
+                    onRunIndependently: { onRunIndependently(message) },
                     onRemove: { onRemove(message) },
                     onOpenInSideChat: { onOpenInSideChat(message) },
                     onCloseQueue: onCloseQueue,
@@ -823,6 +825,7 @@ private struct QueuedMessageRow: View {
     var baseFontSize: CGFloat = NSFont.systemFontSize
     var onEdit: () -> Void = {}
     var onSendNow: () -> Void = {}
+    var onRunIndependently: () -> Void = {}
     var onRemove: () -> Void = {}
     var onOpenInSideChat: () -> Void = {}
     var onCloseQueue: () -> Void = {}
@@ -875,6 +878,9 @@ private struct QueuedMessageRow: View {
                     )
 
                     Menu {
+                        Button(action: onRunIndependently) {
+                            Label(AgentHumanWaitText.runIndependent, systemImage: "arrow.triangle.branch")
+                        }
                         Button(action: onEdit) {
                             Label(L10n.QueuedMessage.editButton, systemImage: "pencil")
                         }

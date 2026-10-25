@@ -2254,7 +2254,7 @@ struct AgentQueueModeTests {
 
     @Test
     @MainActor
-    func sendingQueuedMessageNowDeniesAwaitingUserAnswer() {
+    func sendingQueuedMessageNowRetainsAwaitingUserAnswer() {
         let state = AppState()
         _ = state.startNewAgentSession()
         guard let runtime = state.activeRuntime else {
@@ -2282,10 +2282,12 @@ struct AgentQueueModeTests {
 
         state.sendQueuedAgentMessageNow(id: queued.id)
 
-        #expect(runtime.toolCalls.first?.status == .denied)
-        #expect(runtime.toolCalls.first?.errorMessage == "Sending queued message")
+        defer { runtime.deferredGateMonitor?.cancel(); AgentSessionStore.delete(id: runtime.id) }
+        #expect(runtime.toolCalls.first?.status == .awaitingUserAnswer)
+        #expect(runtime.toolCalls.first?.errorMessage == nil)
         #expect(runtime.queuedMessages.first?.id == queued.id)
-        #expect(runtime.shouldConsumeQueueAfterStop == true)
+        #expect(runtime.shouldConsumeQueueAfterStop == false)
+        #expect(runtime.expeditedIndependentMessages.contains(queued.id))
     }
 
     @Test
@@ -2340,7 +2342,7 @@ struct AgentQueueModeTests {
 
     @Test
     @MainActor
-    func sendingQueuedMessageNowDeniesAwaitingConfirm() {
+    func sendingQueuedMessageNowRetainsAwaitingConfirm() {
         let state = AppState()
         _ = state.startNewAgentSession()
         guard let runtime = state.activeRuntime else {
@@ -2364,10 +2366,12 @@ struct AgentQueueModeTests {
 
         state.sendQueuedAgentMessageNow(id: queued.id)
 
-        #expect(runtime.toolCalls.first?.status == .denied)
-        #expect(runtime.toolCalls.first?.errorMessage == "Sending queued message")
+        defer { runtime.deferredGateMonitor?.cancel(); AgentSessionStore.delete(id: runtime.id) }
+        #expect(runtime.toolCalls.first?.status == .awaitingConfirm)
+        #expect(runtime.toolCalls.first?.errorMessage == nil)
         #expect(runtime.queuedMessages.first?.id == queued.id)
-        #expect(runtime.shouldConsumeQueueAfterStop == true)
+        #expect(runtime.shouldConsumeQueueAfterStop == false)
+        #expect(runtime.expeditedIndependentMessages.contains(queued.id))
     }
 
     @Test
@@ -2405,7 +2409,7 @@ struct AgentQueueModeTests {
 
     @Test
     @MainActor
-    func sendingNewMessageWhileAwaitingUserDecisionClosesBlockingCall() {
+    func sendingNewMessageWhileAwaitingUserDecisionRetainsBlockingCall() {
         let state = AppState()
         // The queued text is asserted verbatim below; without this the send
         // path routes against the host's real skill catalog and splices a
@@ -2432,10 +2436,11 @@ struct AgentQueueModeTests {
 
         state.sendAgentMessage()
 
-        #expect(runtime.toolCalls.first?.status == .denied)
-        #expect(runtime.toolCalls.first?.errorMessage == "New message sent")
+        defer { runtime.deferredGateMonitor?.cancel(); AgentSessionStore.delete(id: runtime.id) }
+        #expect(runtime.toolCalls.first?.status == .awaitingUserAnswer)
+        #expect(runtime.toolCalls.first?.errorMessage == nil)
         #expect(runtime.queuedMessages.first?.text == "skip that and continue here")
-        #expect(runtime.shouldConsumeQueueAfterStop == true)
+        #expect(runtime.shouldConsumeQueueAfterStop == false)
     }
 
     @Test

@@ -491,6 +491,11 @@ struct AgentChatTranscript: View {
                         }
                     }
 
+                    if let runtime = appState.activeRuntime {
+                        AgentDeferredTasksView(root: runtime)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+
                     if !localPanelPreviewCalls.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(localPanelPreviewCalls) { call in
@@ -596,6 +601,9 @@ struct AgentChatTranscript: View {
                             },
                             onSendNow: { queued in
                                 appState.sendQueuedAgentMessageNow(id: queued.id)
+                            },
+                            onRunIndependently: { queued in
+                                appState.runQueuedAgentMessageIndependently(id: queued.id)
                             },
                             onRemove: { queued in
                                 appState.removeQueuedAgentMessage(id: queued.id)

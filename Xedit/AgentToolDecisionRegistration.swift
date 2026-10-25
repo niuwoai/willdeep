@@ -12,6 +12,8 @@ extension AgentRuntime {
     func cancelToolDecisions(reason: String) -> Bool {
         let waiters = toolDecisionWaiters
         toolDecisionWaiters.removeAll()
+        parkedGateIDs.removeAll()
+        gatePresentationDates.removeAll()
         var closedAny = !waiters.isEmpty
         for index in toolCalls.indices {
             guard toolCalls[index].status.isBlockingForUserDecision
@@ -31,6 +33,8 @@ extension AgentRuntime {
     func cancelToolDecision(id: AgentToolCall.ID, token: UUID, reason: String) {
         guard toolDecisionWaiters[id]?.token == token,
               let waiter = toolDecisionWaiters.removeValue(forKey: id) else { return }
+        parkedGateIDs.remove(id)
+        gatePresentationDates.removeValue(forKey: id)
         if let index = toolCalls.firstIndex(where: { $0.id == id }),
            toolCalls[index].status.isBlockingForUserDecision {
             toolCalls[index].status = .denied

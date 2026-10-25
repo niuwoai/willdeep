@@ -34,7 +34,7 @@ nonisolated enum AgentPanelStateMention {
     /// `id` 是英文的，这是刻意的：`@` 触发后要打字筛选，中文候选名意味着
     /// 用户得先切一次输入法。显示名走本地化，两者都参与匹配——照抄
     /// `@worker` 已有的双路做法（`AgentModeComposerView` 的 profile 过滤）。
-    enum PanelKind: String, CaseIterable, Equatable {
+    nonisolated enum PanelKind: String, CaseIterable, Equatable, Codable {
         case terminal
         case browser
 

@@ -200,6 +200,7 @@ extension AppState {
         // otherwise pending tool calls are mistaken for a crash and resumed.
         runtime.userStoppedTurnID = nil
         persistAgentSession(runtime: runtime)
+        noteIndependentLaneFinished(runtime)
         // Runs after the persist so the record reads the same settled
         // state the session file just captured. No-op for anything a
         // human started.
@@ -239,5 +240,6 @@ extension AppState {
             requestAgentInputSuggestionIfNeeded(for: runtime)
         }
         noteGoalTurnFinished(for: runtime, turnID: turnID)
+        scheduleDeferredHumanGateWork(for: runtime)
     }
 }

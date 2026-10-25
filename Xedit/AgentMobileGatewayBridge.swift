@@ -548,6 +548,7 @@ enum AgentMobileGatewayCommandRouter {
             "tool_name": .string(approval.toolName),
             "input_preview": .string(approval.inputPreview),
             "requires_confirmation": .bool(approval.requiresConfirmation),
+            "parked": .bool(approval.parked),
             "session_id": .string(approval.sessionID.uuidString)
         ]
     }

@@ -127,7 +127,7 @@ enum AgentSkillCatalog {
 /// spawn_agent candidate, not a reason to burn the parent's window. The point
 /// is sovereignty as much as cost: in an air-gapped deployment the deployable
 /// models are usually exactly the ones the worker and standard tiers run on.
-nonisolated enum AgentSkillTier: String, Sendable {
+nonisolated enum AgentSkillTier: String, Sendable, Codable {
     /// 32–64K window, verifiable or strongly templated work.
     case worker
     /// ~256K window: the session's default tier.
@@ -156,7 +156,7 @@ nonisolated enum AgentSkillTier: String, Sendable {
 ///
 /// 这四档是**声明**，不是强制：真正的闸门仍然是工具白名单与审批。它的用途
 /// 是让人和模型在挂技能、派工种之前就知道代价。
-nonisolated enum AgentSkillEffects: String, Sendable, CaseIterable {
+nonisolated enum AgentSkillEffects: String, Sendable, CaseIterable, Codable {
     /// 只读本机、只做分析。没有外发、没有花费、不改任何外部状态。
     case readOnly = "read-only"
     /// 会向外发请求，但不改变外部状态。查询词本身就是外发的信息。
@@ -190,7 +190,7 @@ nonisolated enum AgentSkillEffects: String, Sendable, CaseIterable {
     }
 }
 
-nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
+nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable, Codable {
     let identifier: String
     let name: String
     let description: String

@@ -10,6 +10,10 @@ import Foundation
 
 extension AppState {
     func consumeNextQueuedMessageIfNeeded(for runtime: AgentRuntime) {
+        if hasDeferredHumanWait(for: runtime) || deferredGroupIsExecuting(for: runtime, excluding: runtime.id) {
+            scheduleDeferredHumanGateWork(for: runtime)
+            return
+        }
         guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return }
         // Wait for any in-flight compression to finish — otherwise the
         // user's queued message would race a compression that just got
@@ -37,6 +41,7 @@ extension AppState {
     /// a phantom user message and never races a live provider request.
     @MainActor
     func resumeAgentLoopForPendingBackgroundCompletions(for runtime: AgentRuntime) {
+        guard !deferredGroupIsExecuting(for: runtime, excluding: runtime.id) else { return }
         guard !runtime.session.automaticWakeSuppressedAfterUserStop else { return }
         guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return }
         guard ownsAgentRuntimeKernelDelivery(for: runtime.id) else { return }

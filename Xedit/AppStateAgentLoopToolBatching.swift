@@ -404,6 +404,9 @@ extension AppState {
                 runtime.toolDecisionWaiters[id] = AgentToolDecisionRegistration(
                     token: token, continuation: continuation
                 )
+                runtime.gatePresentationDates[id] = Date()
+                suspendProviderSlotForHumanWait(runtime)
+                scheduleDeferredHumanGateWork(for: runtime)
             }
         } onCancel: {
             // The cancellation handler runs synchronously off the cancelling

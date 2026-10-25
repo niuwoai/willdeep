@@ -114,6 +114,7 @@ struct AgentMobileGatewaySessionSnapshot: Codable, Equatable {
 }
 
 struct AgentMobileGatewayToolApprovalSnapshot: Equatable {
+    var parked: Bool = false
     var id: String
     var title: String
     var summary: String

@@ -1685,9 +1685,15 @@ extension AppState {
         }
         // Match the exact call, even when a delegated executor is also waiting.
         // Future serially queued calls still have no waiter and cannot accept input.
+        guard runtime.toolDecisionWaiters[id] != nil else { return }
+        guard runtime.pendingToolDecisions[id] == nil else { return }
+        guard prepareDeferredHumanDecision(runtime: runtime, callID: id, decision: decision) else { return }
         guard let waiter = runtime.toolDecisionWaiters.removeValue(forKey: id) else {
             return
         }
+        runtime.gatePresentationDates.removeValue(forKey: id)
+        runtime.parkedGateIDs.remove(id)
+        runtime.pendingToolDecisions.removeValue(forKey: id)
 
         runtime.recordFeedback("approval_resolved") {
             $0.tool = runtime.toolCalls[index].toolName

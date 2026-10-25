@@ -1271,7 +1271,8 @@ nonisolated enum AgentAssistantTurnGrouping {
 
 /// A message the user queued while the agent was busy. Consumed FIFO
 /// once the current response completes (or is stopped).
-struct AgentQueuedMessage: Identifiable, Equatable {
+nonisolated struct AgentQueuedMessage: Identifiable, Equatable, Codable {
+    var independentOfHumanWait: Bool?
     let id: UUID
     var text: String
     var images: [AgentImageAttachment]

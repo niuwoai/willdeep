@@ -86,6 +86,7 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
     /// closest equivalent unit it has.
     var maxDeepCallsPerHarness: Int?
     var maxTurns: Int?
+    var humanWaitYieldSeconds: Int?
     var tokenBudget: Int?
     var goalTokenBudget: Int?
     var goalWallClockMinutes: Int?
@@ -139,16 +140,18 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
         config.speculativeScout = values["speculative_scout"].flatMap(parseBool)
         config.maxDeepCallsPerHarness = values["max_deep_calls_per_harness"].flatMap { Int($0) }
         config.maxTurns = values["max_turns"].flatMap(Int.init)
+        config.humanWaitYieldSeconds = values["human_wait_yield_seconds"].flatMap(Int.init)
         config.tokenBudget = values["token_budget"].flatMap(Int.init)
         config.goalTokenBudget = values["goal_token_budget"].flatMap(Int.init)
         config.goalWallClockMinutes = values["goal_wall_clock_minutes"].flatMap(Int.init)
         config.goalMaxContinuations = values["goal_max_continuations"].flatMap(Int.init)
         config.inputSuggestions = values["input_suggestions"].flatMap(parseBool)
-        let integerKeys = ["max_turns", "token_budget", "goal_token_budget", "goal_wall_clock_minutes", "goal_max_continuations", "max_deep_calls_per_harness"]
+        let integerKeys = ["human_wait_yield_seconds", "max_turns", "token_budget", "goal_token_budget", "goal_wall_clock_minutes", "goal_max_continuations", "max_deep_calls_per_harness"]
         let booleanKeys = ["input_suggestions", "small_model_routing", "auto_dispatch_read_only"]
         config.runtimeParameterErrors = integerKeys.filter { values[$0].map { Int($0) == nil } ?? false }
             + booleanKeys.filter { values[$0].map { !["true", "false"].contains($0) } ?? false }
             + duplicateKeys.filter { (integerKeys + booleanKeys).contains($0) }
+        if let seconds = config.humanWaitYieldSeconds, seconds < 0 { config.runtimeParameterErrors.append("human_wait_yield_seconds") }
         return config
     }
 

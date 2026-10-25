@@ -57,6 +57,7 @@ nonisolated struct AgentOpenAIResponsesContinuationSnapshot: Codable, Equatable 
 /// sessions still reuse AgentSessionStore, but must not leak into the ordinary
 /// workspace conversation list.
 nonisolated enum AgentSessionPresentationScope: String, Codable, Equatable {
+    case deferredTask
     case workspace
     case dispatchBoard
     case roundtable
@@ -71,6 +72,8 @@ nonisolated enum AgentSessionPresentationScope: String, Codable, Equatable {
 // and AgentSessionStore encodes them on a background write queue. Pure
 // value types with no main-actor state; keep new members that way.
 nonisolated struct AgentSession: Identifiable, Codable, Equatable {
+    var deferredTaskSessionIDs: [UUID] = []
+    var pendingMessages: [AgentQueuedMessage] = []
     let id: UUID
     var title: String
     /// Optional — sessions started before a folder was picked have no root.
@@ -515,6 +518,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
+        case deferredTaskSessionIDs, pendingMessages
         case prefersVisibleTerminal
         case prefersSubagents, sandboxEnabled
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
@@ -527,6 +531,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        deferredTaskSessionIDs = try c.decodeIfPresent([UUID].self, forKey: .deferredTaskSessionIDs) ?? []
+        pendingMessages = try c.decodeIfPresent([AgentQueuedMessage].self, forKey: .pendingMessages) ?? []
         prefersSubagents = try c.decodeIfPresent(Bool.self, forKey: .prefersSubagents)
         sandboxEnabled = try c.decodeIfPresent(Bool.self, forKey: .sandboxEnabled)
         self.id = try c.decode(UUID.self, forKey: .id)
