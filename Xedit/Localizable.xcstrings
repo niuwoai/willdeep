@@ -1,6 +1,7 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "model-usage.reference-pricing" : {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"OpenAI / Anthropic / DeepSeek API reference prices checked %@. Estimates exclude subscriptions, relay discounts and service tiers; cache writes use the standard short-duration rate. DeepSeek uses request time; missing timestamps use peak prices."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"OpenAI / Anthropic / DeepSeek API 参考价核对于 %@。估算不含订阅、网关折扣和服务档位差异；缓存写入按标准短时费率。DeepSeek 按请求时间计价，缺少时间时使用忙时价。"}}}},
     "agent-model-picker.managed-rule" : {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Starts on Flash; switches models only after an explicit failure, for the current task."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"默认使用 Flash；明确失败后，仅为当前任务切换模型。"}}}},
     "agent-managed-routing.failure-generation" : {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Switched after generation failure"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"生成失败后切换"}}}},
     "agent-managed-routing.failure-repetition" : {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Switched after repeated output"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"重复输出后切换"}}}},

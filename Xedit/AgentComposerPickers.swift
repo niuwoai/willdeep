@@ -915,7 +915,7 @@ struct ModelPickerPill: View {
                         title: entry.displayName,
                         subtitle: L10n.AgentModelPicker.modelCount(items.count)
                     )
-                    catalogRows(items)
+                    providerCatalogRows(items, entry: entry)
                 }
             }
         }
@@ -1003,7 +1003,7 @@ struct ModelPickerPill: View {
         } else if items.isEmpty {
             catalogEmptyState(L10n.AgentModelPicker.noModels, clearable: false)
         } else {
-            catalogRows(items)
+            providerCatalogRows(items, entry: entry)
         }
 
         if providerLoadFailures.contains(entry.id) {
@@ -1055,7 +1055,7 @@ struct ModelPickerPill: View {
                         title: entry.displayName,
                         subtitle: L10n.AgentModelPicker.modelCount(providerResults.count)
                     )
-                    catalogRows(providerResults)
+                    providerCatalogRows(providerResults, entry: entry)
                 }
             }
         }
@@ -1091,6 +1091,26 @@ struct ModelPickerPill: View {
                     Divider().padding(.leading, 32)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func providerCatalogRows(_ items: [AgentModelCatalogItem], entry: AgentProviderEntry) -> some View {
+        if entry.displayName.caseInsensitiveCompare("Magpie") == .orderedSame {
+            let groups = AgentModelPickerCatalog.prefixGroups(items)
+            ForEach(groups, id: \.prefix) { group in
+                catalogSectionHeader(
+                    title: group.prefix,
+                    subtitle: L10n.AgentModelPicker.modelCount(group.items.count)
+                )
+                catalogRows(group.items)
+            }
+            let ungroupedItems = AgentModelPickerCatalog.itemsWithoutPrefix(items)
+            if !ungroupedItems.isEmpty {
+                catalogRows(ungroupedItems)
+            }
+        } else {
+            catalogRows(items)
         }
     }
 

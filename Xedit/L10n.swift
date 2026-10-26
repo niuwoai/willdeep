@@ -1282,6 +1282,9 @@ nonisolated enum L10n {
     }
 
     enum ModelUsage {
+        static func referencePricing(_ date: String) -> String {
+            String(format: String(localized: "model-usage.reference-pricing", defaultValue: "OpenAI / Anthropic / DeepSeek API reference prices checked %@. Estimates exclude subscriptions, relay discounts and service tiers; cache writes use the standard short-duration rate. DeepSeek uses request time; missing timestamps use peak prices."), date)
+        }
         static let cached = { (a1: String) -> String in
             let template = String(localized: "model-usage.cached", defaultValue: "%@ cached")
             return String(format: template, a1)

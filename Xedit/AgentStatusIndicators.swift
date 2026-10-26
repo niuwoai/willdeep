@@ -1988,6 +1988,9 @@ struct AgentStatsDashboard: View {
             return nil
         }()
         return Group {
+            Text(L10n.ModelUsage.referencePricing(AgentModelPricing.verifiedAt))
+                .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                .foregroundStyle(.secondary)
             if let text {
                 Text(text)
                     .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))

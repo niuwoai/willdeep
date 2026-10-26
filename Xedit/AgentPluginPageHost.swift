@@ -705,7 +705,7 @@ private struct AgentPluginWebView: NSViewRepresentable {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "willdeepPlugin")
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
         var destination: AgentPluginDestinationDescriptor
         var destinationContext: AgentPluginDestinationContext
         weak var appState: AppState?
@@ -854,6 +854,21 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 return
             }
             let scheme = url.scheme?.lowercased() ?? ""
+            if scheme == "blob", navigationAction.shouldPerformDownload {
+                decisionHandler(.download)
+                return
+            }
+            if destination.pluginID == AgentPluginRuntimeWorkflow.pluginID,
+               scheme == AgentPluginSchemeHandler.scheme, url.host == AgentPluginSchemeHandler.host,
+               URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "download" && $0.value == "true" }) == true,
+               let selection = AgentPluginProductionDelivery.selection(url) {
+                decisionHandler(.cancel)
+                Task { @MainActor in
+                    do { try await AgentPluginProductionDelivery.save(selection) }
+                    catch { NSAlert(error: error).runModal() }
+                }
+                return
+            }
             if scheme == "about" || scheme == "data" {
                 decisionHandler(.allow)
                 return
@@ -872,6 +887,21 @@ private struct AgentPluginWebView: NSViewRepresentable {
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             nil
+        }
+
+        func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+            download.delegate = self
+        }
+
+        func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
+                      suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = URL(fileURLWithPath: suggestedFilename).lastPathComponent
+            completionHandler(panel.runModal() == .OK ? panel.url : nil)
+        }
+
+        func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+            if (error as NSError).code != NSURLErrorCancelled { NSAlert(error: error).runModal() }
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -1886,6 +1916,7 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
     private var lockedPluginID: String
     private let maximumResourceBytes = 8 * 1024 * 1024
     private let maximumMediaBytes = 32 * 1024 * 1024
+    private var productionTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
     /// 生成媒体的落盘目录是按插件分的（plugin-data/<pluginID>/generated-images），
     /// 所以这个值钉死在创建时刻就等于把图钉在了创建时那个插件上。视图身份
@@ -1929,6 +1960,47 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        if pluginID == AgentPluginRuntimeWorkflow.pluginID,
+           let url = urlSchemeTask.request.url, url.scheme == Self.scheme, url.host == Self.host,
+           let selection = AgentPluginProductionDelivery.selection(url) {
+            let key = ObjectIdentifier(urlSchemeTask as AnyObject)
+            productionTasks[key] = Task { @MainActor [weak self] in
+                defer { self?.productionTasks.removeValue(forKey: key) }
+                do {
+                    let file = try await AgentPluginProductionDelivery.open(selection)
+                    try Task.checkCancellation()
+                    let range = try AgentPluginProductionDelivery.byteRange(
+                        urlSchemeTask.request.value(forHTTPHeaderField: "Range"), bytes: file.bytes)
+                    try file.handle.seek(toOffset: range.lowerBound)
+                    let length = range.upperBound - range.lowerBound + 1
+                    var headers = ["Content-Type": file.mime, "Content-Length": String(length), "Accept-Ranges": "bytes"]
+                    let partial = urlSchemeTask.request.value(forHTTPHeaderField: "Range") != nil
+                    if partial { headers["Content-Range"] = "bytes \(range.lowerBound)-\(range.upperBound)/\(file.bytes)" }
+                    guard let response = HTTPURLResponse(url: url, statusCode: partial ? 206 : 200,
+                                                         httpVersion: "HTTP/1.1", headerFields: headers) else {
+                        throw AgentToolError.invalidArgument("production_delivery_response_invalid")
+                    }
+                    urlSchemeTask.didReceive(response)
+                    var remaining = length
+                    while remaining > 0 {
+                        try Task.checkCancellation()
+                        guard let chunk = try file.handle.read(upToCount: Int(min(remaining, 64 * 1024))), !chunk.isEmpty else {
+                            throw AgentToolError.invalidArgument("production_delivery_truncated")
+                        }
+                        remaining -= UInt64(chunk.count)
+                        urlSchemeTask.didReceive(chunk)
+                        await Task.yield()
+                    }
+                    try Task.checkCancellation()
+                    urlSchemeTask.didFinish()
+                } catch is CancellationError {
+                    // WebKit stopped this request; no callbacks are valid after stop.
+                } catch {
+                    if !Task.isCancelled { urlSchemeTask.didFailWithError(error) }
+                }
+            }
+            return
+        }
         do {
             guard let requestURL = urlSchemeTask.request.url,
                   requestURL.scheme == Self.scheme,
@@ -1967,7 +2039,9 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
-    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        productionTasks.removeValue(forKey: ObjectIdentifier(urlSchemeTask as AnyObject))?.cancel()
+    }
 }
 
 enum AgentPluginGeneratedMediaResolver {

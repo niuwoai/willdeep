@@ -97,6 +97,31 @@ struct AgentModelCatalogItem: Identifiable, Equatable {
 }
 
 enum AgentModelPickerCatalog {
+    static func prefixGroups(_ items: [AgentModelCatalogItem]) -> [(prefix: String, items: [AgentModelCatalogItem])] {
+        var orderedPrefixes: [String] = []
+        var groupedItems: [String: [AgentModelCatalogItem]] = [:]
+        for item in items {
+            guard let separator = item.modelID.firstIndex(of: "/") else { continue }
+            let prefix = String(item.modelID[..<separator])
+            guard !prefix.isEmpty else { continue }
+            if groupedItems[prefix] == nil {
+                orderedPrefixes.append(prefix)
+                groupedItems[prefix] = []
+            }
+            groupedItems[prefix, default: []].append(item)
+        }
+        return orderedPrefixes.compactMap { prefix in
+            groupedItems[prefix].map { (prefix: prefix, items: $0) }
+        }
+    }
+
+    static func itemsWithoutPrefix(_ items: [AgentModelCatalogItem]) -> [AgentModelCatalogItem] {
+        items.filter { item in
+            guard let separator = item.modelID.firstIndex(of: "/") else { return true }
+            return separator == item.modelID.startIndex
+        }
+    }
+
     static func items(
         entries: [AgentProviderEntry],
         fetchedByProvider: [UUID: [String]],

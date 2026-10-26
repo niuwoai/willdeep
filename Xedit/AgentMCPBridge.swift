@@ -383,6 +383,10 @@ enum AgentMCPBridge {
         params: [String: Any],
         rendering: ResultRendering = .modelFacing
     ) async throws -> String {
+        if AgentPluginRuntimeWorkflow.routes(server: server, method: method, params: params),
+           let name = params["name"] as? String {
+            return try await AgentPluginRuntimeWorkflow.call(tool: name, arguments: params["arguments"] as? [String: Any] ?? [:])
+        }
         switch server.transport {
         case .stdio:
             let paramsData = try JSONSerialization.data(withJSONObject: params, options: [])

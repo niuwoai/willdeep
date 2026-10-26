@@ -89,6 +89,27 @@ struct AgentModelPickerCatalogTests {
     }
 
     @Test
+    func groupsModelsByThePrefixBeforeTheirFirstSlash() {
+        let models = ["group/alpha", "codex/gpt-6", "plain-model", "group/nested/name", "/leading"]
+        let entry = AgentProviderEntry(
+            providerID: AgentProviderPreset.customID,
+            displayName: "Magpie",
+            baseURL: "http://127.0.0.1/v1",
+            flashPrimary: models[0],
+            proPrimary: models[1]
+        )
+        let items = AgentModelPickerCatalog.items(
+            entries: [entry],
+            fetchedByProvider: [entry.id: models]
+        )
+
+        let groups = AgentModelPickerCatalog.prefixGroups(items)
+        #expect(groups.map(\.prefix) == ["group", "codex"])
+        #expect(groups[0].items.map(\.modelID) == ["group/alpha", "group/nested/name"])
+        #expect(AgentModelPickerCatalog.itemsWithoutPrefix(items).map(\.modelID) == ["plain-model", "/leading"])
+    }
+
+    @Test
     func ollamaConfiguredLLMStaysFirstAndIsMarkedAsPrimary() {
         let ollama = AgentProviderEntry(
             id: AgentLocalModelSettings.composerProviderEntryID,

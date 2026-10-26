@@ -305,7 +305,11 @@ nonisolated enum AgentRequestAnalytics {
                 providerID: provider,
                 providerName: providerName(provider, stored: message.requestProviderDisplayName ?? session.providerDisplayName),
                 modelID: model,
-                isLocal: message.requestIsLocal ?? (provider.lowercased() == localProviderID),
+                isLocal: isLocalInference(
+                    reported: message.requestIsLocal ?? (provider.lowercased() == localProviderID),
+                    providerID: provider,
+                    providerName: message.requestProviderDisplayName ?? session.providerDisplayName
+                ),
                 createdAt: message.createdAt,
                 requestCount: 1,
                 promptTokens: message.promptTokens.map { max(0, $0) },
@@ -335,7 +339,7 @@ nonisolated enum AgentRequestAnalytics {
                 providerID: normalized(record.providerID, fallback: "unknown-provider"),
                 providerName: providerName(record.providerID, stored: record.providerName),
                 modelID: normalized(record.modelID, fallback: "unknown-model"),
-                isLocal: record.isLocal,
+                isLocal: isLocalInference(reported: record.isLocal, providerID: record.providerID, providerName: record.providerName),
                 createdAt: record.createdAt,
                 requestCount: 1,
                 promptTokens: record.promptTokens.map { max(0, $0) },
@@ -347,6 +351,11 @@ nonisolated enum AgentRequestAnalytics {
         return result
     }
 
+    private static func isLocalInference(reported: Bool, providerID: String?, providerName: String?) -> Bool {
+        let identities = [providerID, providerName].compactMap { $0?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) }
+        return reported && !identities.contains("magpie")
+    }
+
     private static func sample(for record: AgentCLIUsageRecord) -> Sample {
         let provider = normalized(record.providerID, fallback: "unknown-provider")
         return Sample(
@@ -354,7 +363,7 @@ nonisolated enum AgentRequestAnalytics {
             providerID: provider,
             providerName: providerName(provider, stored: nil),
             modelID: normalized(record.modelID, fallback: "unknown-model"),
-            isLocal: record.isLocal,
+            isLocal: isLocalInference(reported: record.isLocal, providerID: provider, providerName: nil),
             createdAt: record.timestamp,
             requestCount: 1,
             promptTokens: record.inputTokens,

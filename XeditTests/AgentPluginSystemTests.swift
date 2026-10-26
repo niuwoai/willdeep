@@ -1354,7 +1354,7 @@ struct AgentPluginSystemTests {
         #expect(manifest.permissions.contains(.networkAccess))
         #expect(manifest.permissions.contains(.credentialUse))
         #expect(manifest.dependencies.mcpServers == ["video-studio"])
-        #expect(manifest.dependencies.skills == ["video-studio"])
+        #expect(manifest.dependencies.skills == ["video-studio", "production-repair"])
 
         // 服务商是插件级设置：枚举三选一，默认青蜂；API Base 只在选
         // custom 时才生效，密钥仍是 secret 类型（进钥匙串，不落配置）。

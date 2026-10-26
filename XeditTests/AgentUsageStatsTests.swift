@@ -657,8 +657,8 @@ extension WillDeepTests {
         #expect(detail.capabilityUsage.first?.callCount == 1)
     }
 
-    @Test("monthly usage calendar treats unpriced usage as free instead of vetoing the day")
-    func monthlyUsageCalendarCountsUnpricedUsageAsFree() throws {
+    @Test("monthly usage calendar preserves unknown model costs")
+    func monthlyUsageCalendarPreservesUnknownCosts() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
         let month = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 1)))
@@ -688,8 +688,8 @@ extension WillDeepTests {
         let usage = AgentUsageStats.dailyUsage(for: sessions, in: month, calendar: calendar)
         let day = try #require(usage.first { calendar.component(.day, from: $0.date) == 11 })
 
-        // gpt-4.1 contributes $10; the unknown model contributes $0, not nil.
-        #expect(abs(try #require(day.estimatedCostUSD) - 10) < 0.000_001)
+        // A known subtotal cannot stand in for a total containing unknown charges.
+        #expect(day.estimatedCostUSD == nil)
     }
 
     @Test("August 2026 usage calendar is a Sunday-first six-week grid")
@@ -804,9 +804,9 @@ extension WillDeepTests {
 
         let row = AgentUsageStats.modelUsage(for: [session]).first
 
-        // Terra: $2 input + $12 output — not the gpt-5 family $1.25/$10.
+        // Terra above 272k input: $4 input + $18 output for the full request.
         #expect(row?.modelID == "gpt-5.6-terra")
-        #expect(abs((row?.estimatedCostUSD ?? 0) - 14.0) < 0.000_001)
+        #expect(abs((row?.estimatedCostUSD ?? 0) - 22.0) < 0.000_001)
     }
 
     @Test("AgentUsageStats prices someim managed models like deepseek-v4-flash")

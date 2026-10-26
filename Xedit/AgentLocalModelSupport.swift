@@ -187,6 +187,7 @@ enum AgentLocalAuxiliaryPurpose {
 
 nonisolated enum AgentLocalModelPrompting {
     static func isLocalProvider(_ configuration: AgentConfiguration) -> Bool {
+        if isMagpieGateway(configuration) { return false }
         if configuration.providerID == "ollama" {
             return true
         }
@@ -198,6 +199,16 @@ nonisolated enum AgentLocalModelPrompting {
 
     static func prefersLocalLanguageInstruction(_ configuration: AgentConfiguration) -> Bool {
         isLocalProvider(configuration)
+    }
+
+    /// Discovery supplies this client identity even on a custom Magpie port.
+    /// A loopback gateway does not imply local model inference.
+    static func isMagpieGateway(_ configuration: AgentConfiguration) -> Bool {
+        if configuration.providerID.lowercased() == "magpie" { return true }
+        guard let url = URL(string: configuration.baseURL),
+              let host = url.host?.lowercased(),
+              ["localhost", "127.0.0.1", "::1"].contains(host) else { return false }
+        return url.port == 3425 || ["magpie", "magpie-willdeep"].contains(configuration.apiKey)
     }
 
     static func applyLanguageInstruction(to systemPrompt: String, configuration: AgentConfiguration) -> String {
