@@ -16,6 +16,7 @@ import SwiftUI
 import AppKit
 import ImageIO
 import UniformTypeIdentifiers
+import WillDeepCore
 
 struct AgentToolCallCard: View {
     @EnvironmentObject var appState: AppState
@@ -459,6 +460,7 @@ struct AgentToolCallCard: View {
             VStack(alignment: .leading, spacing: AgentConfirmationReviewMetrics.sectionSpacing) {
                 authorizationHeader(descriptor)
                 authorizationDetailSurface(descriptor)
+                structuralPolicyEvidence
                 authorizationMetadata(descriptor)
                 authorizationExplanation
             }
@@ -471,6 +473,27 @@ struct AgentToolCallCard: View {
             authorizationFooter(descriptor)
                 .padding(AgentConfirmationReviewMetrics.contentPadding)
         }
+    }
+
+    @ViewBuilder
+    private var structuralPolicyEvidence: some View {
+        if let command = AppState.fullAccessCommandPayload(toolName: call.toolName, arguments: call.arguments),
+           case .matched(let match) = AgentMaliciousCommandDenylist.assess(command: command, workingDirectory: approvalWorkingDirectory) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(match.reason)
+                    .font(.system(size: 12))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(match.ruleID)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .textSelection(.enabled)
+        }
+    }
+
+    private var approvalWorkingDirectory: URL? {
+        guard let (runtime, _) = appState.runtimeAndToolCallIndex(containing: call.id) else { return nil }
+        return try? runtime.localWorkspaceURLForOptimisticUse()
     }
 
     private func authorizationHeader(

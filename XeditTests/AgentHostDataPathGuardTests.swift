@@ -25,7 +25,7 @@ struct AgentHostDataPathGuardTests {
     private static let destructiveSpellings: [String] = [
         "rm -rf ~/Library/Application\\ Support/WillDeep/agent-sessions",
         "rm -rf \"$HOME/Library/Application Support/WillDeep/agent-sessions\"",
-        "rm -rf '${HOME}/Library/Application Support/WillDeep/agent-sessions'",
+        "rm -rf \"${HOME}/Library/Application Support/WillDeep/agent-sessions\"",
         "rm -rf '\(realHome)/Library/Application Support/WillDeep/agent-sessions'",
         // 通配删内容与删目录是同一件事。
         "rm -f ~/Library/Application\\ Support/WillDeep/agent-sessions/*.json",

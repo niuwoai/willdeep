@@ -564,7 +564,8 @@ extension AppState {
             return fullAccessApprovalSource(
                 toolName: toolName,
                 arguments: arguments,
-                risk: risk
+                risk: risk,
+                rootDirectory: rootDirectory
             )
         }
 
@@ -1114,7 +1115,8 @@ extension AppState {
     func fullAccessApprovalSource(
         toolName: String,
         arguments: [String: AgentJSONValue],
-        risk: AgentToolRisk
+        risk: AgentToolRisk,
+        rootDirectory: URL? = nil
     ) -> AgentToolApprovalSource? {
         // 读工具本就不过这道门，和其他档位一样返回 nil（"纯读，从不设卡"），
         // 而不是给它盖一个"完全访问放行"的戳——那会在回合报告里凭空多出
@@ -1152,9 +1154,18 @@ extension AppState {
             // 非命令型写工具（改文件、本地元数据等）直接放行。
             return .fullAccess
         }
-        if let match = AgentMaliciousCommandDenylist.match(command: command) {
+        switch AgentMaliciousCommandDenylist.assess(command: command, workingDirectory: rootDirectory) {
+        case .matched(let match):
             noteFullAccessDenylistHit(match, toolName: toolName)
             return nil
+        case .unsupportedSyntax(let limitations):
+            AgentSandboxAuditLog.recordJudge(
+                toolName: toolName, command: command,
+                model: "full-access-structural-policy", verdict: "unsupported",
+                detail: limitations.joined(separator: "; ")
+            )
+        case .notMatched:
+            break
         }
         // 完全访问不再把凭据读取送回人工，也不再经过容易把正常运维误判成
         // 恶意的 AI 裁判。用户已经明确授予这一级权限；宿主只保留上面的

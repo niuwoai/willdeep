@@ -433,14 +433,10 @@ nonisolated public enum SafeCommand {
         "launchctl"
     ]
 
-    /// Substring patterns that don't tokenize cleanly — fork bomb has
-    /// no whitespace at all, `dd if=` embeds an `=` inside the first
-    /// "token", `mkfs.` is a prefix that `mkfs.ext4` / `mkfs.hfs` etc.
-    /// share. Kept short on purpose — every entry is a known one-off.
+    /// Legacy canonical fork-bomb shape, checked only outside quotes.
+    /// dd and mkfs are classified by executable name below, not substrings.
     public static let dangerousSubstrings: [String] = [
-        ":(){:|:&};:",
-        "dd if=",
-        "mkfs."
+        ":(){:|:&};:"
     ]
 
     /// `cp` and `ln` with ANY flag are dangerous (the pre-rc3 needles
@@ -493,11 +489,6 @@ nonisolated public enum SafeCommand {
     }
 
     private static func classifySegment(_ segment: String) -> CommandSafety {
-        let lowercased = segment.lowercased()
-        for needle in dangerousSubstrings where lowercased.contains(needle) {
-            return .alwaysDangerous
-        }
-
         let tokens = commandTokensSkippingEnvironmentAssignments(tokenize(segment))
         guard let head = tokens.first else { return .alwaysSafe }
 
@@ -507,7 +498,8 @@ nonisolated public enum SafeCommand {
         // data unless a command-specific classifier says otherwise, so
         // `printf 'rm'` and `grep sudo file` stay read-only. Wrapper commands
         // (`xargs`, `env`, shell -c) recursively inspect their payload.
-        if dangerousTokens.contains(firstToken) {
+        let executableName = (firstToken as NSString).lastPathComponent
+        if dangerousTokens.contains(executableName) || executableName == "dd" || executableName.hasPrefix("mkfs.") {
             return .alwaysDangerous
         }
 
