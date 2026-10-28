@@ -96,10 +96,12 @@ struct SubmitOnReturnTextView: NSViewRepresentable {
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             guard commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
-            guard SubmitOnReturnKeyPolicy.submits(
+            // 这个输入框只有一种提交，没有排队和立即发送的去处，所以只有裸回车
+            // 算提交，⌘↩ 和 ⌥↩ 在这里仍是换行。
+            guard SubmitOnReturnKeyPolicy.action(
                 modifiers: NSEvent.modifierFlags,
                 hasMarkedText: textView.hasMarkedText()
-            ) else {
+            ) == .send else {
                 return false
             }
             onSubmit()
@@ -108,16 +110,37 @@ struct SubmitOnReturnTextView: NSViewRepresentable {
     }
 }
 
+/// 一次回车要做的事。三档发送方式的含义不随回合忙闲变化：`send` 是今天的
+/// 默认（空闲立刻发、忙碌入队），`sendNow` 要求这条马上生效，`enqueue` 要求
+/// 先排着。`newline` 只换行。
+enum ComposerReturnAction: Equatable {
+    case send
+    case sendNow
+    case enqueue
+    case newline
+}
+
 /// 回车键归属的判定单独抽出来，方便直接测：输入法组字期间的回车属于候选
 /// 词上屏，绝不能当成发送——中文用户每打一个词都会按到它。
 nonisolated enum SubmitOnReturnKeyPolicy {
-    static func submits(modifiers: NSEvent.ModifierFlags, hasMarkedText: Bool) -> Bool {
-        guard !hasMarkedText else { return false }
+    /// `treatsMarkedTextAsComposition` 为真时，组字期间的回车一律上屏。
+    /// composer 的输入框历史上不看这个标记（组字回车由文本视图自己消化），
+    /// 传 `false` 保持原行为，不要借这次键位改动顺手改掉它。
+    static func action(
+        modifiers: NSEvent.ModifierFlags,
+        hasMarkedText: Bool,
+        treatsMarkedTextAsComposition: Bool = true
+    ) -> ComposerReturnAction {
+        if treatsMarkedTextAsComposition, hasMarkedText { return .newline }
         let flags = modifiers.intersection(.deviceIndependentFlagsMask)
-        let wantsLineBreak = flags.contains(.shift)
-            || flags.contains(.option)
-            || flags.contains(.control)
-        return !wantsLineBreak
+        if flags.contains(.command) { return .sendNow }
+        if flags.contains(.option) { return .enqueue }
+        if flags.contains(.shift) || flags.contains(.control) { return .newline }
+        return .send
+    }
+
+    static func submits(modifiers: NSEvent.ModifierFlags, hasMarkedText: Bool) -> Bool {
+        action(modifiers: modifiers, hasMarkedText: hasMarkedText) == .send
     }
 }
 

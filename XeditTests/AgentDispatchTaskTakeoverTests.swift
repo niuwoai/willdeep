@@ -452,6 +452,32 @@ struct AgentDispatchTaskTakeoverTests {
         #expect(SubmitOnReturnKeyPolicy.submits(modifiers: [.capsLock], hasMarkedText: false))
     }
 
+    @Test("⌘↩ 立即发送、⌥↩ 排队、Shift 与 Control 换行，组字期间一律上屏")
+    func returnKeyChoosesSendQueueOrNewline() {
+        #expect(SubmitOnReturnKeyPolicy.action(modifiers: [], hasMarkedText: false) == .send)
+        #expect(SubmitOnReturnKeyPolicy.action(modifiers: [.command], hasMarkedText: false) == .sendNow)
+        #expect(SubmitOnReturnKeyPolicy.action(modifiers: [.option], hasMarkedText: false) == .enqueue)
+        #expect(SubmitOnReturnKeyPolicy.action(modifiers: [.shift], hasMarkedText: false) == .newline)
+        #expect(SubmitOnReturnKeyPolicy.action(modifiers: [.control], hasMarkedText: false) == .newline)
+        // 同时按多个修饰键时，立即发送优先于排队，排队优先于换行。
+        #expect(SubmitOnReturnKeyPolicy.action(modifiers: [.command, .option], hasMarkedText: false) == .sendNow)
+        #expect(SubmitOnReturnKeyPolicy.action(modifiers: [.option, .shift], hasMarkedText: false) == .enqueue)
+        // 大写锁定不是修饰键。
+        #expect(SubmitOnReturnKeyPolicy.action(modifiers: [.capsLock], hasMarkedText: false) == .send)
+        // 组字期间三个发送键都变成上屏。
+        for modifiers in [[], [.command], [.option]] as [[NSEvent.ModifierFlags]] {
+            #expect(
+                SubmitOnReturnKeyPolicy.action(modifiers: .init(modifiers), hasMarkedText: true) == .newline
+            )
+        }
+        // composer 的输入框不看组字标记，保持它原来的手感。
+        #expect(
+            SubmitOnReturnKeyPolicy.action(
+                modifiers: [.command], hasMarkedText: true, treatsMarkedTextAsComposition: false
+            ) == .sendNow
+        )
+    }
+
     @Test("窄窗口下侧栏收窄让位，任务图不会被整列挤没")
     func sidePanelWidthAlwaysLeavesRoomForTheGraph() {
         let takeover = AgentDispatchBoardLayout.preferredTakeoverWidth

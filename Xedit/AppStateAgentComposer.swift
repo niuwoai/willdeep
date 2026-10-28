@@ -66,7 +66,9 @@ extension AppState {
         sendAgentMessage()
     }
 
-    func sendAgentMessage() {
+    /// `delivery` 是用户在发送那一刻的手选，默认保持原行为。`.newline` 不是一种
+    /// 发送，传进来按 `.send` 处理。
+    func sendAgentMessage(delivery: ComposerReturnAction = .send) {
         // The UI's send button always targets whatever session is on
         // screen — that's the active runtime by definition. If there
         // isn't one, lazily create one so a brand-new install can fire
@@ -195,23 +197,25 @@ extension AppState {
         let hasHumanWait = hasDeferredHumanWait(for: runtime)
         let closedDecision = hasHumanWait ? false : closeBlockingAgentToolDecision(for: runtime, reason: "New message sent")
 
-        if runtime.isResponding || hasHumanWait {
+        // `.enqueue` 是唯一一个空闲时也先不发的入口。其余两种只有在有回合
+        // 或人工等待挡着时才入队。
+        let holdForLater = delivery == .enqueue || runtime.isResponding || hasHumanWait
+        if holdForLater {
             // The directive belongs to this message, not to whatever turn is
             // still streaming — park it on the queue entry and clear the
             // staging slot so the in-flight turn is unaffected.
             let queuedDelegationPolicy = runtime.pendingDelegationPolicy
             runtime.pendingDelegationPolicy = .automatic
-            runtime.queuedMessages.append(
-                AgentQueuedMessage(
-                    text: prompt,
-                    images: images,
-                    textAttachments: textAttachments,
-                    attachedSkills: skills,
-                    executionAgent: executionAgent,
-                    delegationPolicy: queuedDelegationPolicy,
-                    panelStateMentions: panelStateMentions
-                )
+            let queued = AgentQueuedMessage(
+                text: prompt,
+                images: images,
+                textAttachments: textAttachments,
+                attachedSkills: skills,
+                executionAgent: executionAgent,
+                delegationPolicy: queuedDelegationPolicy,
+                panelStateMentions: panelStateMentions
             )
+            runtime.queuedMessages.append(queued)
             runtime.session.automaticWakeSuppressedAfterUserStop = false
             persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
             if hasHumanWait { scheduleDeferredHumanGateWork(for: runtime) }
@@ -219,6 +223,11 @@ extension AppState {
                 runtime.shouldConsumeQueueAfterStop = true
                 runtime.requestTask?.cancel()
                 scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
+            }
+            // 「立即发送」入队尾再挪到队首，排在前面的消息保持原顺序。
+            // 人工等待期间这条不取消回合，交给延迟门调度，见 deliverQueuedMessageNow。
+            if delivery == .sendNow {
+                deliverQueuedMessageNow(id: queued.id, in: runtime)
             }
             return
         }

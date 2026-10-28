@@ -1081,9 +1081,11 @@ private struct ComposerCard: View {
                             appState.agentInput = newValue
                         }
                     ),
-                    placeholder: L10n.Composer.inputPlaceholder,
+                    placeholder: appState.isAgentResponding
+                        ? L10n.Composer.inputPlaceholderWhileResponding
+                        : L10n.Composer.inputPlaceholder,
                     baseFontSize: appState.agentChatBaseFontSize,
-                    onSubmit: { submitComposer() },
+                    onSubmit: { submitComposer(action: $0) },
                     onPasteImage: handlePastedImage,
                     onPasteText: handlePastedText,
                     onDropAttachments: { handleDroppedPasteboard($0) },
@@ -1299,14 +1301,16 @@ private struct ComposerCard: View {
     /// Enter outside the palette executes an exact slash invocation that was
     /// previously staged for arguments. Non-command text keeps the ordinary
     /// composer send path.
-    private func submitComposer() {
+    /// `action` 只作用于真正发出去的那条消息。斜杠命令是立刻执行的本地动作，
+    /// 没有「排队」或「打断当前回合」的含义，所以 ⌘↩ 和 ⌥↩ 打在命令上和裸回车一样。
+    private func submitComposer(action: ComposerReturnAction = .send) {
         let commands = SlashCommand.builtIn(state: appState)
         if let chain = SlashCommand.composerChain(in: appState.agentInput, commands: commands) {
             executeSlashCommandChain(chain)
             return
         }
         guard let invocation = SlashCommand.invocation(in: appState.agentInput, commands: commands) else {
-            appState.sendAgentMessage()
+            appState.sendAgentMessage(delivery: action)
             return
         }
 

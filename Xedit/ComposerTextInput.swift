@@ -92,7 +92,9 @@ struct ComposerTextEditor: NSViewRepresentable {
     /// sized like what they read. Defaulted so the many call sites that do
     /// not care keep the previous fixed size.
     var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
-    let onSubmit: () -> Void
+    /// 回车的去向。默认忽略发送方式、一律按普通发送处理，只有 Agent 输入框
+    /// 需要区分立即发送和排队。
+    let onSubmit: (ComposerReturnAction) -> Void
     let onPasteImage: () -> Void
     let onPasteText: (String) -> Void
     /// 拖进输入框的文件/图片。返回 true 表示已经收下(变成附件),文本视图
@@ -289,7 +291,7 @@ struct ComposerTextEditor: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
-        let onSubmit: () -> Void
+        let onSubmit: (ComposerReturnAction) -> Void
         let onPasteImage: () -> Void
         let onPasteText: (String) -> Void
         let historyProvider: () -> [String]
@@ -335,7 +337,7 @@ struct ComposerTextEditor: NSViewRepresentable {
 
         init(
             text: Binding<String>,
-            onSubmit: @escaping () -> Void,
+            onSubmit: @escaping (ComposerReturnAction) -> Void,
             onPasteImage: @escaping () -> Void,
             onPasteText: @escaping (String) -> Void,
             historyProvider: @escaping () -> [String],
@@ -523,12 +525,15 @@ struct ComposerTextEditor: NSViewRepresentable {
             }
 
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                let modifiers = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                let wantsLineBreak = modifiers.contains(.shift)
-                    || modifiers.contains(.option)
-                    || modifiers.contains(.control)
-                if !wantsLineBreak {
-                    onSubmit()
+                // composer 的组字回车历来由文本视图自己消化，这里不看
+                // hasMarkedText，避免这次键位改动顺手改变中文输入的手感。
+                let action = SubmitOnReturnKeyPolicy.action(
+                    modifiers: NSEvent.modifierFlags,
+                    hasMarkedText: textView.hasMarkedText(),
+                    treatsMarkedTextAsComposition: false
+                )
+                if action != .newline {
+                    onSubmit(action)
                     historyIndex = nil
                     lastHistoryString = nil
                     return true

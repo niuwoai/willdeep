@@ -858,7 +858,7 @@ private struct QueuedMessageRow: View {
                     Button(action: onSendNow) {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.turn.down.right")
-                            Text(L10n.QueuedMessage.adjustDirection)
+                            Text(L10n.QueuedMessage.sendNowCompact)
                         }
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)

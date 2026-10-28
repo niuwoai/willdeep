@@ -22,7 +22,7 @@ struct ComposerTextInputTests {
         var dismisses = 0
         var submits = 0
         let coordinator = ComposerTextEditor.Coordinator(
-            text: Binding(get: { draft }, set: { draft = $0 }), onSubmit: { submits += 1 },
+            text: Binding(get: { draft }, set: { draft = $0 }), onSubmit: { _ in submits += 1 },
             onPasteImage: {}, onPasteText: { _ in }, historyProvider: { [] },
             slashMenuVisible: .constant(false), slashMenuSelection: .constant(0), slashMenuItemCount: { 0 },
             onSlashCommit: { false }, onSlashQueryChange: { _ in },

@@ -1588,6 +1588,18 @@ extension AppState {
 
         let message = runtime.queuedMessages.remove(at: index)
         runtime.queuedMessages.insert(message, at: 0)
+        deliverQueuedMessageNow(id: id, in: runtime)
+    }
+
+    /// 队列里指定的那条已经在队首。有人工等待时不取消回合，交给延迟门调度；
+    /// 否则取消正在跑的回合，等它退出后消费队首。两个调用方共用这一段：
+    /// 队列卡片上的「立即发送」，以及输入框的 ⌘↩。
+    func deliverQueuedMessageNow(id: AgentQueuedMessage.ID, in runtime: AgentRuntime) {
+        guard let index = runtime.queuedMessages.firstIndex(where: { $0.id == id }) else { return }
+        if index != 0 {
+            let message = runtime.queuedMessages.remove(at: index)
+            runtime.queuedMessages.insert(message, at: 0)
+        }
 
         if hasDeferredHumanWait(for: runtime) {
             runtime.session.automaticWakeSuppressedAfterUserStop = false

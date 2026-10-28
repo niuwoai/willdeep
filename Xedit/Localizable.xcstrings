@@ -29095,6 +29095,17 @@
         }
       }
     },
+    "composer.input.placeholder.while-responding" : {
+      "comment" : "placeholder shown only while a turn is running: return queues, command-return sends now",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "↩ queues, ⌘↩ sends now" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "↩ encola, ⌘↩ envía ahora" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "↩ met en file, ⌘↩ envoie maintenant" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "↩ で並べる、⌘↩ で今すぐ送信" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "↩ 排队，⌘↩ 立即发送" } }
+      }
+    },
     "composer.input.placeholder" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -44445,14 +44456,14 @@
       }
     },
     "queued-message.adjust-direction" : {
-      "comment" : "visible action that immediately steers the running turn with this queued message",
-      "extractionState" : "manual",
+      "comment" : "retired: the button now uses queued-message.send-now-compact. The action cancels the running turn and sends this message, it does not steer it.",
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Adjust direction" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Ajustar dirección" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajuster la direction" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "方向を調整" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "调整方向" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send now" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Enviar ahora" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Envoyer" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "今すぐ送信" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "立即发送" } }
       }
     },
     "queued-message.actions-button" : {

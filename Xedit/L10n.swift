@@ -522,6 +522,8 @@ nonisolated enum L10n {
         static let inputSuggestionSettingsToggle = String(localized: "composer.input-suggestion.settings.toggle", defaultValue: "Predict my next message after each turn")
         static let inputSuggestionSettingsFootnote = String(localized: "composer.input-suggestion.settings.footnote", defaultValue: "The prediction appears as gray text in the empty input box. Press Tab to accept it, or just start typing to ignore it. Uses the conversation title model (or the fast model), and a local model first when local models are enabled.")
         static let inputPlaceholder = String(localized: "composer.input.placeholder", defaultValue: "Ask anything... / commands, @ files/workspace, $ skills & plugins")
+        /// 回合进行中才换上的提示：两个键的含义是固定的，不随忙闲变化。
+        static let inputPlaceholderWhileResponding = String(localized: "composer.input.placeholder.while-responding", defaultValue: "\u{21A9} queues, \u{2318}\u{21A9} sends now")
         static let removeSecretHelp = String(localized: "composer.remove-secret.help", defaultValue: "Remove this secret row")
         static let secretLabelPlaceholder = String(localized: "composer.secret-label.placeholder", defaultValue: "Label, e.g. Production SSH password")
         static let secretValuePlaceholder = String(localized: "composer.secret-value.placeholder", defaultValue: "Secret value")
@@ -1392,7 +1394,6 @@ nonisolated enum L10n {
     }
 
     enum QueuedMessage {
-        static let adjustDirection = String(localized: "queued-message.adjust-direction", defaultValue: "Adjust direction")
         static let actionsButton = String(localized: "queued-message.actions-button", defaultValue: "Queued message actions")
         static let actionsButtonHelp = String(localized: "queued-message.actions-button.help", defaultValue: "Show queued message actions")
         static let deleteButton = String(localized: "queued-message.delete-button", defaultValue: "Delete")

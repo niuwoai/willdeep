@@ -87,7 +87,7 @@ struct AgentHeaderEditorEntryTests {
 
         #expect(source.contains("private var sixDotDragHandle"))
         #expect(source.contains(".opacity(isHovering ? 1 : 0)"))
-        #expect(source.contains("Text(L10n.QueuedMessage.adjustDirection)"))
+        #expect(source.contains("Text(L10n.QueuedMessage.sendNowCompact)"))
         #expect(source.contains("systemName: \"trash\""))
         #expect(source.contains("Label(L10n.QueuedMessage.editButton"))
         #expect(source.contains("Label(L10n.QueuedMessage.openInSideChat"))
