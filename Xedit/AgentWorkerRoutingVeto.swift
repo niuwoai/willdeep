@@ -163,11 +163,13 @@ nonisolated enum AgentWorkerRoutingVeto {
     /// from the request text alone, and cannot name a privileged profile.
     static func downgradedDecision(
         for requestText: String,
-        delegationPolicy: AgentDelegationPolicy
+        delegationPolicy: AgentDelegationPolicy,
+        sharedConfig: AgentSharedRuntimeConfig = .load()
     ) -> AgentRequestRouter.Decision? {
         AgentRequestRouter.routedDecision(
             for: requestText,
             delegationPolicy: delegationPolicy,
+            sharedConfig: sharedConfig,
             skippingPrivilegedBranches: true
         )
     }
