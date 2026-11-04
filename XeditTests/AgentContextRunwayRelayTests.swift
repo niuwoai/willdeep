@@ -110,6 +110,17 @@ struct AgentContextRunwayRelayTests {
         #expect(!f.source.messages.contains { $0.transcriptEvent != nil })
     }
 
+    @Test("子会话不能接力成失去只读边界的顶层会话")
+    func childCannotRelayToUnrestrictedSession() throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let sessionCount = f.app.agentSessions.count
+        f.source.session.parentSessionID = UUID()
+
+        #expect(f.app.prepareContextRunwayRelayAfterCompressionFailure(for: f.source) == nil)
+        #expect(f.app.makeContextRunwayRelaySession(from: f.source, makeActive: false) == nil)
+        #expect(f.app.agentSessions.count == sessionCount)
+    }
+
     @Test("远程工作区不接力")
     func remoteWorkspaceIsNotRelayed() throws {
         let f = try fixture(); defer { f.cleanup() }

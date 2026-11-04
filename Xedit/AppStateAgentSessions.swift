@@ -1396,6 +1396,7 @@ extension AppState {
             runtime.clearTurnError()
             markCurrentPlanInterruptedByUser(for: runtime)
             _ = appendStoppedTurnEvent(to: runtime, content: L10n.Composer.stopped)
+            recordChildSessionCompletionIfNeeded(for: runtime, wasUserStopped: true)
             return
         }
         let stoppedTurnID = runtime.activeTurnID
@@ -2424,6 +2425,7 @@ extension AppState {
         if removeFromStore {
             agentRuntimeKernel.removeEvents(for: id)
             agentExternalWakeRetryTasks.removeValue(forKey: id)?.cancel()
+            childResultRetryTasks.removeValue(forKey: id)?.cancel()
             agentKernelPreemptedRuntimeIDs.remove(id)
         }
         persistedImages.forEach { $0.removeStoredFileIfNeeded() }

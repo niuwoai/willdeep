@@ -105,6 +105,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// projected back into the dispatch sidebar as duplicate projects.
     var dispatchParentProjectID: UUID?
     var dispatchTaskID: UUID?
+    /// Parent conversation, if this session was opened for a delegated task.
+    var parentSessionID: UUID? = nil
+    /// The one assignment represented by this child conversation. The parent
+    /// only needs the child's id; its transcript stays in the child's file.
+    var childSessionAssignment: AgentChildSessionAssignment? = nil
     /// Best-effort local folder identity for recovering from Finder moves
     /// or renames. Tools do not poll this on the happy path; it is consulted
     /// only after the recorded path appears to have failed.
@@ -299,6 +304,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         presentationScope: AgentSessionPresentationScope = .workspace,
         dispatchParentProjectID: UUID? = nil,
         dispatchTaskID: UUID? = nil,
+        parentSessionID: UUID? = nil,
+        childSessionAssignment: AgentChildSessionAssignment? = nil,
         localWorkspaceIdentity: LocalWorkspaceIdentity? = nil,
         modelID: String? = nil,
         providerEntryID: UUID? = nil,
@@ -356,6 +363,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.presentationScope = presentationScope
         self.dispatchParentProjectID = dispatchParentProjectID
         self.dispatchTaskID = dispatchTaskID
+        self.parentSessionID = parentSessionID
+        self.childSessionAssignment = childSessionAssignment
         self.localWorkspaceIdentity = localWorkspaceIdentity
             ?? AgentWorkspaceAvailabilityResolver.captureIdentity(for: self.workspaceLocation?.localPath ?? workspaceRootPath)
         self.modelID = modelID
@@ -521,7 +530,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case deferredTaskSessionIDs, pendingMessages
         case prefersVisibleTerminal
         case prefersSubagents, sandboxEnabled
-        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
+        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, parentSessionID, childSessionAssignment, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID, contextSummaryInstalledAt, contextCheckpoint
         case didEditFiles, agentEditedPaths, fileObservations, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
@@ -548,6 +557,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
             forKey: .dispatchParentProjectID
         )
         self.dispatchTaskID = try c.decodeIfPresent(UUID.self, forKey: .dispatchTaskID)
+        self.parentSessionID = try c.decodeIfPresent(UUID.self, forKey: .parentSessionID)
+        self.childSessionAssignment = try c.decodeIfPresent(
+            AgentChildSessionAssignment.self,
+            forKey: .childSessionAssignment
+        )
         self.localWorkspaceIdentity = try c.decodeIfPresent(LocalWorkspaceIdentity.self, forKey: .localWorkspaceIdentity)
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
         self.providerEntryID = try c.decodeIfPresent(UUID.self, forKey: .providerEntryID)

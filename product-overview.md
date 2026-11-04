@@ -1,5 +1,7 @@
 # WillDeep Product Overview
 
+Mac 独立子会话（1.428.0-rc1，未发布）：主会话可在同一已授权本地工作区委派只读任务；子会话从空历史启动，拥有独立聊天与运行状态，侧栏可展开并查看完整过程，首次任务结束时将结果送回主会话。子会话只能发起同级只读任务，不能生成下一层；目前不支持独立可写 worktree、历史 fork 或跨机器执行。实现边界见 [Mac 子会话设计](docs/MAC_CHILD_SESSIONS.md)。
+
 Magpie 社区 Agent 接入（1.427.0-rc1，Build 941，未发布）：Desktop 只读消费自己的 `~/.willdeep/integrations/magpie/desktop/connection.json`，以临时 Provider 为未显式选择的新会话提供默认连接。既有会话固定来源与完整模型 ID，A→B 仅影响后续新会话；断开原集成会话明确报错，原 Provider 库、默认配置和钥匙串不因连接被改写。详情及 CLI 互操作边界见 [Magpie 集成设计](docs/MAGPIE_AGENT_INTEGRATION.md)。
 
 联合发布候选（1.425.0-rc1）：短剧公开工作流由已运行的 Rust Runtime 管理，Mac 页面与 CLI 共用工作流状态；成片预览与保存校验验收结果及 SHA256。内嵌短剧工坊 0.53.0-rc9、配置插件 0.6.0-rc2；自动制作需要已配置且批准插件的兼容 Runtime，发布不会重启现有任务。
@@ -62,7 +64,7 @@ Worker 终态（1.420.0-rc3）：最终答复和轮次耗尽由宿主的明确�
 目标的计划、全部阶段和验收完成后，当前会话自动切回普通模式，保留计划和验收证据供回看；预算暂停、待复核和阶段中途完成仍保持目标模式。恢复旧的已完成目标会话也会退出目标模式。
 主 Agent 按工具结果判断能否跨过轮数检查点继续：新读取结果或成功操作是执行活跃信号，不代表验收通过；重复结果、同一操作连续失败或持续无新结果会暂停。后台任务仍运行时允许等待，token 预算和 Goal 时间/交接限制仍生效；子 Agent 保留独立硬轮数上限。
 
-> Last updated: 2026-11-04 | Current version: v1.427.0-rc3 | Build: 943
+> Last updated: 2026-11-04 | Current version: v1.428.0-rc1 | Build: 944
 
 完全访问命令策略改为有界结构分析：区分命令、引用参数、重定向和管道，修复日志文本被误判为 netcat 的问题；确认卡显示命中规则。详细边界与回归记录见 [命令规则复查](docs/FULL_ACCESS_DENYLIST_REVIEW.md)。
 

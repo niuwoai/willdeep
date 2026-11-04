@@ -191,6 +191,9 @@ extension AppState {
                 runtime.pendingContextRunwayResume = false
                 runtime.contextRunwayResumeCount = 0
             }
+            // Settle a child's first task before a queued message claims the
+            // runtime. A runway task stays open while its resume is pending.
+            recordChildSessionCompletionIfNeeded(for: runtime, wasUserStopped: false)
             // Auto-compression can be racing with a queued message; resume
             // the queue once compression resolves so the user doesn't see
             // "queued" forever.
@@ -209,6 +212,9 @@ extension AppState {
                 if !deferGoalAfterCompressionFailure(compressionFailure, for: runtime) {
                     relayContextRunwayAfterCompressionFailure(for: runtime)
                 }
+                // Compression failed after the runway stopped the first turn.
+                // A child cannot relay into an unrestricted top-level session.
+                recordChildSessionCompletionIfNeeded(for: runtime, wasUserStopped: false)
             }
             // A background job/media task/subagent finishing while
             // `isCompressingContext` was set had its auto-resume guarded
@@ -508,6 +514,7 @@ extension AppState {
             return
         }
         runtime.contextRunwayResumeCount += 1
+        runtime.childContextRunwayHandoffStopped = false
 
         dispatchAgentMessageUsingSelectedExecutor(
             runtime.executionAgent,

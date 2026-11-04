@@ -182,7 +182,7 @@ nonisolated enum AgentSessionStore {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(id.uuidString).json")
                 guard !wouldTruncateStoredTranscript(payload, at: url) else {
-                    print("AgentSessionStore: refused to overwrite session \(id) with an empty transcript")
+                    print("AgentSessionStore: refused to overwrite session \(id) with truncated stored content")
                     pendingWrites.finish(id)
                     return
                 }
@@ -250,6 +250,8 @@ nonisolated enum AgentSessionStore {
         let workspaceLocation: WorkspaceLocation?
         let sidebarWorkspaceRootPath: String?
         let presentationScope: AgentSessionPresentationScope
+        let parentSessionID: UUID?
+        let childSessionAssignment: AgentChildSessionAssignment?
         let localWorkspaceIdentity: LocalWorkspaceIdentity?
         let modelID: String?
         let providerID: String?
@@ -283,7 +285,7 @@ nonisolated enum AgentSessionStore {
         let hasAnyMessage: Bool
 
         enum CodingKeys: String, CodingKey {
-            case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, localWorkspaceIdentity, modelID
+            case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, parentSessionID, childSessionAssignment, localWorkspaceIdentity, modelID
             case providerID, providerDisplayName
             case createdAt, updatedAt, messages
             case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts
@@ -300,6 +302,11 @@ nonisolated enum AgentSessionStore {
             workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
                 ?? workspaceRootPath.map { .local(path: $0) }
             sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
+            parentSessionID = try c.decodeIfPresent(UUID.self, forKey: .parentSessionID)
+            childSessionAssignment = try c.decodeIfPresent(
+                AgentChildSessionAssignment.self,
+                forKey: .childSessionAssignment
+            )?.forCatalog()
             localWorkspaceIdentity = try c.decodeIfPresent(LocalWorkspaceIdentity.self, forKey: .localWorkspaceIdentity)
             modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
             providerID = try c.decodeIfPresent(String.self, forKey: .providerID)
@@ -353,6 +360,8 @@ nonisolated enum AgentSessionStore {
                 workspaceLocation: workspaceLocation,
                 sidebarWorkspaceRootPath: sidebarWorkspaceRootPath,
                 presentationScope: presentationScope,
+                parentSessionID: parentSessionID,
+                childSessionAssignment: childSessionAssignment,
                 localWorkspaceIdentity: localWorkspaceIdentity,
                 modelID: modelID,
                 providerID: providerID,
@@ -1006,7 +1015,7 @@ nonisolated enum AgentSessionStore {
     private static func writeCatalogEntryBestEffort(_ entry: CatalogEntry) {
         do {
             try ensureCatalogDirectory()
-            let data = try encoder.encode(entry)
+            let data = try redactPersistedCredentials(in: encoder.encode(entry))
             try coordinatedWrite(data, to: catalogURL(for: entry.session.id))
         } catch {
             // Conversation persistence already succeeded. A missing sidecar
@@ -1067,7 +1076,9 @@ nonisolated enum AgentSessionStore {
     /// equivalence against the full-decode result.
     private static func writeUsageCatalogEntryBestEffort(for session: AgentSession, sourceURL: URL) {
         guard let signature = sourceSignature(for: sourceURL) else { return }
-        let snapshot = AgentUsageSessionSnapshot(session: session)
+        guard let snapshot = redactedUsageSnapshot(AgentUsageSessionSnapshot(session: session)) else {
+            return
+        }
         writeUsageCatalogEntryBestEffort(
             UsageCatalogEntry(snapshot: snapshot, sourceSignature: signature),
             in: sourceURL.deletingLastPathComponent()
@@ -1080,6 +1091,30 @@ nonisolated enum AgentSessionStore {
                 modificationTime: signature.modificationTime
             )
         )
+    }
+
+    /// Usage caches are separate persisted copies of message metadata. Redact
+    /// the whole encoded snapshot before either the sidecar or SQLite sees it,
+    /// including nested tool errors and worker records.
+    private static func redactedUsageSnapshot(
+        _ snapshot: AgentUsageSessionSnapshot
+    ) -> AgentUsageSessionSnapshot? {
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(snapshot)
+            guard let json = String(data: data, encoding: .utf8) else {
+                throw CocoaError(.fileWriteInapplicableStringEncoding)
+            }
+            let redacted = AgentSensitiveContentRedactor.redactCredentials(json)
+            guard redacted != json else { return snapshot }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(AgentUsageSessionSnapshot.self, from: Data(redacted.utf8))
+        } catch {
+            print("AgentSessionStore: failed to redact usage snapshot for \(snapshot.id): \(error)")
+            return nil
+        }
     }
 
     private static func usageCatalogURL(for id: UUID, in sourceDirectory: URL) -> URL {
@@ -1126,6 +1161,16 @@ nonisolated enum AgentSessionStore {
         do {
             let data = try Data(contentsOf: url)
             let stored = try decoder.decode(AgentSession.self, from: data)
+            if let original = stored.childSessionAssignment,
+               let incoming = session.childSessionAssignment,
+               original.id == incoming.id,
+               (original.prompt.count > incoming.prompt.count
+                   || (original.resultExcerpt?.count ?? 0) > (incoming.resultExcerpt?.count ?? 0)) {
+                // The catalog keeps only a bounded preview. An empty child
+                // transcript cannot identify a sidebar skeleton by messages;
+                // reject writes that would replace its full assignment text.
+                return true
+            }
             return !stored.messages.isEmpty
         } catch {
             print("AgentSessionStore: refused to overwrite unreadable session file \(url.lastPathComponent): \(error)")
@@ -1159,6 +1204,7 @@ nonisolated enum AgentSessionStore {
     private static func metadataSession(from session: AgentSession) -> AgentSession {
         var copy = session
         copy.messages = []
+        copy.childSessionAssignment = session.childSessionAssignment?.forCatalog()
         copy.contextSummary = nil
         copy.contextCheckpoint = nil
         copy.contextSummaryThroughMessageID = nil
@@ -1555,7 +1601,7 @@ nonisolated enum AgentSessionStore {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(session.id.uuidString).json")
                 guard !wouldTruncateStoredTranscript(session, at: url) else {
-                    print("AgentSessionStore: refused to overwrite session \(session.id) with an empty transcript")
+                    print("AgentSessionStore: refused to overwrite session \(session.id) with truncated stored content")
                     return false
                 }
                 let data = try persistenceData(for: session)
@@ -1646,6 +1692,8 @@ nonisolated enum AgentSessionStore {
                     return
                 }
                 if index.hasAnyMessage
+                    || index.parentSessionID != nil
+                    || index.childSessionAssignment != nil
                     || index.workspaceRootPath != nil
                     || index.workspaceLocation != nil
                     || index.pinnedAt != nil
@@ -1676,6 +1724,8 @@ nonisolated enum AgentSessionStore {
     /// `AppState` adds the `projectID == nil` requirement on top.
     static func isAbandonedPlaceholder(_ session: AgentSession) -> Bool {
         session.messages.isEmpty
+            && session.parentSessionID == nil
+            && session.childSessionAssignment == nil
             && session.workspaceRootPath == nil
             && session.workspaceLocation == nil
             && session.pinnedAt == nil
@@ -1747,8 +1797,13 @@ nonisolated enum AgentSessionStore {
     /// cannot survive in the generated conversation JSON even if an upstream
     /// caller accidentally put plaintext into a message or tool argument.
     static func persistenceData(for session: AgentSession) throws -> Data {
-        let encoded = try encoder.encode(session.externalizingAttachmentContent())
-        guard let json = String(data: encoded, encoding: .utf8) else { return encoded }
+        try redactPersistedCredentials(in: encoder.encode(session.externalizingAttachmentContent()))
+    }
+
+    private static func redactPersistedCredentials(in encoded: Data) throws -> Data {
+        guard let json = String(data: encoded, encoding: .utf8) else {
+            throw CocoaError(.fileWriteInapplicableStringEncoding)
+        }
         return Data(AgentSensitiveContentRedactor.redactCredentials(json).utf8)
     }
 

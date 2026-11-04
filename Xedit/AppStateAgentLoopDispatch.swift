@@ -47,6 +47,11 @@ extension AppState {
                     self.magpieTurnPreparationIDs.removeValue(forKey: runtime.id)
                     runtime.isResponding = false
                     runtime.requestTask = nil
+                    if runtime.errorMessage != nil || Task.isCancelled {
+                        self.recordChildSessionCompletionIfNeeded(
+                            for: runtime, wasUserStopped: Task.isCancelled
+                        )
+                    }
                 }
             }
             do {
@@ -102,7 +107,8 @@ extension AppState {
         runtime.currentTurnPlanningOnly = source == .operatorInput
             && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
         // Slash-staged delegation directive applies to exactly this turn.
-        let delegationPolicy = runtime.resolvedComposerDelegationPolicy
+        let delegationPolicy: AgentDelegationPolicy = runtime.session.parentSessionID == nil
+            ? runtime.resolvedComposerDelegationPolicy : .forbidden
         runtime.pendingDelegationPolicy = .automatic
         runtime.currentTurnDelegationPolicy = delegationPolicy
         runtime.currentTurnSpawnAgentCallCount = 0
@@ -121,7 +127,9 @@ extension AppState {
         let pinnedWorker = runtime.pendingWorkerProfileID
         runtime.pendingWorkerProfileID = nil
         let routeDecision: AgentRequestRouter.Decision?
-        if source == .operatorInput, let pinnedWorker, delegationPolicy != .forbidden {
+        if runtime.session.parentSessionID != nil {
+            routeDecision = nil
+        } else if source == .operatorInput, let pinnedWorker, delegationPolicy != .forbidden {
             routeDecision = AgentRequestRouter.pinnedDecision(profileID: pinnedWorker)
         } else {
             routeDecision = source == .operatorInput

@@ -233,6 +233,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// interrupted work once it finishes. Cleared as soon as the resume is
     /// dispatched or refused.
     @Published var pendingContextRunwayResume: Bool = false
+    /// A child's ordered handoff must not be reported as a completed first task
+    /// when automatic continuation is exhausted or compression fails.
+    var childContextRunwayHandoffStopped = false
     /// How many times this session has auto-resumed after a runway stop. The
     /// pathological case is a task that refills the window as fast as
     /// compression drains it; without a ceiling that spins forever on the

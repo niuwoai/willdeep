@@ -139,12 +139,13 @@ nonisolated enum AgentSessionSearch {
             .map(AgentSessionSearchResult.session)
     }
 
-    /// 与侧栏一致：发送过用户消息才算会话，纯附件消息也保留。
+    /// 与侧栏一致：受托子会话即使还在排队、没有消息，也有可打开的任务记录。
     private static func hasConversation(
         _ session: AgentSession,
         isMetadataOnly: (AgentSession.ID) -> Bool,
         metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool
     ) -> Bool {
+        if session.parentSessionID != nil { return true }
         if isMetadataOnly(session.id) {
             return metadataOnlyHasUserMessage(session.id)
         }

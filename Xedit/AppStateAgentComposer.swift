@@ -524,6 +524,14 @@ extension AppState {
         delegatedProfile: LocalAgentCLIProfile? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
+        guard runtime.session.parentSessionID == nil || executionAgent == .willDeep else {
+            runtime.errorMessage = String(
+                localized: "child-session.native-only",
+                defaultValue: "This child conversation only supports WillDeep's read-only agent.",
+                table: "SessionManagement"
+            )
+            return
+        }
         switch executionAgent {
         case .willDeep:
             dispatchAgentMessage(

@@ -30,7 +30,7 @@ nonisolated struct AgentToolPack: Equatable, Sendable {
 }
 
 enum AgentToolPackCatalog {
-    static let loaderToolName = "load_tool_pack"
+    nonisolated static let loaderToolName = "load_tool_pack"
 
     /// These tools cover the normal coding loop and the two existing lazy
     /// directories (Skills and jobs). Keeping them stable avoids an extra
@@ -56,7 +56,7 @@ enum AgentToolPackCatalog {
         AgentToolPack(
             id: .sessionAutomation,
             title: "Sessions and automation",
-            summary: "List projects and their sessions, search or rename sessions, preview and batch archive/delete sessions, change workspace, run workflows, and manage scheduled tasks."
+            summary: "Start independent read-only conversations, list projects and sessions, search or rename sessions, manage archives, change workspace, run workflows, and manage scheduled tasks."
         ),
         AgentToolPack(
             id: .knowledge,
@@ -263,7 +263,8 @@ enum AgentToolPackCatalog {
 
     private static let sessionAutomationToolNames: Set<String> = [
         "list_projects", "list_project_sessions", "manage_sessions",
-        "list_workspace_sessions", "send_session_message", "search_sessions", "suggest_session_title",
+        "list_workspace_sessions", "send_session_message", AgentChildSessionTool.startName,
+        "search_sessions", "suggest_session_title",
         "rename_session", "change_workspace", "run_workflow", "schedule_task",
         "declare_environment_trust", "complete_scheduled_task", "manage_scheduled_task", "list_scheduled_tasks"
     ]

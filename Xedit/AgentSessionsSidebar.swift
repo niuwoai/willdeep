@@ -140,6 +140,7 @@ enum AgentSidebarSessionVisibility {
         return workspaceSessions.filter { session in
             session.isPinned
                 || session.id == activeID
+                || session.parentSessionID != nil
                 || hasUserMessage(session)
                 || fallbackPlaceholderIDs.contains(session.id)
         }
@@ -695,9 +696,10 @@ struct AgentSessionsSidebar: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 6)
 
-                ForEach(sessions) { session in
+                ForEach(AgentChildSessionSidebar.rows(from: sessions, groupRelated: false), id: \.session.id) { row in
                     sessionRow(
-                        session,
+                        row.session,
+                        childDepth: row.depth,
                         contentLeadingInset: AgentDesign.sidebarPinnedSessionContentHorizontalInset
                     )
                 }
@@ -714,9 +716,11 @@ struct AgentSessionsSidebar: View {
         let activeSessions = sessions.filter { !$0.isArchived }
         let archivedSessions = sessions.filter { $0.isArchived }
             .sorted { ($0.archivedAt ?? .distantPast) > ($1.archivedAt ?? .distantPast) }
+        let activeRows = AgentChildSessionSidebar.rows(from: activeSessions)
         let isExpanded = expandedWorkspaces.contains(workspace)
         let isCollapsed = collapsedWorkspaces.contains(workspace)
-        let visible = isExpanded ? activeSessions : Array(activeSessions.prefix(initialRowCount))
+        let collapsedRows = AgentChildSessionSidebar.initialRows(activeRows, rootLimit: initialRowCount)
+        let visibleRows = isExpanded ? activeRows : collapsedRows
         let archivedExpanded = expandedArchivedGroups.contains(workspace)
         let remoteWorkspace = remoteWorkspaceGroup(from: workspace)
         let remoteRuntime = group.remoteRuntime
@@ -846,11 +850,11 @@ struct AgentSessionsSidebar: View {
             }
 
             if !isCollapsed {
-                ForEach(visible) { session in
-                    sessionRow(session)
+                ForEach(visibleRows, id: \.session.id) { row in
+                    sessionRow(row.session, childDepth: row.depth)
                 }
 
-                if activeSessions.count > initialRowCount {
+                if collapsedRows.count < activeRows.count {
                     Button {
                         setWorkspaceExpanded(workspace, expanded: !isExpanded)
                     } label: {
@@ -913,8 +917,8 @@ struct AgentSessionsSidebar: View {
         .buttonStyle(.plain)
 
         if isExpanded {
-            ForEach(sessions) { session in
-                sessionRow(session)
+            ForEach(AgentChildSessionSidebar.rows(from: sessions, groupRelated: false), id: \.session.id) { row in
+                sessionRow(row.session, childDepth: row.depth)
             }
         }
     }
@@ -922,6 +926,7 @@ struct AgentSessionsSidebar: View {
     @ViewBuilder
     private func sessionRow(
         _ session: AgentSession,
+        childDepth: Int = 0,
         contentLeadingInset: CGFloat = AgentDesign.sidebarSessionContentHorizontalInset,
         contentTrailingInset: CGFloat = AgentDesign.sidebarSessionTrailingContentInset
     ) -> some View {
@@ -937,6 +942,12 @@ struct AgentSessionsSidebar: View {
                 appState.selectAgentSession(id: session.id)
             } label: {
                 HStack(spacing: 6) {
+                if session.parentSessionID != nil {
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(palette.secondaryText)
+                        .accessibilityHidden(true)
+                }
                 if activeScheduledTaskCount(for: session) > 0 {
                     Image(systemName: "clock.fill")
                         .font(.system(size: 9, weight: .semibold))
@@ -973,6 +984,15 @@ struct AgentSessionsSidebar: View {
                     runtime: observedRuntime,
                     baseFontSize: appState.agentChatBaseFontSize
                 )
+                if session.parentSessionID != nil {
+                    Text(session.childSessionAssignment.map { L10n.ChildSessionSidebar.status($0.status) }
+                        ?? L10n.ChildSessionSidebar.unknownStatus)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(palette.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(-1)
+                }
                 Spacer(minLength: 0)
                 AgentSessionModeBadges(
                     session: displaySession,
@@ -1011,7 +1031,7 @@ struct AgentSessionsSidebar: View {
                 )
                 .opacity(isHovered ? 0 : 1)
                 }
-                .padding(.leading, contentLeadingInset)
+                .padding(.leading, contentLeadingInset + CGFloat(min(childDepth, 3)) * 12)
                 .padding(.trailing, contentTrailingInset)
                 .frame(height: AgentDesign.sidebarRowHeight)
                 .contentShape(Rectangle())
@@ -1029,6 +1049,7 @@ struct AgentSessionsSidebar: View {
                 .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset)
             }
             .buttonStyle(.plain)
+            .help(session.parentSessionID == nil ? session.title : L10n.ChildSessionSidebar.openConversation)
             .accessibilityAction(
                 named: session.isPinned
                     ? L10n.Sidebar.sessionRowUnpinTooltip
