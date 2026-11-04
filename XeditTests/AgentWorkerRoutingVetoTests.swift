@@ -87,7 +87,11 @@ struct AgentWorkerRoutingVetoTests {
         #expect(keyword.enforcesDelegatedExecution(for: .automatic))
 
         let downgraded = try #require(
-            AgentWorkerRoutingVeto.downgradedDecision(for: "部署到生产环境", delegationPolicy: .automatic)
+            AgentWorkerRoutingVeto.downgradedDecision(
+                for: "部署到生产环境",
+                delegationPolicy: .automatic,
+                sharedConfig: AgentSharedRuntimeConfig()
+            )
         )
         // 这才是用户感知到的差别：guard 不再在工具边界拦住直接执行。
         #expect(!downgraded.enforcesDelegatedExecution(for: .automatic))
