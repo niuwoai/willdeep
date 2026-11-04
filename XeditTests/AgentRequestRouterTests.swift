@@ -84,7 +84,11 @@ struct AgentRequestRouterTests {
     @Test("steering names the trade and the read/write split")
     func steeringMentionsTheTrade() throws {
         let steering = try #require(
-            AgentRequestRouter.steering(for: "这个函数定义在哪个文件", delegationPolicy: .automatic)
+            AgentRequestRouter.steering(
+                for: "这个函数定义在哪个文件",
+                delegationPolicy: .automatic,
+                sharedConfig: AgentSharedRuntimeConfig()
+            )
         )
 
         #expect(steering.contains("profile=\"scout\""))
@@ -122,12 +126,14 @@ struct AgentRequestRouterTests {
         // model at it would only cost a rejected round.
         #expect(AgentRequestRouter.steering(
             for: "这个函数定义在哪个文件",
-            delegationPolicy: .forbidden
+            delegationPolicy: .forbidden,
+            sharedConfig: AgentSharedRuntimeConfig()
         ) == nil)
 
         #expect(AgentRequestRouter.steering(
             for: "这个函数定义在哪个文件",
-            delegationPolicy: .required
+            delegationPolicy: .required,
+            sharedConfig: AgentSharedRuntimeConfig()
         ) != nil)
     }
 
