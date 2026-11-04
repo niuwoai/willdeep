@@ -457,6 +457,10 @@ extension AppState {
         runtime.errorDetails = nil
         runtime.errorSeverity = .notice
 
+        // Background child sessions are not the active composer, so the
+        // activeRuntime-only retry below cannot resume them. Settle their
+        // first assignment as failed instead of leaving it running forever.
+        guard runtime.session.parentSessionID == nil else { return }
         guard runtime.turnInterruptionAutoResumeCount < AgentTurnWatchdogPolicy.maximumAutomaticResumes else { return }
         runtime.turnInterruptionAutoResumeCount += 1
         let prompt = AgentTurnWatchdogPolicy.resumePrompt(danglingToolNames: names)

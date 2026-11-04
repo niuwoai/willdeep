@@ -83,6 +83,9 @@ extension AppState {
     /// 专家、沙箱开关、知识库。交接里全是这个工作区、这套配置下的事实，
     /// 换了任何一样，ANCHORS 就对不上了。
     func makeContextRunwayRelaySession(from source: AgentRuntime, makeActive: Bool) -> AgentRuntime? {
+        // A new top-level relay would lose the child's parent and its read-only
+        // capability ceiling. Leave the failed task in its original conversation.
+        guard source.session.parentSessionID == nil else { return nil }
         let location = source.workspaceLocation ?? source.workspaceRootPath.map { .local(path: $0) }
         if let location, location.localPath == nil { return nil }
         let session = startNewAgentSession(inWorkspaceAt: location?.localPath, makeActive: makeActive)

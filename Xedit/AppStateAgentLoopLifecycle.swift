@@ -85,6 +85,9 @@ extension AppState {
         for runtime: AgentRuntime,
         finishReason: String?
     ) {
+        if runtime.session.parentSessionID != nil {
+            runtime.childContextRunwayHandoffStopped = true
+        }
         if canResumeAfterContextCompaction(for: runtime) {
             runtime.pendingContextRunwayResume = true
         }
@@ -205,6 +208,9 @@ extension AppState {
         // state the session file just captured. No-op for anything a
         // human started.
         recordRoutineRunCompletionIfNeeded(for: runtime)
+        // Settle the first assignment before optional compression starts and
+        // before a later queued turn can replace its report.
+        recordChildSessionCompletionIfNeeded(for: runtime, wasUserStopped: wasUserStopped)
         if !wasUserStopped, !wasRuntimeBudgetStopped, !shouldConsumeQueueAfterStop {
             // A runway stop means the window is already at 90%, well past
             // the ordinary 75% trigger — but `shouldAutoCompressNow` can

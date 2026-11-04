@@ -23,6 +23,11 @@ extension AppState {
                                                        protectDedicatedWorkflows: Bool) -> String? {
         if session.id == callerID || session.id == activeAgentSessionID { return "active_session" }
         if session.isPinned { return "pinned" }
+        if agentSessions.contains(where: {
+            guard $0.parentSessionID == session.id,
+                  let status = $0.childSessionAssignment?.status else { return false }
+            return status == .queued || status == .running || status == .waiting
+        }) { return "active_child_session" }
         if protectDedicatedWorkflows && session.presentationScope != .workspace { return "dedicated_workflow" }
         if session.lastTurnFailure != nil || session.goalTurnRecoveryCheckpoint != nil
             || session.currentGoal?.scheduledWake != nil { return "awaiting_attention" }
