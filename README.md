@@ -12,7 +12,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.426.0--rc1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.427.0--rc1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 **[下载 WillDeep](https://willdeep.com)** · [阅读使用指南](docs/willdeep-tutorial/README.md) · [从源码构建](docs/DEVELOPMENT.md)
@@ -38,6 +38,8 @@
 | 审查与控制 | 审批模式、工作区边界、沙箱、Diff、测试输出和执行记录 |
 
 打开模型选择器时，WillDeep 会探测本机兼容网关并列出可用模型；探测不会改变当前会话的服务商，只有选择模型后才会切换。具体协议兼容性取决于网关和模型。
+
+1.427.0-rc1 的 Magpie 社区 Agent 接入可让 Magpie 管理后续新会话的默认连接；既有会话保持自己的模型。插件已完成本地安装验收，尚未发布；使用范围和 Desktop/CLI 独立配置见 [集成说明](docs/MAGPIE_AGENT_INTEGRATION.md)。
 
 ## 一个目标，一个完整的工作现场
 

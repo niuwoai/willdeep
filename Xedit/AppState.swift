@@ -154,6 +154,16 @@ final class AppState: ObservableObject {
     /// derived from the active entry; selecting a different entry in
     /// Settings rebuilds the configuration on the spot.
     var pluginDiscoveredModels: [UUID: [String]] = [:]
+    @Published var magpieIntegrationState: AgentMagpieIntegration.State = .disconnected
+    @Published var isRefreshingMagpieIntegration = false
+    var magpieIntegrationHome: URL? = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
+        ? FileManager.default.homeDirectoryForCurrentUser : nil
+    var magpieIntegrationRefreshTask: Task<AgentMagpieIntegration.State, Never>?
+    var magpieIntegrationRefreshID: UUID?
+    var magpieSessionPreparationTasks: [UUID: Task<Void, Never>] = [:]
+    var magpieTurnPreparationIDs: [UUID: UUID] = [:]
+    var magpieDefaultEligibleSessionIDs: Set<UUID> = []
+    var magpieInitialSelections: [UUID: MagpieSessionSelectionSnapshot] = [:]
     @Published var agentProviderLibrary: AgentProviderLibrary {
         didSet {
             pluginDiscoveredModels.removeAll()
@@ -1141,6 +1151,7 @@ final class AppState: ObservableObject {
                 self.editorTerminalSettings = loaded
                 self.isApplyingExternalTerminalSettings = false
             }
+        initializeMagpieIntegration()
         guard loadSessionCatalog else { return }
         // 性能报告触发时读一次「当前在哪个界面」。只有带会话目录的主实例注册，
         // 设置窗口、桌宠那几个辅助 AppState 不抢这个位置。

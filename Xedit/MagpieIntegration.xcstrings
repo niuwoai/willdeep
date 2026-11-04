@@ -1,0 +1,31 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "magpie.managed": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Managed by Magpie · New sessions" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "由 Magpie 管理 · 对新会话生效" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "Magpie で管理 · 新しいセッションに適用" } }
+    } },
+    "magpie.refreshing": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Refreshing Magpie connection…" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在刷新 Magpie 连接…" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "Magpie 接続を更新中…" } }
+    } },
+    "magpie.disconnected": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "This session’s Magpie connection is disconnected. Reconnect in Magpie or choose another provider." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "此会话的 Magpie 连接已断开。请在 Magpie 中重新连接，或选择其他供应商。" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "このセッションの Magpie 接続は切断されています。Magpie で再接続するか、別のプロバイダーを選択してください。" } }
+    } },
+    "magpie.conflict": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The Magpie integration ID conflicts with a saved provider. Choose another provider or remove the conflicting entry in Settings." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "Magpie 集成标识与已保存的供应商冲突。请选择其他供应商，或在设置中移除冲突条目。" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "Magpie 連携の ID が保存済みプロバイダーと重複しています。別のプロバイダーを選ぶか、設定で重複する項目を削除してください。" } }
+    } },
+    "magpie.invalid": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The Magpie connection is invalid (%@). Reconnect in Magpie or choose another provider." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "Magpie 连接配置无效（%@）。请在 Magpie 中重新连接，或选择其他供应商。" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "Magpie の接続設定が無効です（%@）。Magpie で再接続するか、別のプロバイダーを選択してください。" } }
+    } }
+  },
+  "version": "1.0"
+}
