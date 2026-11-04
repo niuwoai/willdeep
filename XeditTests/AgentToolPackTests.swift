@@ -26,18 +26,34 @@ struct AgentToolPackTests {
         let tools = AgentToolRegistry.tools(activeExperts: [], loadedPacks: [])
         let names = tools.map(\.name)
 
-        // Background tasks keep their stable core; starting and reading a roundtable
-        // add two directly discoverable tools for conversational expert debate.
-        #expect(names.count <= 28)
-        #expect(names.first == AgentToolPackCatalog.loaderToolName)
+        // Background tasks, independent conversations, and roundtables are
+        // directly discoverable without a separate pack-loading model round.
+        #expect(names.count <= 29)
+        #expect(names.first == AgentChildSessionTool.startName)
+        #expect(names.contains(AgentToolPackCatalog.loaderToolName))
         #expect(names.contains("read_file"))
         #expect(names.contains("edit_file"))
         #expect(names.contains("run_command"))
         #expect(names.contains("list_skills"))
+        #expect(names.contains("start_session"))
         #expect(names.contains("start_roundtable"))
         #expect(names.contains("get_roundtable_status"))
         #expect(!names.contains("chrome_snapshot"))
         #expect(!names.contains("generate_image"))
+    }
+
+    @Test("native session creation stays ahead of similarly named plugin tools")
+    func nativeSessionCreationIsDiscoverableWithPlugin() {
+        let plugin = AgentToolDescriptor(
+            name: "mcp__video-studio__start_session", description: "", risk: .read, parameters: []
+        )
+        let names = AgentToolRegistry.tools(
+            activeExperts: [], loadedPacks: [], pluginMCPTools: [plugin]
+        ).map(\.name)
+
+        #expect(names.contains("start_session"))
+        #expect(names.contains(plugin.name))
+        #expect(names.firstIndex(of: "start_session")! < names.firstIndex(of: plugin.name)!)
     }
 
     @Test("loaded packs append schemas in registry order and never remove the core")

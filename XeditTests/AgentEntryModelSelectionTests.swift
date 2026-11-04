@@ -471,6 +471,7 @@ struct AgentEntryModelSelectionTests {
 final class KeychainSandbox {
     let service: String
     let suiteName: String
+    var defaults: UserDefaults { sandboxDefaults }
     private let sandboxDefaults: UserDefaults
 
     init() {

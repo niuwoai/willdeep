@@ -55,6 +55,14 @@ struct AppStateMagpieIntegrationTests {
     func pinnedModelsAndStorage() async throws {
         let sandbox = KeychainSandbox()
         defer { withExtendedLifetime(sandbox) {} }
+        try await AppDefaults._withTestDefaults(sandbox.defaults) {
+            try await AgentSettingsStore._withTestDefaults(sandbox.defaults) {
+                try await verifyPinnedModelsAndStorage()
+            }
+        }
+    }
+
+    private func verifyPinnedModelsAndStorage() async throws {
         let root = try home()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = app(home: root)
@@ -78,7 +86,16 @@ struct AppStateMagpieIntegrationTests {
         #expect(activeSnapshot.magpieConnection?.contextWindow == 8192)
         #expect(app.effectiveAgentProviderLibrary.entries.count == 2)
         #expect(app.agentProviderLibrary.entries.count == 1)
-        #expect(app.agentConfiguration == savedConfiguration)
+        // Parallel suites may refresh the auxiliary image provider. Magpie must
+        // leave the active conversation provider and its model selection alone.
+        #expect(app.agentConfiguration.providerID == savedConfiguration.providerID)
+        #expect(app.agentConfiguration.baseURL == savedConfiguration.baseURL)
+        #expect(app.agentConfiguration.model == savedConfiguration.model)
+        #expect(app.agentConfiguration.flashModel == savedConfiguration.flashModel)
+        #expect(app.agentConfiguration.proModel == savedConfiguration.proModel)
+        #expect(app.agentConfiguration.routingMode == savedConfiguration.routingMode)
+        #expect(app.agentConfiguration.customKindOverride == savedConfiguration.customKindOverride)
+        #expect(app.agentConfiguration.magpieConnection == nil)
         #expect(try storedLibrary() == before)
         #expect(AgentSettingsStore.loadProviderLibrary().entries.allSatisfy { $0.id != AgentMagpieIntegration.providerEntryID })
         #expect(!AgentSettingsStore.materializeProviderLibraryAPIKey(in: &app.agentProviderLibrary, id: AgentMagpieIntegration.providerEntryID))
