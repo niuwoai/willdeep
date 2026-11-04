@@ -622,7 +622,8 @@ extension AppState {
             // is already enforced by the tool table below; this paragraph
             // only stops the model from burning a round on a call that the
             // transport would reject.
-            if let delegationInstruction = runtime.currentTurnDelegationPolicy.systemPromptInstruction {
+            if runtime.session.parentSessionID == nil,
+               let delegationInstruction = runtime.currentTurnDelegationPolicy.systemPromptInstruction {
                 assembledPrompt += "\n\n\(delegationInstruction)"
             }
             // The runtime's classification of this turn's request. Advisory
@@ -660,6 +661,9 @@ extension AppState {
             if runtime.prefersVisibleTerminal {
                 systemPrompt += "\n\n" + AgentPanelStateMention.visibleTerminalExecutionInstruction
             }
+            if runtime.session.parentSessionID != nil {
+                systemPrompt += "\n\nThis is a read-only independent child conversation. Your first task brief was supplied by the host, not typed by the operator. Inspect the workspace and report findings; do not write, run commands, use integrations or spawn workers. When useful, start_session creates a sibling under your original parent; it cannot create your child. You can ask the operator a question when truly necessary."
+            }
             let cacheDiagnostics = AgentContextBuilder.cacheDiagnostics(
                 for: systemPrompt,
                 toolsEnabled: true,
@@ -680,7 +684,7 @@ extension AppState {
                 pluginMCPTools: AgentPluginMCPToolCatalog.descriptors(
                     activeServers: AgentMCPServerDirectory.list()
                 )
-            )
+            ).filter { runtime.session.parentSessionID == nil || AgentChildSessionTool.permits($0.name) }
             // The model-facing slice plus its two usage readings. A nested
             // function because the pre-send gate below may compress and then
             // needs exactly this rebuilt from the fresh summary — the request
@@ -1593,6 +1597,27 @@ extension AppState {
                     continue
                 }
 
+                // A child's read-only ceiling is enforced at the execution
+                // choke point too: a stale provider response, alias, plugin or
+                // restored call cannot bypass the model-facing tool filter.
+                if runtime.session.parentSessionID != nil,
+                   !AgentChildSessionTool.permits(call.toolName) {
+                    let reason = "This child conversation is read-only; \(call.toolName) is unavailable. Report the finding to the parent instead."
+                    var failed = AgentToolCall(
+                        messageID: assistantID, externalID: call.externalID,
+                        toolName: call.toolName, arguments: argsDict,
+                        risk: .read, status: .failed, approvalSource: nil
+                    )
+                    failed.errorMessage = reason
+                    runtime.toolCalls.append(failed)
+                    appendToolMessage(
+                        for: runtime, toolCallID: call.externalID,
+                        payload: reason, outcomeStatus: .failed,
+                        errorMessage: reason
+                    )
+                    continue
+                }
+
                 // The single choke point for `monitor`: from here on it is the
                 // background `run_command` it runs, so risk, auto-approval,
                 // cards, judge and sandbox decide exactly as for that command.
@@ -2217,7 +2242,9 @@ extension AppState {
                         status: .awaitingUserAnswer,
                         runtime: runtime
                     )
+                    markChildSessionWaiting(true, for: runtime)
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
+                    markChildSessionWaiting(false, for: runtime)
                     if runtime.toolCalls.first(where: { $0.id == recordID })?.status == .failed {
                         finishHostStoppedToolRound(runtime: runtime, assistantID: assistantID, recordID: recordID)
                         return
@@ -2271,7 +2298,9 @@ extension AppState {
                         status: risk == .danger ? .awaitingConfirm : .pendingApproval,
                         runtime: runtime
                     )
+                    markChildSessionWaiting(true, for: runtime)
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
+                    markChildSessionWaiting(false, for: runtime)
                     if runtime.toolCalls.first(where: { $0.id == recordID })?.status == .failed {
                         finishHostStoppedToolRound(runtime: runtime, assistantID: assistantID, recordID: recordID)
                         return
@@ -2343,6 +2372,10 @@ extension AppState {
                 }
                 if call.toolName == AgentPeerMessageTool.name {
                     executePeerSessionMessageToolCall(call, recordID: recordID, arguments: argsDict, runtime: runtime)
+                    continue
+                }
+                if call.toolName == AgentChildSessionTool.startName {
+                    executeStartChildSessionToolCall(call, recordID: recordID, arguments: argsDict, runtime: runtime)
                     continue
                 }
 

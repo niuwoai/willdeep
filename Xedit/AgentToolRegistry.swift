@@ -20,7 +20,8 @@
 import Foundation
 
 enum AgentToolRegistry {
-    static let all: [AgentToolDescriptor] = AgentSessionManagementTools.descriptors + [
+    static let all: [AgentToolDescriptor] = AgentSessionManagementTools.descriptors
+        + [AgentChildSessionTool.descriptor] + [
         AgentToolPackCatalog.loaderDescriptor,
         AgentContextReadTool.descriptor,
         AgentToolDescriptor(

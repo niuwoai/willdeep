@@ -1427,6 +1427,30 @@ nonisolated enum L10n {
         static let openInEditor = String(localized: "file-tree.open-in-editor", defaultValue: "Open in Editor")
     }
 
+    enum ChildSessionSidebar {
+        static let openConversation = String(localized: "child-session.open-conversation", defaultValue: "Open full conversation", table: "SessionManagement")
+        static let unknownStatus = String(localized: "child-session.status.unknown", defaultValue: "Status unavailable", table: "SessionManagement")
+
+        static func status(_ value: AgentChildSessionAssignment.Status) -> String {
+            switch value {
+            case .queued:
+                return String(localized: "child-session.status.queued", defaultValue: "Queued", table: "SessionManagement")
+            case .running:
+                return String(localized: "child-session.status.running", defaultValue: "Running", table: "SessionManagement")
+            case .waiting:
+                return String(localized: "child-session.status.waiting", defaultValue: "Waiting", table: "SessionManagement")
+            case .completed:
+                return String(localized: "child-session.status.completed", defaultValue: "Done", table: "SessionManagement")
+            case .failed:
+                return String(localized: "child-session.status.failed", defaultValue: "Failed", table: "SessionManagement")
+            case .cancelled:
+                return String(localized: "child-session.status.cancelled", defaultValue: "Cancelled", table: "SessionManagement")
+            case .interrupted:
+                return String(localized: "child-session.status.interrupted", defaultValue: "Interrupted", table: "SessionManagement")
+            }
+        }
+    }
+
     enum Sidebar {
         static func archivedSessionsHeader(_ a1: String) -> String {
             let template = String(localized: "sidebar.archived-sessions.header", defaultValue: "Archived")

@@ -2170,8 +2170,9 @@ struct WillDeepTests {
         // 1.396/1.397 browser batch (press_key / scroll / upload tools and the
         // optional `tab_id` on 14 Chrome tools) measures 51,157.
         // 1.413 roundtable tools intentionally bring the registry to 51,815.
-        // Keep the regression ceiling within 185 tokens of that baseline.
-        let maximumExpectedToolSchemaTokens = 52_000
+        // 1.428.0-rc1 `start_session` adds a bounded independent task schema;
+        // the measured complete registry is 52,236 tokens. Keep a narrow margin.
+        let maximumExpectedToolSchemaTokens = 52_450
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)

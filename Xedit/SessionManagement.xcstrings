@@ -1,6 +1,106 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "child-session.open-conversation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open full conversation" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开完整会话" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir conversación completa" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir la conversation complète" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "会話全体を開く" } }
+      }
+    },
+    "child-session.status.unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Status unavailable" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "状态未知" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Estado no disponible" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Statut indisponible" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "状態を確認できません" } }
+      }
+    },
+    "child-session.status.queued": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Queued" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "排队中" } },
+        "es": { "stringUnit": { "state": "translated", "value": "En cola" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "En file d’attente" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "待機中" } }
+      }
+    },
+    "child-session.status.running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Running" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "运行中" } },
+        "es": { "stringUnit": { "state": "translated", "value": "En ejecución" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "En cours" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "実行中" } }
+      }
+    },
+    "child-session.status.waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Waiting" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "等待中" } },
+        "es": { "stringUnit": { "state": "translated", "value": "En espera" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "En attente" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "応答待ち" } }
+      }
+    },
+    "child-session.status.completed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Done" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已完成" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Completado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Terminé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "完了" } }
+      }
+    },
+    "child-session.status.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Failed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "失败" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Fallido" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Échec" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "失敗" } }
+      }
+    },
+    "child-session.status.cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancelled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已取消" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Cancelado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Annulé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "キャンセル済み" } }
+      }
+    },
+    "child-session.status.interrupted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Interrupted" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已中断" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Interrumpido" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Interrompu" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "中断" } }
+      }
+    },
+    "child-session.native-only": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This child conversation only supports WillDeep's read-only agent." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此子会话仅支持 WillDeep 的只读智能体。" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Esta conversación secundaria solo admite el agente de solo lectura de WillDeep." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Cette conversation enfant prend uniquement en charge l’agent en lecture seule de WillDeep." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この子セッションでは、WillDeep の読み取り専用エージェントのみ使用できます。" } }
+      }
+    },
     "section": {
       "extractionState": "manual",
       "localizations": {

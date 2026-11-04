@@ -584,6 +584,9 @@ final class AppState: ObservableObject {
     /// One delayed retry per runtime when authenticated external wakeups hit
     /// their process-wide sliding-window budget.
     var agentExternalWakeRetryTasks: [UUID: Task<Void, Never>] = [:]
+    /// Bounded retries for a child's first result when its terminal session
+    /// snapshot could not be confirmed on disk before notifying the parent.
+    var childResultRetryTasks: [UUID: Task<Void, Never>] = [:]
     /// Marks cancellation initiated by a host-trusted critical kernel event.
     /// A normal stop/provider failure must not auto-retry forever, while a
     /// real preemption must restart from the preserved transcript.
@@ -1210,6 +1213,7 @@ final class AppState: ObservableObject {
             // early callers skipped so the board reflects reality without
             // waiting for the next user interaction.
             self.synchronizeDispatchBoardInBackground()
+            self.recoverChildSessionResults()
 
             // Event journals follow the session retention boundary. Archived
             // and deleted conversations must not leave mail/webhook payloads
@@ -1241,6 +1245,7 @@ final class AppState: ObservableObject {
 
     deinit {
         agentExternalWakeRetryTasks.values.forEach { $0.cancel() }
+        childResultRetryTasks.values.forEach { $0.cancel() }
         sessionAutoArchiveTask?.cancel()
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()
