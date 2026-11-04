@@ -201,6 +201,7 @@ struct AgentChildSessionRuntimeTests {
     func terminalSaveRetryPublishesResult() async {
         let kernel = AgentRuntimeKernel(loadPersisted: false, persistsEvents: false)
         let (state, parent, child) = childFixture(kernel: kernel)
+        defer { withExtendedLifetime(state) {} }
         defer { AgentSessionStore.delete(id: child.id); AgentSessionStore.delete(id: parent.id) }
         child.messages.append(AgentMessage(role: .assistant, content: "Recovered report"))
         state.recordChildSessionCompletionIfNeeded(
@@ -208,10 +209,13 @@ struct AgentChildSessionRuntimeTests {
         )
         #expect(!kernel.events.contains { $0.metadata["child_session_id"] == child.id.uuidString })
 
-        let deadline = ContinuousClock.now + .seconds(5)
+        // The retry schedule reaches its third attempt after 13 seconds;
+        // concurrent suites can delay MainActor work beyond that point.
+        let deadline = ContinuousClock.now + .seconds(40)
         while !kernel.events.contains(where: { $0.metadata["child_session_id"] == child.id.uuidString }),
               ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(100))
+            do { try await Task.sleep(for: .milliseconds(100)) }
+            catch { break }
         }
         #expect(kernel.events.contains {
             $0.metadata["child_session_id"] == child.id.uuidString
@@ -247,11 +251,11 @@ struct AgentChildSessionRuntimeTests {
         #expect(journal.contains("[REDACTED:API-KEY]"))
     }
 
-    @Test("Parent discovers the tool in the session automation pack")
+    @Test("Parent discovers the native child session tool without loading a pack")
     func toolCatalogRegistration() {
-        #expect(AgentToolPackCatalog.toolNames(in: .sessionAutomation)
-            .contains(AgentChildSessionTool.startName))
-        #expect(AgentToolRegistry.all.contains { $0.name == AgentChildSessionTool.startName })
+        #expect(AgentToolPackCatalog.coreToolNames.contains(AgentChildSessionTool.startName))
+        #expect(AgentToolRegistry.tools(activeExperts: [], loadedPacks: [])
+            .contains { $0.name == AgentChildSessionTool.startName })
     }
 
     @MainActor

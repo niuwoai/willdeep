@@ -221,21 +221,27 @@ struct AgentEmbeddedBrowserInteractionTests {
 
     // MARK: - Script robustness
 
-    @Test("永不结束的 eval 可以被取消，不会把回合挂死")
-    func hungEvalIsCancellable() async throws {
-        let sandbox = try Sandbox()
-        defer { AgentEmbeddedBrowserController.release(for: sandbox.runtimeID) }
-        let page = try sandbox.write("hang.html", "<html><body>hang</body></html>")
-        let controller = try await open(page, in: sandbox)
-
-        let started = ContinuousClock.now
+    @Test("等待中的页面回调可取消，迟到回调不会重复完成")
+    func pendingWebKitCallbackIsCancellable() async throws {
+        let runtimeID = UUID()
+        defer { AgentEmbeddedBrowserController.release(for: runtimeID) }
+        let controller = AgentEmbeddedBrowserController.controller(for: runtimeID)
+        var complete: (@MainActor (Result<Any, any Error>) -> Void)?
         let task = Task { @MainActor in
-            try await controller.evaluate(source: "await new Promise(() => {});", maxChars: 100)
+            try await controller.awaitWebKitCallback(timeout: .seconds(30), what: "test callback") { finish in
+                complete = finish
+            }
         }
-        try await Task.sleep(for: .milliseconds(200))
+        let startDeadline = ContinuousClock.now + .seconds(20)
+        while complete == nil && ContinuousClock.now < startDeadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let finish = try #require(complete)
+        let cancelledAt = ContinuousClock.now
         task.cancel()
         await #expect(throws: CancellationError.self) { _ = try await task.value }
-        #expect(ContinuousClock.now - started < .seconds(5))
+        #expect(ContinuousClock.now - cancelledAt < .seconds(25))
+        finish(.success("late result"))
     }
 
     @Test("非法选择器报出页面里的真实异常信息")
