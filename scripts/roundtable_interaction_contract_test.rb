@@ -66,11 +66,11 @@ add_check.call(
   includes_all?(
     submit_source,
     [
-      "flags.contains(.shift)",
-      "flags.contains(.option)",
-      "flags.contains(.control)",
-      "return !wantsLineBreak",
-      "guard !hasMarkedText else { return false }"
+      "if treatsMarkedTextAsComposition, hasMarkedText { return .newline }",
+      "if flags.contains(.option) { return .enqueue }",
+      "if flags.contains(.shift) || flags.contains(.control) { return .newline }",
+      "== .send else {",
+      "return false"
     ]
   ),
   "Shift/Option/Control + Return must remain available for deliberate line breaks."
