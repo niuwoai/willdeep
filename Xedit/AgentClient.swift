@@ -145,8 +145,16 @@ struct AgentClient {
         requestLedger: AgentModelRequestLedger? = nil,
         onRoutedModel: (@MainActor @Sendable (String) -> Void)? = nil
     ) {
-        self.configuration = configuration.normalized
-        self.session = session
+        var effective = configuration.normalized
+        if effective.magpieConnection != nil {
+            do {
+                try effective.validateMagpieConnection()
+                effective.baseURL = try AgentMagpieIntegration.validatedBaseURL(effective.baseURL)
+            } catch let failure as AgentMagpieIntegration.Failure { effective.magpieFailure = failure }
+            catch { effective.magpieFailure = .init(code: .url) }
+        }
+        self.configuration = effective
+        self.session = effective.magpieConnection == nil ? session : AgentMagpieTransport.sharedSession
         self.someIMContext = someIMContext
         self.requestLedger = requestLedger
         self.openAIResponsesContinuationState = openAIResponsesContinuationState
@@ -161,6 +169,7 @@ struct AgentClient {
         onEmptyResponseRetry: (@MainActor (Int, Int) -> Void)? = nil,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
+        try configuration.validateMagpieConnection()
         if let executionBudget {
             try await executionBudget.runModelRequest {
                 try await streamChatRetryLoop(messages: messages, tools: tools, executionBudget: executionBudget,
@@ -244,6 +253,7 @@ struct AgentClient {
         kind: AgentSafetyJudgeKind = .developerOperations,
         executionBudget: AgentToolExecutionBudget? = nil
     ) async throws -> AgentSafetyJudgeResult {
+        try configuration.validateMagpieConnection()
         try Task.checkCancellation()
         try executionBudget?.checkCurrentOwner()
         if let requestLedger, let ownerLedger = executionBudget?.requestLedger, requestLedger != ownerLedger {
@@ -318,6 +328,7 @@ struct AgentClient {
         model: String, systemPrompt: String, userPayload: String, maxTokens: Int,
         executionBudget: AgentToolExecutionBudget? = nil
     ) async throws -> String? {
+        try configuration.validateMagpieConnection()
         try Task.checkCancellation()
         try executionBudget?.checkCurrentOwner()
         if let requestLedger, let ownerLedger = executionBudget?.requestLedger, requestLedger != ownerLedger {
@@ -346,6 +357,7 @@ struct AgentClient {
     }
 
     func fetchModels() async throws -> [String] {
+        try configuration.validateMagpieConnection()
         switch configuration.providerKind {
         case .openAIChat:
             return try await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
@@ -363,6 +375,7 @@ struct AgentClient {
     }
 
     func fetchModelDiscoveries() async throws -> [AgentModelDiscovery] {
+        try configuration.validateMagpieConnection()
         switch configuration.providerKind {
         case .openAIChat:
             return try await OpenAIChatAdapter(configuration: configuration, session: session)
