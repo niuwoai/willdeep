@@ -209,7 +209,7 @@ Dir.mktmpdir do |directory|
       retried = tool.call("video.retry", { "id" => failed_job["id"] })
       check(retried.dig("job", "retryOf") == failed_job["id"], "Explicit retry creates a linked new attempt and preserves the original.", results)
 
-      invalid = tool.call("video.generate", { "prompt" => "bad duration", "duration" => 5 })
+      invalid = tool.call("video.generate", { "prompt" => "bad duration", "duration" => 3 })
       check(!invalid["ok"] && invalid.dig("error", "code") == "invalid_duration", "Invalid duration is rejected before submission.", results)
 
       ["invalid response", "missing identifier"].each do |prompt|
