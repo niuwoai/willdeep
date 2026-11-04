@@ -204,6 +204,7 @@ nonisolated enum AgentLocalModelPrompting {
     /// Discovery supplies this client identity even on a custom Magpie port.
     /// A loopback gateway does not imply local model inference.
     static func isMagpieGateway(_ configuration: AgentConfiguration) -> Bool {
+        if configuration.magpieConnection != nil { return true }
         if configuration.providerID.lowercased() == "magpie" { return true }
         guard let url = URL(string: configuration.baseURL),
               let host = url.host?.lowercased(),
@@ -756,6 +757,9 @@ extension AppState {
         // 2026-09-23 起压缩不再走本地小模型：把十几万 token 的历史交给一个
         // 2B 模型，实测每次只喂得进几千 token，压出来的摘要撑不起后续工作。
         let normalized = auxiliaryBaseConfiguration(for: runtime)
+        if normalized.magpieConnection != nil || normalized.magpieFailure != nil {
+            return [normalized.resolved(for: .compression)]
+        }
         let hasExplicitCompressionModel = !normalized.compressionModel
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hosted = hasExplicitCompressionModel ? nil : someIMContextCompressorConfiguration()
@@ -809,6 +813,7 @@ extension AppState {
         fallback.flashModel = remoteModelID
         fallback.proModel = remoteModelID
         fallback.routingMode = .flash
+        if fallback.magpieConnection != nil || fallback.magpieFailure != nil { return [fallback] }
         return auxiliaryConfigurationCandidates(
             local: localAuxiliaryConfiguration(for: .title),
             fallback: fallback

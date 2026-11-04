@@ -470,6 +470,10 @@ struct ModelPickerPill: View {
         .onReceive(appState.$agentProviderLibrary) { _ in
             refreshMenuSnapshot()
         }
+        .onReceive(appState.$magpieIntegrationState) { _ in
+            // @Published emits before assignment; defer the projection read.
+            Task { @MainActor in refreshMenuSnapshot() }
+        }
         .onReceive(appState.$agentConfiguration) { _ in
             refreshMenuSnapshot()
         }
@@ -616,6 +620,13 @@ struct ModelPickerPill: View {
                 }
                 .padding(.horizontal, 7)
                 .padding(.vertical, 5)
+            }
+
+            if appState.isRefreshingMagpieIntegration {
+                Text(L10n.MagpieIntegration.refreshing).font(.caption).foregroundStyle(.secondary)
+            }
+            if let failure = appState.magpieIntegrationFailure {
+                Text(failure.localizedDescription).font(.caption).foregroundStyle(.secondary)
             }
 
             ForEach(entries) { entry in
@@ -1823,7 +1834,8 @@ struct ModelPickerPill: View {
     }
 
     private func providerCatalogSubtitle(_ entry: AgentProviderEntry) -> String {
-        L10n.AgentModelPicker.modelCount(catalogItems(for: entry).count)
+        if entry.id == AgentMagpieIntegration.providerEntryID { return L10n.MagpieIntegration.managed }
+        return L10n.AgentModelPicker.modelCount(catalogItems(for: entry).count)
     }
 
     private func selectSource(_ source: AgentModelPickerSource) {
@@ -1866,10 +1878,16 @@ struct ModelPickerPill: View {
         } else {
             selectSource(.allModels)
         }
-        selectableProviderEntries.forEach { entry in
+        selectableProviderEntries.filter { $0.id != AgentMagpieIntegration.providerEntryID }.forEach { entry in
             refreshProviderCatalog(entry)
         }
-        discoverLocalGatewaysForPicker()
+        Task { @MainActor in
+            await appState.refreshMagpieIntegration()
+            guard isModelPanelPresented else { return }
+            refreshMenuSnapshot()
+            if let entry = appState.magpieProviderEntry { refreshProviderCatalog(entry, force: true) }
+            discoverLocalGatewaysForPicker()
+        }
     }
 
     private func discoverLocalGatewaysForPicker() {
@@ -1884,13 +1902,13 @@ struct ModelPickerPill: View {
             guard !Task.isCancelled, isModelPanelPresented else { return }
             for gateway in gateways {
                 let normalizedURL = gateway.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                var existing = appState.agentProviderLibrary.entries.first {
+                var existing = appState.effectiveAgentProviderLibrary.entries.first {
                     $0.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                         .caseInsensitiveCompare(normalizedURL) == .orderedSame
                 }
                 if let existingID = existing?.id {
                     appState.materializeProviderLibraryEntryAPIKey(id: existingID)
-                    existing = appState.agentProviderLibrary.entries.first(where: { $0.id == existingID })
+                    existing = appState.effectiveAgentProviderLibrary.entries.first(where: { $0.id == existingID })
                 }
                 let entry: AgentProviderEntry
                 if let existing {
@@ -1913,17 +1931,22 @@ struct ModelPickerPill: View {
         loadingProviderIDs.insert(entry.id)
         providerLoadFailures.remove(entry.id)
         appState.materializeProviderLibraryEntryAPIKey(id: entry.id)
-        let resolvedEntry = appState.agentProviderLibrary.entries.first(where: { $0.id == entry.id }) ?? entry
         Task { @MainActor in
             defer { loadingProviderIDs.remove(entry.id) }
             do {
+                if entry.id == AgentMagpieIntegration.providerEntryID { await appState.refreshMagpieIntegration() }
+                guard let resolvedEntry = appState.effectiveAgentProviderLibrary.entries.first(where: { $0.id == entry.id }) else {
+                    throw appState.magpieIntegrationFailure ?? AgentMagpieIntegration.Failure(code: .disconnected)
+                }
                 // Discoveries, not bare ids: they carry each model's own
                 // context window (the local id-matching table only guesses)
                 // and the free marking the price list published.
                 let found = try await AgentClient(configuration: resolvedEntry.makeConfiguration())
                     .fetchModelDiscoveries()
                 fetchedModelsByProvider[entry.id] = found.map(\.id)
-                appState.recordFetchedAgentModelDiscoveries(found)
+                if entry.id != AgentMagpieIntegration.providerEntryID {
+                    appState.recordFetchedAgentModelDiscoveries(found)
+                }
             } catch {
                 fetchedModelsByProvider[entry.id] = []
                 providerLoadFailures.insert(entry.id)
@@ -1962,7 +1985,7 @@ struct ModelPickerPill: View {
         AgentModelPickerPresentation.pillLabel(
             managedActive: isManagedRoutingActive,
             currentModelLabel: currentModelLabel,
-            providerDisplayName: appState.agentProviderLibrary.entries.count > 1
+            providerDisplayName: appState.effectiveAgentProviderLibrary.entries.count > 1
                 ? appState.activeAgentProviderEntry?.displayName : nil,
             managedLabel: L10n.AgentModelPicker.managed,
             selectModelLabel: L10n.AgentModelPicker.selectModel
@@ -2225,7 +2248,7 @@ struct ModelPickerPill: View {
     /// used to filter ad-hoc model groups so we don't repeat them.
     private var libraryModelSet: Set<String> {
         var s = Set<String>()
-        for e in appState.agentProviderLibrary.entries {
+        for e in appState.effectiveAgentProviderLibrary.entries {
             s.formUnion(e.allFlashModels)
             s.formUnion(e.allProModels)
         }
@@ -2269,7 +2292,7 @@ struct ModelPickerPill: View {
     }
 
     private func refreshMenuSnapshot() {
-        let library = appState.agentProviderLibrary
+        let library = appState.effectiveAgentProviderLibrary
         let sessionProvider = appState.activeAgentProviderEntry
         let configured = appState.activeRuntime.map {
             appState.configurationForCurrentTurn(for: $0).model(for: .interactive)
@@ -2309,7 +2332,7 @@ struct ModelPickerPill: View {
             let model = managed.currentTaskActualModel ?? managed.currentTaskModel.flatMap { SomeIMManagedModel.allowlist.contains($0) ? $0 : nil }
                 ?? SomeIMManagedModel.autoFlash
             let core = "\(L10n.AgentManagedRouting.title) · \(model)"
-            guard appState.agentProviderLibrary.entries.count > 1,
+            guard appState.effectiveAgentProviderLibrary.entries.count > 1,
                   let active = appState.activeAgentProviderEntry else {
                 return core
             }
@@ -2326,7 +2349,7 @@ struct ModelPickerPill: View {
         ) == true else {
             return ""
         }
-        guard appState.agentProviderLibrary.entries.count > 1,
+        guard appState.effectiveAgentProviderLibrary.entries.count > 1,
               let active = appState.activeAgentProviderEntry else {
             return model
         }

@@ -118,8 +118,11 @@ extension AppState {
     /// without an entry UUID fall back to provider id + display name before
     /// using the current default, so existing history remains compatible.
     func providerEntry(for runtime: AgentRuntime) -> AgentProviderEntry? {
+        if runtime.sessionProviderEntryID == AgentMagpieIntegration.providerEntryID {
+            return magpieProviderEntry
+        }
         if let entryID = runtime.sessionProviderEntryID,
-           let entry = agentProviderLibrary.entries.first(where: { $0.id == entryID }) {
+           let entry = effectiveAgentProviderLibrary.entries.first(where: { $0.id == entryID }) {
             return entry
         }
         let providerID = runtime.sessionProviderIDOverride?
@@ -159,6 +162,9 @@ extension AppState {
     /// The provider a runtime is pinned to, before any per-purpose model
     /// resolution. `nil` means "no session pin — use the Settings default".
     func sessionProviderConfiguration(for runtime: AgentRuntime) -> AgentConfiguration? {
+        if runtime.sessionProviderEntryID == AgentMagpieIntegration.providerEntryID {
+            return magpieConfiguration(for: runtime)
+        }
         if let entry = providerEntry(for: runtime) {
             return entry.makeConfiguration(
                 imageDescription: agentConfiguration.imageDescription
@@ -200,6 +206,9 @@ extension AppState {
         global: AgentConfiguration,
         session: AgentConfiguration
     ) -> AgentConfiguration {
+        // Integration provenance owns the no-proxy/no-redirect transport even
+        // when a saved custom entry happens to contain the same public marker.
+        if session.magpieConnection != nil || session.magpieFailure != nil { return session }
         let sameProvider = session.providerID == global.providerID
             && session.baseURL == global.baseURL
             && session.apiKey == global.apiKey
@@ -221,8 +230,14 @@ extension AppState {
               !override.isEmpty else {
             return result
         }
-        result.model = result.providerID == AgentProviderPreset.someIMID && SomeIMManagedModel.isRetired(override)
-            ? SomeIMManagedModel.autoFlash : override
+        result.model = result.magpieConnection != nil ? (rawOverride ?? override)
+            : result.providerID == AgentProviderPreset.someIMID && SomeIMManagedModel.isRetired(override)
+                ? SomeIMManagedModel.autoFlash : override
+        if result.magpieConnection != nil {
+            // Callers resolving a purpose after this point must keep the pin too.
+            result.flashModel = result.model
+            result.proModel = result.model
+        }
         return result
     }
 
@@ -624,6 +639,9 @@ extension AppState {
     /// session's window as their auto-compression denominator.
     func agentContextWindow(for runtime: AgentRuntime) -> Int {
         let configuration = configurationForCurrentTurn(for: runtime)
+        if let reported = configuration.magpieConnection?.contextWindow {
+            return reported
+        }
         // `.model`, not `model(for:)`: the property is the fully resolved
         // per-turn model — session override included — and is exactly what
         // the runway policy divides by (`turnConfiguration.model`). The

@@ -1828,6 +1828,7 @@ extension AppState {
         // to land somewhere.
         let newRuntime = AgentRuntime(session: session)
         seedPersistedSessionModelOverride(for: newRuntime)
+        prepareMagpieDefaultForNewSession(newRuntime)
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
@@ -1929,6 +1930,7 @@ extension AppState {
         agentSessions.insert(session, at: 0)
         let newRuntime = AgentRuntime(session: session)
         seedPersistedSessionModelOverride(for: newRuntime)
+        prepareMagpieDefaultForNewSession(newRuntime)
         agentRuntimes[session.id] = newRuntime
         if makeActive {
             activeAgentSessionID = session.id
@@ -2456,6 +2458,7 @@ extension AppState {
             startNewAgentSession(inWorkspaceAt: nil)
         }
         guard let runtime = activeRuntime else { return }
+        cancelMagpieDefaultSelection(for: runtime)
         runtime.sessionProviderEntryID = someIMEntry.id
         runtime.sessionProviderIDOverride = someIMEntry.providerID
         runtime.session.providerEntryID = someIMEntry.id
@@ -2512,6 +2515,10 @@ extension AppState {
     /// Launch recovery uses the same path as an explicit sidebar selection so
     /// a background-resumed Goal continues on its original concrete model.
     func seedPersistedSessionModelOverride(for runtime: AgentRuntime) {
+        if runtime.sessionProviderEntryID == AgentMagpieIntegration.providerEntryID {
+            runtime.sessionModelOverride = runtime.session.modelID
+            return
+        }
         guard runtime.managedRouting == nil else {
             runtime.sessionModelOverride = nil
             return
@@ -2577,6 +2584,7 @@ extension AppState {
         // an unbound conversation so the user's selection has a real session to
         // land on; choosing a folder later rebinds this empty runtime in place.
         ensureActiveAgentSessionForInteractiveControl()
+        cancelMagpieDefaultSelection(for: activeRuntime)
         let previousModel = previousModelForNotice ?? activeAgentModelSelectionLabel
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
         guard activeAgentProviderEntry?.isUsableForChatSelection(
@@ -2593,7 +2601,8 @@ extension AppState {
         let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmed, !trimmed.isEmpty {
             if agentModelIsCompatibleWithActiveProvider(trimmed) {
-                agentSessionModelOverride = trimmed
+                agentSessionModelOverride = activeRuntime?.sessionProviderEntryID == AgentMagpieIntegration.providerEntryID
+                    ? model : trimmed
                 recordFetchedAgentModels([trimmed])
                 recordRecentlyUsedAgentModel(trimmed)
             } else {
@@ -2673,12 +2682,13 @@ extension AppState {
         let previousModel = activeAgentModelSelectionLabel
         materializeProviderLibraryEntryAPIKey(id: entryID)
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        guard let entry = agentProviderLibrary.entries.first(where: { $0.id == entryID }),
+        guard let entry = effectiveAgentProviderLibrary.entries.first(where: { $0.id == entryID }),
               entry.isUsableForChatSelection(isSomeIMAuthenticated: authenticated) else {
             return
         }
         ensureActiveAgentSessionForInteractiveControl()
         guard let runtime = activeRuntime else { return }
+        cancelMagpieDefaultSelection(for: runtime)
         runtime.sessionProviderEntryID = entry.id
         runtime.sessionProviderIDOverride = entry.providerID
         runtime.session.providerEntryID = entry.id
@@ -2695,7 +2705,9 @@ extension AppState {
         let routed = entry.makeConfiguration(
             imageDescription: agentConfiguration.imageDescription
         ).normalized.model(for: .interactive)
-        if trimmed == routed {
+        if entry.id == AgentMagpieIntegration.providerEntryID {
+            setAgentSessionModel(model, previousModelForNotice: previousModel)
+        } else if trimmed == routed {
             recordRecentlyUsedAgentModel(trimmed)
             setAgentSessionModel(nil, previousModelForNotice: previousModel)
         } else {

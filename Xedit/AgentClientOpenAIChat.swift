@@ -27,8 +27,17 @@ struct OpenAIChatAdapter {
         session: URLSession? = nil,
         someIMContext: SomeIMRequestContext? = nil
     ) {
-        self.configuration = configuration.normalized
-        self.session = session ?? AgentNetworkSupport.defaultSession()
+        var effective = configuration.normalized
+        if effective.magpieConnection != nil {
+            do {
+                try effective.validateMagpieConnection()
+                effective.baseURL = try AgentMagpieIntegration.validatedBaseURL(effective.baseURL)
+            } catch let failure as AgentMagpieIntegration.Failure { effective.magpieFailure = failure }
+            catch { effective.magpieFailure = .init(code: .url) }
+        }
+        self.configuration = effective
+        self.session = effective.magpieConnection == nil
+            ? (session ?? AgentNetworkSupport.defaultSession()) : AgentMagpieTransport.sharedSession
         self.someIMContext = someIMContext
     }
 
@@ -61,7 +70,8 @@ struct OpenAIChatAdapter {
             tools: tools,
             supportsImages: configuration.supportsImageInput,
             disableThinking: AgentLocalModelPrompting.isLocalProvider(configuration),
-            includeOllamaThinkingFlag: configuration.providerID == AgentProviderPreset.ollamaID
+            includeOllamaThinkingFlag: configuration.providerID == AgentProviderPreset.ollamaID,
+            maximumOutputTokens: configuration.magpieConnection?.maximumOutputTokens
         )
         request.httpBody = requestBody
 
@@ -568,11 +578,13 @@ struct OpenAIChatAdapter {
     }
 
     private func chatCompletionsEndpoint(from baseURL: String) throws -> URL {
-        try AgentNetworkSupport.endpoint(from: baseURL, suffix: "chat/completions")
+        try configuration.validateMagpieConnection()
+        return try AgentNetworkSupport.endpoint(from: baseURL, suffix: "chat/completions")
     }
 
     private func modelsEndpoint(from baseURL: String) throws -> URL {
-        try AgentNetworkSupport.endpoint(from: baseURL, suffix: "models")
+        try configuration.validateMagpieConnection()
+        return try AgentNetworkSupport.endpoint(from: baseURL, suffix: "models")
     }
 
     // MARK: - Request encoding
@@ -586,7 +598,8 @@ struct OpenAIChatAdapter {
         tools: [AgentToolDescriptor],
         supportsImages: Bool = true,
         disableThinking: Bool = false,
-        includeOllamaThinkingFlag: Bool = false
+        includeOllamaThinkingFlag: Bool = false,
+        maximumOutputTokens: Int? = nil
     ) throws -> Data {
         let providerMessages = providerReadyMessages(messages, supportsImages: supportsImages)
         var body: [String: Any] = [
@@ -602,6 +615,7 @@ struct OpenAIChatAdapter {
                 supportsImages: supportsImages
             )
         ]
+        if let maximumOutputTokens { body["max_tokens"] = maximumOutputTokens }
         if !tools.isEmpty {
             body["tools"] = tools.map(encodeTool)
             body["tool_choice"] = "auto"

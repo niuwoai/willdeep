@@ -49,6 +49,8 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
     /// kind so the facade dispatches the right adapter. Ignored when
     /// `providerID` is anything other than `custom`.
     var customKindOverride: AgentProviderKind?
+    /// Runtime-only provenance; never encoded into the user's library.
+    var magpieConnection: AgentMagpieIntegration.Connection? = nil
 
     init(
         id: UUID = UUID(),
@@ -165,7 +167,7 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         // that need to force a specific mode (e.g. compression always
         // wants flash) pass an override.
         let mode = routingModeOverride ?? routingMode
-        return AgentConfiguration(
+        var configuration = AgentConfiguration(
             providerID: providerID,
             baseURL: baseURL,
             model: mode == .pro ? pro : flash,
@@ -176,6 +178,8 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
             apiKey: apiKey,
             customKindOverride: customKindOverride
         )
+        configuration.magpieConnection = magpieConnection
+        return configuration
     }
 
     private static func cleanList(_ list: [String], excluding primary: String) -> [String] {

@@ -268,7 +268,7 @@ extension AppState {
     /// Provider library entry used by the active conversation, independent
     /// from the Settings-wide default provider used for new conversations.
     var activeAgentProviderEntry: AgentProviderEntry? {
-        guard let runtime = activeRuntime else { return agentProviderLibrary.active }
+        guard let runtime = activeRuntime else { return magpieProviderEntry ?? agentProviderLibrary.active }
         return providerEntry(for: runtime)
     }
 

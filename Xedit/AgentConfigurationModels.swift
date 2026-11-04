@@ -135,6 +135,15 @@ struct AgentConfiguration: Codable, Equatable {
     /// source of truth.
     var customKindOverride: AgentProviderKind?
 
+    // Ephemeral integration provenance. Deliberately excluded from persisted settings.
+    var magpieConnection: AgentMagpieIntegration.Connection? = nil
+    var magpieFailure: AgentMagpieIntegration.Failure? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case providerID, baseURL, model, flashModel, proModel, routingMode
+        case imageDescription, apiKey, titleModel, compressionModel, customKindOverride
+    }
+
     static let `default` = AgentConfiguration(
         providerID: AgentProviderPreset.deepSeekID,
         baseURL: "https://api.deepseek.com",
@@ -198,6 +207,8 @@ struct AgentConfiguration: Codable, Equatable {
     }
 
     var normalized: AgentConfiguration {
+        // Contract values were validated at the read boundary. Preserve complete model IDs.
+        if magpieConnection != nil || magpieFailure != nil { return self }
         var result = self
         result.providerID = result.providerID.trimmingCharacters(in: .whitespacesAndNewlines)
         result.baseURL = result.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)

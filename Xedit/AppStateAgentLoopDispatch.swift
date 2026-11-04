@@ -28,6 +28,63 @@ extension AppState {
         existingUserMessageID: AgentMessage.ID? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
+        guard magpieIntegrationHome != nil, agentLoopInferenceEnvironment == nil else {
+            dispatchPreparedAgentMessage(for: runtime, text: text, images: images,
+                textAttachments: textAttachments, attachedSkills: attachedSkills,
+                existingUserMessageID: existingUserMessageID, source: source)
+            return
+        }
+        let preparationID = UUID()
+        magpieTurnPreparationIDs[runtime.id] = preparationID
+        runtime.requestTask?.cancel()
+        // The bounded read can take 100ms. The composer must treat that wait as
+        // busy so another send queues instead of launching a duplicate turn.
+        runtime.isResponding = true
+        runtime.requestTask = Task { [weak self, weak runtime] in
+            guard let self, let runtime else { return }
+            defer {
+                if self.magpieTurnPreparationIDs[runtime.id] == preparationID {
+                    self.magpieTurnPreparationIDs.removeValue(forKey: runtime.id)
+                    runtime.isResponding = false
+                    runtime.requestTask = nil
+                }
+            }
+            do {
+                try await self.prepareMagpieConnectionForTurn(runtime)
+                try Task.checkCancellation()
+                guard self.magpieTurnPreparationIDs[runtime.id] == preparationID else { return }
+                self.magpieTurnPreparationIDs.removeValue(forKey: runtime.id)
+                runtime.isResponding = false
+                runtime.requestTask = nil
+                self.dispatchPreparedAgentMessage(for: runtime, text: text, images: images,
+                    textAttachments: textAttachments, attachedSkills: attachedSkills,
+                    existingUserMessageID: existingUserMessageID, source: source)
+            } catch {
+                guard self.magpieTurnPreparationIDs[runtime.id] == preparationID else { return }
+                if existingUserMessageID == nil {
+                    runtime.messages.append(AgentMessage(role: .user, content: text, images: images,
+                        textAttachments: textAttachments, source: source))
+                }
+                if !(error is CancellationError) {
+                    runtime.errorMessage = error.localizedDescription
+                    runtime.errorDetails = nil
+                }
+                runtime.session.automaticWakeSuppressedAfterUserStop = true
+                self.persistAgentSession(runtime: runtime)
+                self.recordRoutineRunCompletionIfNeeded(for: runtime)
+            }
+        }
+    }
+
+    private func dispatchPreparedAgentMessage(
+        for runtime: AgentRuntime,
+        text: String,
+        images: [AgentImageAttachment],
+        textAttachments: [AgentTextAttachment] = [],
+        attachedSkills: [AgentSkillEntry] = [],
+        existingUserMessageID: AgentMessage.ID? = nil,
+        source: AgentMessageSource = .operatorInput
+    ) {
         if source != .operatorInput && dispatchContinuationIsSuspended(runtime) { return }
         do { runtime.runtimeParameters = try runtimeParametersForNewTurn() }
         catch {
