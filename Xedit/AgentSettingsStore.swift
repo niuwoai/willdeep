@@ -138,6 +138,13 @@ enum AgentSettingsStore {
     /// point this at a per-run `UserDefaults(suiteName:)` so non-secret
     /// fixture data is sandboxed too.
     nonisolated(unsafe) private static var testDefaultsOverride: UserDefaults?
+    #if DEBUG
+    @TaskLocal private static var scopedTestDefaults: UserDefaults?
+
+    static func _withTestDefaults<T>(_ suite: UserDefaults, _ body: () async throws -> T) async rethrows -> T {
+        try await $scopedTestDefaults.withValue(suite, operation: body)
+    }
+    #endif
     nonisolated(unsafe) private static var xctestKeychainStorage: [String: String] = [:]
 
     private static var keychainService: String {
@@ -159,12 +166,14 @@ enum AgentSettingsStore {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
-    /// All non-secret persistence flows through this accessor so a test
-    /// can redirect every read / write into a sandbox suite. Production
-    /// gets `defaults`; tests get whatever
-    /// `_setTestDefaultsOverride` last installed.
+    /// All non-secret persistence flows through this accessor. A test can
+    /// pin an async task to its own suite even while other suites run; legacy
+    /// overrides remain available, and XCTest defaults stay disposable.
     private static var defaults: UserDefaults {
-        testDefaultsOverride ?? .standard
+        #if DEBUG
+        if let scopedTestDefaults { return scopedTestDefaults }
+        #endif
+        return testDefaultsOverride ?? AppDefaults.standard
     }
 
     /// Test-only entry point: redirect all subsequent Keychain reads /

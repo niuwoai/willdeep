@@ -40,6 +40,10 @@ nonisolated enum AppDefaults {
     static func _withTestDefaults<T>(_ defaults: UserDefaults, _ body: () throws -> T) rethrows -> T {
         try $testOverride.withValue(defaults, operation: body)
     }
+
+    static func _withTestDefaults<T>(_ defaults: UserDefaults, _ body: () async throws -> T) async rethrows -> T {
+        try await $testOverride.withValue(defaults, operation: body)
+    }
     #endif
 
     /// `.standard` in the app. Under XCTest, the suite a test installed with
