@@ -355,7 +355,7 @@ extension AppState {
             return
         }
         runtime.pendingContextRunwayResume = true
-        compressAgentContext(for: runtime, keepRecent: Self.goalWakeCompressionKeepRecentMessages)
+        compressAgentContext(for: runtime, keepRecent: Self.goalWakeCompressionKeepRecentMessages, reason: .runwayRecovery)
         guard !runtime.isCompressingContext else { return }
         // Nothing left to compress: resume anyway. The pre-send gate still
         // compresses in-turn if the request would not fit.

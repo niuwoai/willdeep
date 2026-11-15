@@ -212,7 +212,6 @@ nonisolated enum AgentWorkerTranscriptCompression {
 
     struct Outcome {
         var transcript: [AgentMessage]
-        var summary: String
     }
 
     /// 切分方案。抽成纯函数是为了能被测到：保留哪两条、head 从哪开始、
@@ -226,7 +225,9 @@ nonisolated enum AgentWorkerTranscriptCompression {
         var segments: [String]
     }
 
-    static func plan(transcript: [AgentMessage], priorSummary: String?) -> Plan? {
+    // The rebuilt transcript owns earlier summaries. A second out-of-band
+    // summary would duplicate that same evidence on every later compression.
+    static func plan(transcript: [AgentMessage]) -> Plan? {
         guard transcript.count >= minimumCompressibleCount else { return nil }
         let preservedPrefix = Array(transcript.prefix(2))
         let compressible = Array(transcript.dropFirst(2))
@@ -235,7 +236,7 @@ nonisolated enum AgentWorkerTranscriptCompression {
 
         let head = Array(compressible[..<tailStart])
         let tail = Array(compressible[tailStart...])
-        let segments = AppState.compressionTranscriptSegments(head: head, priorSummary: priorSummary)
+        let segments = AppState.compressionTranscriptSegments(head: head, priorSummary: nil)
         guard !segments.isEmpty else { return nil }
         return Plan(preservedPrefix: preservedPrefix, head: head, tail: tail, segments: segments)
     }
@@ -249,7 +250,7 @@ nonisolated enum AgentWorkerTranscriptCompression {
             role: .user,
             content: """
             <untrusted-conversation-summary>
-            \(summary)
+            \(summary.replacingOccurrences(of: "</untrusted-conversation-summary>", with: "&lt;/untrusted-conversation-summary&gt;"))
             </untrusted-conversation-summary>
             """
         )
@@ -259,13 +260,12 @@ nonisolated enum AgentWorkerTranscriptCompression {
     /// 把中间轮折成一条摘要。返回 nil 表示没什么可压的。
     static func compress(
         transcript: [AgentMessage],
-        priorSummary: String?,
         configuration: AgentConfiguration,
         someIMContext: SomeIMRequestContext?,
         requestLedger: AgentModelRequestLedger?,
         executionBudget: AgentToolExecutionBudget?
     ) async throws -> Outcome? {
-        guard let plan = plan(transcript: transcript, priorSummary: priorSummary) else { return nil }
+        guard let plan = plan(transcript: transcript) else { return nil }
         let summary = try await AgentContextCompressionFolder.fold(
             segments: plan.segments,
             configuration: configuration,
@@ -275,6 +275,6 @@ nonisolated enum AgentWorkerTranscriptCompression {
         )
         let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return Outcome(transcript: rebuild(plan: plan, summary: trimmed), summary: trimmed)
+        return Outcome(transcript: rebuild(plan: plan, summary: trimmed))
     }
 }
