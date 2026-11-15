@@ -737,7 +737,7 @@ extension AppState {
                 Self.contextCompressionLog.notice(
                     "pre-send gate: compressing before request runtime=\(runtime.id.uuidString, privacy: .public) round=\(toolRound) estimated=\(estimatedRequestTokens) anchored=\(providerAnchoredTokens ?? -1) window=\(contextWindow) staleCheckpoint=\(self.contextCheckpointIsStale(for: runtime))"
                 )
-                switch await compressContextInTurn(for: runtime, reason: "pre-send gate") {
+                switch await compressContextInTurn(for: runtime, reason: .preSendGate) {
                 case .reclaimed:
                     (collapsedHistory, estimatedRequestTokens, providerAnchoredTokens) = assembleModelFacingRequest()
                 case .failed:
@@ -962,7 +962,7 @@ extension AppState {
                             Self.contextCompressionLog.error(
                                 "provider rejected request for length: compressing and retrying once runtime=\(runtime.id.uuidString, privacy: .public) round=\(toolRound) estimated=\(estimatedRequestTokens) window=\(contextWindow)"
                             )
-                            if case .reclaimed = await compressContextInTurn(for: runtime, reason: "overflow 400") {
+                            if case .reclaimed = await compressContextInTurn(for: runtime, reason: .overflowRecovery) {
                                 let rebuilt = assembleModelFacingRequest()
                                 collapsedHistory = rebuilt.collapsedHistory
                                 estimatedRequestTokens = rebuilt.estimatedTokens

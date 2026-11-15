@@ -139,20 +139,23 @@ extension AppState {
     /// Recompress only the delta following an accepted prior summary. The
     /// checkpoint retains all operator constraints independently of that prose.
     func contextCompressionInput(for runtime: AgentRuntime, head: [AgentMessage], priorSummary: String?) throws
-        -> (segments: [String], sourceTokens: Int) {
+        -> (segments: [String], sourceTokens: Int, hasDelta: Bool) {
         guard !head.isEmpty, Array(runtime.messages.prefix(head.count)) == head else { throw AgentContextCheckpoint.Failure.stale }
         var delta = head
-        var prior = priorSummary
+        // The accepted runtime summary owns coverage. A plan captured before
+        // installation can have no priorSummary even though its head is now
+        // fully covered; do not send those originals a second time.
+        var prior = effectiveContextSummary(for: runtime)
         var checkpointTokens = 0
-        if let priorSummary {
-            guard priorSummary == effectiveContextSummary(for: runtime) else { throw AgentContextCheckpoint.Failure.stale }
+        if let priorSummary, priorSummary != prior { throw AgentContextCheckpoint.Failure.stale }
+        if prior != nil {
             if let through = runtime.contextSummaryThroughMessageID, let index = head.firstIndex(where: { $0.id == through }) {
                 delta = Array(head.dropFirst(index + 1))
                 checkpointTokens = contextCheckpointText(for: runtime).map(Self.estimateTextTokens) ?? 0
             } else { prior = nil }
         }
         let segments = Self.compressionTranscriptSegments(head: delta, priorSummary: prior)
-        return (segments, checkpointTokens + segments.reduce(0) { $0 + Self.estimateTextTokens($1) })
+        return (segments, checkpointTokens + segments.reduce(0) { $0 + Self.estimateTextTokens($1) }, !delta.isEmpty)
     }
 
     func effectiveContextSummary(for runtime: AgentRuntime) -> String? {

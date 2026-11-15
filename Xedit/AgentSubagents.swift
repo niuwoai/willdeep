@@ -1452,10 +1452,9 @@ enum AgentSubagentRunner {
         // Flipped after the first request streams to completion; until then
         // each request is under the first-contact clock.
         var hasCompletedFirstRequest = false
-        // 本次 run 压过几次，以及上一次的摘要（下一次压缩要把它折进去而不是
-        // 丢掉，否则每次压缩都会把更早的历史彻底忘掉）。
+        // 本次 run 的压缩次数。旧摘要由重建后的 transcript 保留，下一次
+        // 直接随 head 折入，不再另存一份重复传给摘要器。
         var compressionsUsed = 0
-        var lastCompressionSummary: String?
         var opsReportOnly = false
         while round <= roundLimit {
             try Task.checkCancellation()
@@ -1493,7 +1492,6 @@ enum AgentSubagentRunner {
                     publishProgress(round: round, activity: .thinking)
                     let outcome = try? await AgentWorkerTranscriptCompression.compress(
                         transcript: transcript,
-                        priorSummary: lastCompressionSummary,
                         configuration: compressionConfiguration ?? configuration,
                         someIMContext: someIMContext,
                         requestLedger: nil,
@@ -1504,7 +1502,6 @@ enum AgentSubagentRunner {
                             "subagent compressed transcript profile=\(profile.id, privacy: .public) round=\(round, privacy: .public) before=\(transcript.count, privacy: .public) after=\(outcome.transcript.count, privacy: .public) attempt=\(compressionsUsed, privacy: .public)"
                         )
                         transcript = outcome.transcript
-                        lastCompressionSummary = outcome.summary
                     }
                 }
                 // 压过之后仍然超限——在抛错之前还有一手：换下一档模型继续。
