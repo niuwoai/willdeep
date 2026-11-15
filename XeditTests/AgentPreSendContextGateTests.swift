@@ -128,7 +128,7 @@ struct AgentInTurnCompressionTests {
             requests += 1
             return "只保留简短模型摘要"
         }
-        let outcome = await f.app.compressContextInTurn(for: f.runtime, reason: "test")
+        let outcome = await f.app.compressContextInTurn(for: f.runtime, reason: .preSendGate)
         guard case .reclaimed = outcome else {
             Issue.record("expected .reclaimed, got \(outcome)")
             return
@@ -149,7 +149,7 @@ struct AgentInTurnCompressionTests {
             Issue.record("summariser must not be called while another compression is in flight")
             return "unexpected"
         }
-        let outcome = await f.app.compressContextInTurn(for: f.runtime, reason: "test")
+        let outcome = await f.app.compressContextInTurn(for: f.runtime, reason: .preSendGate)
         guard case .skippedAlreadyCompressing = outcome else {
             Issue.record("expected .skippedAlreadyCompressing, got \(outcome)")
             return
@@ -163,7 +163,7 @@ struct AgentInTurnCompressionTests {
         let f = try fixture(); defer { f.cleanup() }
         struct SummariserDown: Error {}
         f.app.contextCompressionSummaryOperation = { _, _ in throw SummariserDown() }
-        let outcome = await f.app.compressContextInTurn(for: f.runtime, reason: "test")
+        let outcome = await f.app.compressContextInTurn(for: f.runtime, reason: .preSendGate)
         guard case .failed(let error) = outcome else {
             Issue.record("expected .failed, got \(outcome)")
             return
@@ -178,7 +178,7 @@ struct AgentInTurnCompressionTests {
     func checkpointGoesStaleWhenGoalContractChanges() async throws {
         let f = try fixture(); defer { f.cleanup() }
         f.app.contextCompressionSummaryOperation = { _, _ in "摘要" }
-        guard case .reclaimed = await f.app.compressContextInTurn(for: f.runtime, reason: "test") else {
+        guard case .reclaimed = await f.app.compressContextInTurn(for: f.runtime, reason: .preSendGate) else {
             Issue.record("compression did not reclaim")
             return
         }

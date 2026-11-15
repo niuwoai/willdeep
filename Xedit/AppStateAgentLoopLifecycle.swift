@@ -218,7 +218,7 @@ extension AppState {
             // Ask for it explicitly so the ordered stop is always followed
             // by the compression it promised the model.
             if runtime.pendingContextRunwayResume {
-                compressAgentContext(for: runtime, keepRecent: 2)
+                compressAgentContext(for: runtime, keepRecent: 2, reason: .runwayRecovery)
             } else {
                 maybeAutoCompressContext(for: runtime)
             }

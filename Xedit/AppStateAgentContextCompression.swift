@@ -12,6 +12,25 @@ import Foundation
 import os
 
 extension AppState {
+    /// Ordinary optimization only folds new history. Explicit reclamation may
+    /// shorten the installed summary even when no new head has accumulated.
+    /// Stale checkpoints use the intact transcript under either policy.
+    nonisolated enum ContextCompressionReason: String, Sendable {
+        case automatic
+        case managedEscalation
+        case manual
+        case preSendGate
+        case overflowRecovery
+        case runwayRecovery
+
+        var allowsSummaryOnlyRecompression: Bool {
+            switch self {
+            case .automatic, .managedEscalation: false
+            case .manual, .preSendGate, .overflowRecovery, .runwayRecovery: true
+            }
+        }
+    }
+
     /// True while context compression is running for the active session.
     /// Delegated to `activeRuntime.isCompressingContext`.
     var isCompressingAgentContext: Bool {
@@ -28,10 +47,14 @@ extension AppState {
         compressAgentContext(for: runtime, keepRecent: keepRecent)
     }
 
-    func compressAgentContext(for runtime: AgentRuntime, keepRecent: Int = 4) {
+    func compressAgentContext(
+        for runtime: AgentRuntime,
+        keepRecent: Int = 4,
+        reason: ContextCompressionReason = .manual
+    ) {
         guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return }
         guard !runtime.isCompressingContext, !runtime.isResponding else { return }
-        guard let plan = compressionPlan(for: runtime, keepRecent: keepRecent) else { return }
+        guard let plan = compressionPlan(for: runtime, keepRecent: keepRecent, reason: reason) else { return }
 
         runtime.isCompressingContext = true
         AgentTelemetry.recordFeatureUsed(.contextCompression, surface: .automatic)
@@ -44,7 +67,8 @@ extension AppState {
                 head: plan.head,
                 tail: plan.tail,
                 priorSummary: plan.priorSummary,
-                configurations: configurations
+                configurations: configurations,
+                reason: reason
             )
         }
     }
@@ -60,18 +84,31 @@ extension AppState {
         let priorSummary: String?
     }
 
-    func compressionPlan(for runtime: AgentRuntime, keepRecent: Int) -> AgentCompressionPlan? {
+    func compressionPlan(
+        for runtime: AgentRuntime,
+        keepRecent: Int,
+        reason: ContextCompressionReason = .manual
+    ) -> AgentCompressionPlan? {
         guard runtime.messages.count > 1 else { return nil }
         let priorSummary = effectiveContextSummary(for: runtime)
         let hasPriorSummary = (priorSummary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             && runtime.contextSummaryThroughMessageID != nil
         let effectiveKeepRecent = hasPriorSummary ? min(2, keepRecent) : keepRecent
-        guard runtime.messages.count > effectiveKeepRecent else { return nil }
+        guard runtime.messages.count > effectiveKeepRecent || runtime.contextCheckpoint != nil else { return nil }
 
-        let tailStart = Self.compressionTailStart(
+        var tailStart = Self.compressionTailStart(
             messages: runtime.messages,
             keepRecent: effectiveKeepRecent
         )
+        if hasPriorSummary || runtime.contextCheckpoint != nil,
+           let coveredIndex = runtime.messages.firstIndex(where: { $0.id == runtime.contextSummaryThroughMessageID }) {
+            if hasPriorSummary {
+                guard reason.allowsSummaryOnlyRecompression || tailStart > coveredIndex + 1 else { return nil }
+            }
+            // Preserve coverage on recompression. A stale checkpoint must also
+            // rebuild at least its old prefix, even in a short conversation.
+            tailStart = max(tailStart, coveredIndex + 1)
+        }
         guard tailStart > 0 else { return nil }
         return AgentCompressionPlan(
             head: Array(runtime.messages.prefix(tailStart)),
@@ -109,7 +146,8 @@ extension AppState {
     func shouldAutoCompressNow(for runtime: AgentRuntime) -> Bool {
         guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return false }
         guard !runtime.isCompressingContext, !runtime.isResponding else { return false }
-        guard runtime.messages.count > 6 else { return false }
+        guard runtime.messages.count > 6,
+              compressionPlan(for: runtime, keepRecent: 4, reason: .automatic) != nil else { return false }
         // This runtime's own window: a background session must not borrow
         // the frontmost session's model as its denominator.
         let window = max(1, agentContextWindow(for: runtime))
@@ -160,15 +198,15 @@ extension AppState {
         // what the ratio says. Recompress instead of waiting for 75% of a
         // number that will only keep climbing.
         guard shouldAutoCompressNow(for: runtime) || staleCheckpointNeedsRecompression(for: runtime) else { return }
-        compressAgentContext(for: runtime)
+        compressAgentContext(for: runtime, reason: .automatic)
     }
 
     /// True when a checkpoint exists but no longer validates, which is the
     /// only state where compression reports success and reclaims nothing.
     func staleCheckpointNeedsRecompression(for runtime: AgentRuntime) -> Bool {
         guard !runtime.isCompressingContext, !runtime.isResponding,
-              runtime.contextCheckpoint != nil, runtime.messages.count > 6 else { return false }
-        return contextCheckpointText(for: runtime) == nil
+              contextCheckpointIsStale(for: runtime) else { return false }
+        return compressionPlan(for: runtime, keepRecent: 4, reason: .automatic) != nil
     }
 
     @MainActor
@@ -177,7 +215,8 @@ extension AppState {
         head: [AgentMessage],
         tail: [AgentMessage],
         priorSummary: String? = nil,
-        configurations: [AgentConfiguration]
+        configurations: [AgentConfiguration],
+        reason: ContextCompressionReason = .manual
     ) async {
         var didReclaimWindow = false
         var compressionFailure: Error?
@@ -231,9 +270,11 @@ extension AppState {
             for: runtime,
             head: head,
             priorSummary: priorSummary,
-            configurations: configurations
+            configurations: configurations,
+            reason: reason
         )
-        if outcome.reclaimed {
+        if case .nothingToCompress = outcome { return }
+        if case .reclaimed = outcome {
             didReclaimWindow = true
             return
         }
@@ -251,16 +292,31 @@ extension AppState {
     /// 压缩核心：切块摘要并把结果写回 runtime 的 model-facing 摘要状态。
     /// 不含 between-turns 的恢复机制（队列消费 / runway 恢复），供
     /// runContextCompression（手动/自动压缩）与升档前压缩两条路径共用。
+    private enum ContextCompressionResult {
+        case reclaimed
+        case nothingToCompress
+        case failed(Error?)
+
+        var lastError: Error? {
+            if case .failed(let error) = self { return error }
+            return nil
+        }
+    }
+
     @MainActor
     private func performCompression(
         for runtime: AgentRuntime,
         head: [AgentMessage],
         priorSummary: String?,
-        configurations: [AgentConfiguration]
-    ) async -> (reclaimed: Bool, lastError: Error?) {
-        let input: (segments: [String], sourceTokens: Int)
+        configurations: [AgentConfiguration],
+        reason: ContextCompressionReason
+    ) async -> ContextCompressionResult {
+        let input: (segments: [String], sourceTokens: Int, hasDelta: Bool)
         do { input = try contextCompressionInput(for: runtime, head: head, priorSummary: priorSummary) }
-        catch { return (false, error) }
+        catch { return .failed(error) }
+        // Recheck at execution, before preparing a ticket or contacting any
+        // provider. A queued automatic plan can reach an already-covered head.
+        guard reason.allowsSummaryOnlyRecompression || input.hasDelta else { return .nothingToCompress }
         let segments = input.segments
 
         // some.im 归因头：压缩流量此前不带 session/workspace id，服务端
@@ -279,7 +335,7 @@ extension AppState {
             guard let through = head.last?.id else { throw AgentContextCheckpoint.Failure.stale }
             ticket = try prepareContextCompression(for: runtime, through: through,
                 sourceTokens: input.sourceTokens)
-        } catch { return (false, error) }
+        } catch { return .failed(error) }
         for configuration in configurations {
             do {
                 try validateContextCompressionTicket(ticket, for: runtime)
@@ -306,17 +362,17 @@ extension AppState {
                     continue
                 }
                 try installContextCompression(for: runtime, summary: trimmed, ticket: ticket)
-                return (true, nil)
+                return .reclaimed
             } catch is CancellationError {
-                return (false, CancellationError())
+                return .failed(CancellationError())
             } catch let error as AgentContextCheckpoint.Failure {
-                return (false, error)
+                return .failed(error)
             } catch {
                 lastError = error
                 continue
             }
         }
-        return (false, lastError)
+        return .failed(lastError)
     }
 
     /// 省心托管升档前压缩（设计见 muchtoken docs/someim-32b-compressor.md）。
@@ -347,7 +403,7 @@ extension AppState {
         // 「值不值得压」的判断。
         let estimated = Self.estimateAgentTokens(messages: collapsed, tools: [])
         guard estimated >= threshold else { return }
-        _ = await compressContextInTurn(for: runtime, reason: "managed escalation")
+        _ = await compressContextInTurn(for: runtime, reason: .managedEscalation)
     }
 
     /// turn 内同步压缩的结果。`.failed` 与 `.nothingToCompress` 分开：
@@ -368,11 +424,11 @@ extension AppState {
     /// 是 composer 与任务监视器已经认得的状态位，压缩期间照常点亮。
     /// 任何失败都只记日志不抛，调用方自己决定原文照发还是别的。
     @MainActor
-    func compressContextInTurn(for runtime: AgentRuntime, reason: String) async -> InTurnCompressionOutcome {
+    func compressContextInTurn(for runtime: AgentRuntime, reason: ContextCompressionReason) async -> InTurnCompressionOutcome {
         guard !runtime.isCompressingContext else { return .skippedAlreadyCompressing }
-        guard let plan = compressionPlan(for: runtime, keepRecent: 4) else {
+        guard let plan = compressionPlan(for: runtime, keepRecent: 4, reason: reason) else {
             Self.contextCompressionLog.notice(
-                "in-turn compression skipped: nothing to compress reason=\(reason, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) messages=\(runtime.messages.count)"
+                "in-turn compression skipped: nothing to compress reason=\(reason.rawValue, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) messages=\(runtime.messages.count)"
             )
             return .nothingToCompress
         }
@@ -386,11 +442,13 @@ extension AppState {
             for: runtime,
             head: plan.head,
             priorSummary: plan.priorSummary,
-            configurations: contextCompressionConfigurationCandidates(for: runtime)
+            configurations: contextCompressionConfigurationCandidates(for: runtime),
+            reason: reason
         )
-        if outcome.reclaimed {
+        if case .nothingToCompress = outcome { return .nothingToCompress }
+        if case .reclaimed = outcome {
             Self.contextCompressionLog.notice(
-                "in-turn compression reclaimed window reason=\(reason, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) head=\(plan.head.count) tail=\(plan.tail.count)"
+                "in-turn compression reclaimed window reason=\(reason.rawValue, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) head=\(plan.head.count) tail=\(plan.tail.count)"
             )
             return .reclaimed
         }
@@ -403,7 +461,7 @@ extension AppState {
             )
         )
         Self.contextCompressionLog.error(
-            "in-turn compression failed reason=\(reason, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
+            "in-turn compression failed reason=\(reason.rawValue, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)"
         )
         return .failed(error)
     }
@@ -623,7 +681,7 @@ extension AppState {
             case .scheduledTask: label = "SCHEDULED_TASK(\(message.scheduledTask?.title ?? "?"))"
             case .specProposal: label = "DESIGN_PROPOSAL(\(message.specProposal?.documentPath ?? "?"))"
             }
-            let body: String
+            var body: String
             if message.role == .tool {
                 body = modelFacingToolResultContent(
                     message.content,
@@ -633,6 +691,11 @@ extension AppState {
                 )
             } else {
                 body = message.content
+            }
+            if message.role == .assistant {
+                for call in message.toolCalls {
+                    body += "\nTOOL_CALL(\(call.externalID)) \(call.toolName):\n\(call.argumentsJSON)"
+                }
             }
             segments.append("\(label):\n\(body)")
         }
