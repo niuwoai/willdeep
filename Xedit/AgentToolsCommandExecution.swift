@@ -174,10 +174,8 @@ extension AgentToolRunner {
         }
 
         try Task.checkCancellation()
-        let cancellationController = ForegroundCommandCancellationController()
         let commandTask = Task.detached(priority: .userInitiated) { () -> CommandOutcome in
             let process = Process()
-            defer { cancellationController.clear(process) }
             let launch = AgentSandboxPolicy.shellLaunch(
                 command: command,
                 mode: context.sandboxMode,
@@ -208,23 +206,40 @@ extension AgentToolRunner {
             closeStandardInput(for: process)
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
-            let outputLimit = maxCommandOutput
-            let stdoutCollector = CommandOutputCollector(limit: outputLimit)
-            let stderrCollector = CommandOutputCollector(limit: outputLimit)
-            let runState = CommandRunState()
-            do {
-                try process.run()
-                cancellationController.bind(process)
-            } catch {
-                // Do not start pipe readers until launch succeeds. A failed
-                // Process.run() leaves no producer behind; closing a handle
-                // while readDataToEndOfFile() is already running can raise an
-                // Objective-C NSFileHandleOperationException, which bypasses
-                // Swift error handling and crashes the entire app/test host.
+            // This task is the sole reader and closer. Cancellation only sets
+            // its flag; it never closes a handle while another thread reads it.
+            defer {
                 try? stdoutPipe.fileHandleForReading.close()
                 try? stdoutPipe.fileHandleForWriting.close()
                 try? stderrPipe.fileHandleForReading.close()
                 try? stderrPipe.fileHandleForWriting.close()
+            }
+            let outputLimit = maxCommandOutput
+            let stdoutCollector = CommandOutputCollector(limit: outputLimit)
+            let stderrCollector = CommandOutputCollector(limit: outputLimit)
+            let completion: AgentForegroundCommandDrain.Completion
+            do {
+                try Task.checkCancellation()
+                try AgentForegroundCommandDrain.prepare(stdoutPipe.fileHandleForReading)
+                try AgentForegroundCommandDrain.prepare(stderrPipe.fileHandleForReading)
+                let deadline = ProcessInfo.processInfo.systemUptime + timeout
+                try process.run()
+                // The parent must not keep a producer alive itself. A
+                // descendant may still retain either pipe after the root exits.
+                try? stdoutPipe.fileHandleForWriting.close()
+                try? stderrPipe.fileHandleForWriting.close()
+                completion = try AgentForegroundCommandDrain.wait(
+                    for: process,
+                    stdout: stdoutPipe.fileHandleForReading,
+                    stderr: stderrPipe.fileHandleForReading,
+                    deadline: deadline,
+                    receiveStdout: { stdoutCollector.append($0) },
+                    receiveStderr: { stderrCollector.append($0) }
+                )
+            } catch {
+                if process.isRunning {
+                    AgentProcessSupport.terminateProcessTree(process)
+                }
                 return CommandOutcome(
                     exitStatus: -1,
                     stdout: "",
@@ -233,28 +248,12 @@ extension AgentToolRunner {
                     launchFailed: true
                 )
             }
-            let stdoutDrain = Task.detached(priority: .utility) {
-                stdoutCollector.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+            if completion != .finished, process.isRunning {
+                AgentProcessSupport.terminateProcessTree(process)
             }
-            let stderrDrain = Task.detached(priority: .utility) {
-                stderrCollector.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
-            }
-
-            let timeoutWorkItem = DispatchWorkItem {
-                runState.markTimedOut()
-                if process.isRunning {
-                    AgentProcessSupport.terminateProcessTree(process)
-                }
-            }
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
-
-            await AgentProcessSupport.waitUntilExit(process)
-            timeoutWorkItem.cancel()
-            await stdoutDrain.value
-            await stderrDrain.value
 
             return CommandOutcome(
-                exitStatus: process.terminationStatus,
+                exitStatus: process.isRunning ? -1 : process.terminationStatus,
                 stdout: AgentSecretStore.redact(
                     AgentSandboxPolicy.scrub(stdoutCollector.stringValue),
                     secretValues: context.secretRedactionValues
@@ -263,15 +262,15 @@ extension AgentToolRunner {
                     AgentSandboxPolicy.scrub(stderrCollector.stringValue),
                     secretValues: context.secretRedactionValues
                 ),
-                timedOut: runState.didTimeout,
+                timedOut: completion == .timedOut,
                 launchFailed: false
             )
         }
         let outcome = await withTaskCancellationHandler {
             await commandTask.value
         } onCancel: {
+            // The drain observes this even after the root shell has exited.
             commandTask.cancel()
-            cancellationController.cancel()
         }
         try Task.checkCancellation()
 
@@ -372,63 +371,4 @@ extension AgentToolRunner {
         }
     }
 
-    private nonisolated final class CommandRunState: @unchecked Sendable {
-        private let lock = NSLock()
-        private var timedOut = false
-
-        func markTimedOut() {
-            lock.lock()
-            timedOut = true
-            lock.unlock()
-        }
-
-        var didTimeout: Bool {
-            lock.lock()
-            let value = timedOut
-            lock.unlock()
-            return value
-        }
-    }
-
-    /// Bridges structured Task cancellation to Foundation.Process. Without
-    /// this, stopping an Agent turn only cancelled the awaiter while the shell
-    /// kept running until its timeout and continued consuming resources.
-    private nonisolated final class ForegroundCommandCancellationController: @unchecked Sendable {
-        private let lock = NSLock()
-        private var process: Process?
-        private var isCancelled = false
-
-        func bind(_ process: Process) {
-            lock.lock()
-            self.process = process
-            let shouldCancel = isCancelled
-            lock.unlock()
-            if shouldCancel {
-                terminate(process)
-            }
-        }
-
-        func clear(_ process: Process) {
-            lock.lock()
-            if self.process === process {
-                self.process = nil
-            }
-            lock.unlock()
-        }
-
-        func cancel() {
-            lock.lock()
-            isCancelled = true
-            let process = process
-            lock.unlock()
-            if let process {
-                terminate(process)
-            }
-        }
-
-        private func terminate(_ process: Process) {
-            guard process.isRunning else { return }
-            AgentProcessSupport.terminateProcessTree(process)
-        }
-    }
 }
